@@ -9,7 +9,7 @@ out/
 build/
 dist/
 
-# Python
+# Python & Virtual Environments
 __pycache__/
 *.py[cod]
 *$py.class
@@ -18,10 +18,21 @@ __pycache__/
 env/
 venv/
 .venv/
+my-env/
 ENV/
+env.bak/
+venv.bak/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing & Coverage
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # Environment variables
 .env
@@ -29,7 +40,11 @@ htmlcov/
 .env.development.local
 .env.test.local
 .env.production.local
+backend/.env
+frontend/.env
+frontend/.env.local
 !.env.example
+!backend/.env.example
 
 # Logs & Debug
 npm-debug.log*
@@ -38,7 +53,7 @@ yarn-error.log*
 pnpm-debug.log*
 *.log
 
-# OS Files
+# OS & Secrets
 .DS_Store
 Thumbs.db
 *.pem
@@ -47,3 +62,5 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+*.swp
+*.swo
