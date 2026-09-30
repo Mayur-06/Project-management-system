@@ -1,0 +1,122 @@
+'use client';
+
+import React from 'react';
+import {
+  Search,
+  Filter,
+  SlidersHorizontal,
+  LayoutGrid,
+  List,
+  Sparkles,
+  Plus,
+  ChevronRight,
+  Bell,
+} from 'lucide-react';
+
+interface TopNavProps {
+  title: string;
+  subtitle?: string;
+  breadcrumbs?: string[];
+  viewMode?: 'board' | 'list';
+  onToggleViewMode?: (mode: 'board' | 'list') => void;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
+  onOpenNewIssue?: () => void;
+  onOpenAIAsk?: () => void;
+}
+
+export const TopNav: React.FC<TopNavProps> = ({
+  title,
+  subtitle,
+  breadcrumbs = [],
+  viewMode = 'board',
+  onToggleViewMode,
+  searchQuery = '',
+  onSearchChange,
+  onOpenNewIssue,
+  onOpenAIAsk,
+}) => {
+  return (
+    <header className="h-14 border-b border-[#1e2025] bg-[#090a0c]/80 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-10 select-none">
+      {/* Breadcrumbs & Title */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+          {breadcrumbs.map((crumb, idx) => (
+            <React.Fragment key={idx}>
+              <span className="hover:text-zinc-200 transition-colors cursor-pointer">{crumb}</span>
+              {idx < breadcrumbs.length - 1 && <ChevronRight className="w-3 h-3 text-zinc-600" />}
+            </React.Fragment>
+          ))}
+        </div>
+        <div className="h-3.5 w-px bg-zinc-800" />
+        <h1 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+          <span>{title}</span>
+          {subtitle && <span className="text-xs font-normal text-zinc-500 font-mono">({subtitle})</span>}
+        </h1>
+      </div>
+
+      {/* Action Controls */}
+      <div className="flex items-center gap-3">
+        {/* Search Bar */}
+        {onSearchChange && (
+          <div className="relative flex items-center">
+            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Filter issues..."
+              className="bg-[#121417] text-xs text-zinc-200 pl-8 pr-3 py-1.5 rounded-md border border-[#23262d] focus:border-indigo-500 focus:outline-none w-48 transition-all focus:w-64"
+            />
+          </div>
+        )}
+
+        {/* View Switcher (Board vs List) */}
+        {onToggleViewMode && (
+          <div className="flex items-center bg-[#121417] border border-[#23262d] rounded-md p-0.5 text-zinc-400">
+            <button
+              onClick={() => onToggleViewMode('board')}
+              className={`p-1 rounded text-xs transition-colors cursor-pointer ${
+                viewMode === 'board' ? 'bg-[#20232b] text-zinc-100 shadow-xs' : 'hover:text-zinc-200'
+              }`}
+              title="Board View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onToggleViewMode('list')}
+              className={`p-1 rounded text-xs transition-colors cursor-pointer ${
+                viewMode === 'list' ? 'bg-[#20232b] text-zinc-100 shadow-xs' : 'hover:text-zinc-200'
+              }`}
+              title="List View"
+            >
+              <List className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Linear Ask AI Button */}
+        {onOpenAIAsk && (
+          <button
+            onClick={onOpenAIAsk}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-indigo-300 bg-indigo-950/40 hover:bg-indigo-900/40 border border-indigo-800/40 hover:border-indigo-700/60 transition-colors shadow-xs cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Linear Ask</span>
+          </button>
+        )}
+
+        {/* Create Issue Action */}
+        {onOpenNewIssue && (
+          <button
+            onClick={onOpenNewIssue}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-md active:scale-95 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>New Issue</span>
+          </button>
+        )}
+      </div>
+    </header>
+  );
+};

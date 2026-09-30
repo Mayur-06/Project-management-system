@@ -1,0 +1,172 @@
+export type MemberRole = 'admin' | 'member' | 'guest';
+
+export type StateCategory = 'triage' | 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled';
+
+export type IssuePriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
+
+export type IssueRelationType = 'blocks' | 'blocked_by' | 'relates_to' | 'duplicate_of';
+
+export type ProjectHealth = 'on_track' | 'at_risk' | 'off_track';
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  avatar_url?: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkspaceMember {
+  id: string;
+  organization_id: string;
+  user_id: string;
+  role: MemberRole;
+  user?: User;
+  created_at: string;
+}
+
+export interface Team {
+  id: string;
+  organization_id: string;
+  name: string;
+  key: string;
+  issue_counter: number;
+  cycle_duration_weeks: number;
+  created_at: string;
+}
+
+export interface WorkflowState {
+  id: string;
+  team_id: string;
+  name: string;
+  color: string;
+  category: StateCategory;
+  position: string;
+  is_default: boolean;
+  created_at: string;
+}
+
+export interface Cycle {
+  id: string;
+  team_id: string;
+  number: number;
+  name?: string;
+  starts_at: string;
+  ends_at: string;
+  completed_at?: string;
+  created_at: string;
+  progress?: number;
+  total_points?: number;
+  completed_points?: number;
+}
+
+export interface Project {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  summary?: string;
+  lead_id?: string;
+  lead?: User;
+  health: ProjectHealth;
+  target_date?: string;
+  sort_order: string;
+  created_at: string;
+  progress?: number;
+}
+
+export interface ProjectMilestone {
+  id: string;
+  project_id: string;
+  name: string;
+  target_date?: string;
+  completed_at?: string;
+  sort_order: string;
+  created_at: string;
+}
+
+export interface Label {
+  id: string;
+  organization_id: string;
+  name: string;
+  color: string;
+  description?: string;
+  created_at: string;
+}
+
+export interface Issue {
+  id: string;
+  organization_id: string;
+  team_id: string;
+  number: number;
+  identifier: string; // e.g. "ENG-104"
+  title: string;
+  description_json?: any;
+  description_text?: string;
+  priority: IssuePriority;
+  estimate?: number;
+  state_id: string;
+  state?: WorkflowState;
+  assignee_id?: string;
+  assignee?: User;
+  creator_id: string;
+  creator?: User;
+  project_id?: string;
+  project?: Project;
+  cycle_id?: string;
+  cycle?: Cycle;
+  parent_id?: string;
+  parent?: Issue;
+  subtasks?: Issue[];
+  labels?: Label[];
+  sort_order: string;
+  version: number;
+  due_date?: string;
+  snoozed_until?: string;
+  completed_at?: string;
+  canceled_at?: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string;
+}
+
+export interface IssueComment {
+  id: string;
+  issue_id: string;
+  user_id: string;
+  user?: User;
+  body_text: string;
+  body_json?: any;
+  reactions?: { emoji: string; count: number; users: string[] }[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  organization_id: string;
+  issue_id?: string;
+  actor_id: string;
+  actor?: User;
+  action: string;
+  changes?: Record<string, { old?: any; new?: any }>;
+  created_at: string;
+}
+
+export interface TriageOutput {
+  suggested_team_key: string;
+  suggested_priority: IssuePriority;
+  suggested_estimate: number;
+  suggested_labels: string[];
+  suggested_assignee_id?: string;
+  suggested_assignee?: User;
+  reasoning: string;
+}
