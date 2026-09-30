@@ -143,7 +143,7 @@ sequenceDiagram
     FE->>API: POST /api/v1/ai/breakdown/resume (thread_id, approved_tasks)
     API->>LG: ainvoke(Command(resume=approved_tasks), config={"thread_id": thread_id})
     LG->>LG: Node 3: persist_subtasks_node (Batch insert)
-    LG->>DB: Atomic batch insert into issues & issue_relations
+    LG->>DB: Atomic batch insert into issues table
     LG-->>FE: Realtime Broadcast event confirming creation
 ```
 
