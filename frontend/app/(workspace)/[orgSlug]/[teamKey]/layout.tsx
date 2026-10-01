@@ -10,6 +10,8 @@ import { IssueDetailDrawer } from '@/components/issues/IssueDetailDrawer';
 import { Issue, Organization, Team, User } from '@/types';
 import { api } from '@/lib/api';
 
+import { supabase } from '@/lib/supabase/client';
+
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) || 'acme';
@@ -27,6 +29,25 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     api.getWorkspace(orgSlug).then(setOrganization);
     api.getTeams(orgSlug).then(setTeams);
+
+    // Resolve current user from Supabase auth
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setCurrentUser({
+          id: user.id,
+          email: user.email || 'user@example.com',
+          name: (user.user_metadata?.full_name as string) || user.email?.split('@')[0] || 'Workspace User',
+          avatar_url: (user.user_metadata?.avatar_url as string) || undefined,
+        });
+      } else {
+        // Fallback default user for dev mode
+        setCurrentUser({
+          id: '00000000-0000-0000-0000-000000000001',
+          email: 'alex@acme.inc',
+          name: 'Alex Rivera',
+        });
+      }
+    });
   }, [orgSlug]);
 
   // Global Keyboard Shortcuts (Cmd+K for palette, C for new issue)

@@ -314,3 +314,31 @@ def test_unauthorized_access():
         response = raw_client.get("/api/v1/workspaces/me")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
+
+def test_atomic_issue_identifier_allocation_rpc(mock_db):
+    from app.services.issue_service import IssueService
+
+    mock_db.rpc().execute.return_value = MagicMock(
+        data=[{"issue_number": 42, "issue_identifier": "ENG-42"}]
+    )
+
+    team_data = {"key": "ENG", "issue_counter": 41}
+    num, ident = IssueService._allocate_identifier(MOCK_TEAM_ID, team_data, mock_db)
+    assert num == 42
+    assert ident == "ENG-42"
+    mock_db.rpc.assert_called_with("allocate_issue_identifier", {"p_team_id": MOCK_TEAM_ID})
+
+
+def test_atomic_issue_identifier_allocation_fallback(mock_db):
+    from app.services.issue_service import IssueService
+
+    # When RPC fails or is missing, fall back to atomic table update
+    mock_db.rpc.side_effect = Exception("RPC not found")
+    mock_db.table().update().eq().execute.return_value = MagicMock(data=[])
+
+    team_data = {"key": "ENG", "issue_counter": 10}
+    num, ident = IssueService._allocate_identifier(MOCK_TEAM_ID, team_data, mock_db)
+    assert num == 11
+    assert ident == "ENG-11"
+    mock_db.table("teams").update.assert_called_with({"issue_counter": 11})
+

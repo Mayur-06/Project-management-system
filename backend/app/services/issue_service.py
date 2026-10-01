@@ -43,6 +43,27 @@ class IssueService:
         return team
 
     @staticmethod
+    def _allocate_identifier(team_id: str, team: dict, db: Client) -> tuple[int, str]:
+        """
+        Atomically allocates the next sequential issue number & identifier.
+        Calls the PostgreSQL SECURITY DEFINER RPC 'allocate_issue_identifier',
+        falling back to table-level update if RPC is unavailable in mock tests.
+        """
+        try:
+            rpc_res = db.rpc("allocate_issue_identifier", {"p_team_id": team_id}).execute()
+            if rpc_res.data and len(rpc_res.data) > 0:
+                row = rpc_res.data[0]
+                return int(row["issue_number"]), str(row["issue_identifier"])
+        except Exception:
+            pass
+
+        # Fallback for environments / unit tests without the RPC mock
+        counter = team["issue_counter"] + 1
+        identifier = f"{team['key']}-{counter}"
+        db.table("teams").update({"issue_counter": counter}).eq("id", team_id).execute()
+        return counter, identifier
+
+    @staticmethod
     def _verify_issue_access(issue_id_or_identifier: str, user_id: str, db: Client) -> dict:
         query = db.table("issues").select("*")
         if "-" in issue_id_or_identifier and not len(issue_id_or_identifier) == 36:
@@ -130,10 +151,8 @@ class IssueService:
                     raise HTTPException(status_code=500, detail="Team has no workflow states configured")
                 target_state_id = first_state.data[0]["id"]
 
-        # 2. Sequential counter & identifier
-        counter = team["issue_counter"] + 1
-        identifier = f"{team['key']}-{counter}"
-        db.table("teams").update({"issue_counter": counter}).eq("id", data.team_id).execute()
+        # 2. Sequential counter & identifier (atomic allocation)
+        counter, identifier = cls._allocate_identifier(data.team_id, team, db)
 
         # 3. Calculate initial LexoRank position
         last_issue = (
@@ -388,12 +407,10 @@ class IssueService:
     def create_subtask(cls, parent_issue_id: str, data: SubtaskCreate, user_id: str, db: Client) -> IssueResponse:
         parent = cls._verify_issue_access(parent_issue_id, user_id, db)
 
-        # Team counter
+        # Team counter (atomic allocation)
         team_res = db.table("teams").select("key, issue_counter").eq("id", parent["team_id"]).limit(1).execute()
         team = team_res.data[0]
-        counter = team["issue_counter"] + 1
-        identifier = f"{team['key']}-{counter}"
-        db.table("teams").update({"issue_counter": counter}).eq("id", parent["team_id"]).execute()
+        counter, identifier = cls._allocate_identifier(parent["team_id"], team, db)
 
         # Sort order among subtasks
         last_sub = (

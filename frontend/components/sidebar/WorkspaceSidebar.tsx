@@ -14,7 +14,10 @@ import {
   ChevronDown,
   Settings,
   User as UserIcon,
+  LogOut,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase/client';
 import { Organization, Team, User } from '@/types';
 
 interface WorkspaceSidebarProps {
@@ -40,8 +43,23 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onOpenNewIssue,
   onOpenAIAsk,
 }) => {
+  const router = useRouter();
   const pathname = usePathname();
   const orgName = organization?.name || currentOrgSlug.toUpperCase();
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore
+    } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('supabase_access_token');
+        document.cookie = 'sb-access-token=; path=/; max-age=0';
+      }
+      window.location.href = '/login';
+    }
+  };
 
   const navItems = [
     {
@@ -208,12 +226,21 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             <span className="text-[10px] text-zinc-500 truncate">{currentUser?.email || ''}</span>
           </div>
         </div>
-        <button
-          className="p-1.5 rounded-md hover:bg-[#1a1d22] text-zinc-400 hover:text-zinc-200 transition-colors"
-          title="Settings"
-        >
-          <Settings className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleSignOut}
+            className="p-1.5 rounded-md hover:bg-[#1a1d22] text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
+            title="Sign Out"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
+          <button
+            className="p-1.5 rounded-md hover:bg-[#1a1d22] text-zinc-400 hover:text-zinc-200 transition-colors"
+            title="Settings"
+          >
+            <Settings className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </aside>
   );
