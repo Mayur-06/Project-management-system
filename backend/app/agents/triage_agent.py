@@ -64,12 +64,46 @@ def fetch_capacity_node(state: TriageAgentState, config: Optional[RunnableConfig
 
 # Node 2: LLM Classification & Sizing
 def llm_classify_node(state: TriageAgentState, config: Optional[RunnableConfig] = None) -> Dict[str, Any]:
+    import json
+    from app.core.ai_client import generate_llm_completion
 
+    # Try structured LLM classification first if GEMINI_API_KEY is configured
+    prompt = (
+        f"You are a technical lead doing issue triage.\n"
+        f"Issue Title: {state['title']}\n"
+        f"Issue Description: {state.get('description') or ''}\n\n"
+        f"Classify this issue and return STRICT JSON with these keys:\n"
+        f"- priority: one of ['urgent', 'high', 'medium', 'low', 'none']\n"
+        f"- estimate: integer Fibonacci points [1, 2, 3, 5, 8]\n"
+        f"- labels: list of string tags (e.g. ['bug', 'frontend', 'security'])\n"
+        f"- rationale: concise diagnostic rationale string\n"
+        f"Return ONLY valid JSON."
+    )
+    llm_resp = generate_llm_completion(prompt)
+    if llm_resp:
+        try:
+            cleaned = llm_resp.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            data = json.loads(cleaned.strip())
+            return {
+                "predicted_priority": data.get("priority", "medium").lower(),
+                "predicted_estimate": int(data.get("estimate", 3)),
+                "predicted_labels": list(data.get("labels", [])),
+                "rationale": data.get("rationale", "Triaged via Gemini AI."),
+            }
+        except Exception:
+            pass
+
+    # Structured heuristics adhering to plan2 rules (falls back gracefully without billing)
     title_lower = state["title"].lower()
     desc_lower = (state.get("description") or "").lower()
     combined = f"{title_lower} {desc_lower}"
 
-    # Structured heuristics adhering to plan2 rules (falls back gracefully without billing)
     if any(k in combined for k in ("crash", "blocker", "critical", "outage", "down")):
         priority = "urgent"
         estimate = 5

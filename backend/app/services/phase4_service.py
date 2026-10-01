@@ -120,16 +120,17 @@ class Phase4Service:
         if not mem.data:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to organization")
 
-        # Mock vector generator for deterministic sub-200ms in-flight search
-        # In full production, this calls google-genai or fast local embedding
-        dummy_embedding = [0.01 * ((i % 10) + 1) for i in range(768)]
+        from app.core.ai_client import get_embedding
+
+        # Generate 768-dimensional embedding for the title
+        query_embedding = get_embedding(data.title)
 
         # Call PostgreSQL match_similar_issues RPC with relaxed HNSW iterative scan
         try:
             rpc_res = db.rpc(
                 "match_similar_issues",
                 {
-                    "query_embedding": dummy_embedding,
+                    "query_embedding": query_embedding,
                     "match_threshold": data.threshold,
                     "match_count": data.limit,
                     "p_organization_id": data.organization_id,

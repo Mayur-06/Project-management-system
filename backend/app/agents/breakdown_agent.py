@@ -36,7 +36,55 @@ class BreakdownAgentState(TypedDict):
 
 # Node 1: Pure compute generation (zero side-effects)
 def generate_proposal_node(state: BreakdownAgentState) -> Dict[str, Any]:
+    import json
+    from app.core.ai_client import generate_llm_completion
+
     parent_title = state.get("prdspec", "Feature Epic")
+
+    # Attempt dynamic LLM breakdown if Gemini API key is configured
+    prompt = (
+        f"You are a Principal Software Architect decomposing an issue or epic.\n"
+        f"Initiative Title: {parent_title}\n\n"
+        f"Formulate a structured PRD summary and decompose this problem into 3 to 5 atomic child subtasks.\n"
+        f"Return STRICT JSON with keys:\n"
+        f"- prdspec: string formatted markdown containing high-level architectural specification\n"
+        f"- subtasks: array of objects with keys:\n"
+        f"    - title: concise task title\n"
+        f"    - description: task implementation details\n"
+        f"    - estimate: integer Fibonacci points (1, 2, 3, 5, 8)\n"
+        f"    - priority: one of ['urgent', 'high', 'medium', 'low', 'none']\n"
+        f"Return ONLY valid JSON."
+    )
+    llm_resp = generate_llm_completion(prompt)
+    if llm_resp:
+        try:
+            cleaned = llm_resp.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.startswith("```"):
+                cleaned = cleaned[3:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            data = json.loads(cleaned.strip())
+            prdspec = data.get("prdspec") or f"# Technical Specification: {parent_title}"
+            subtasks = data.get("subtasks") or []
+            if subtasks:
+                return {
+                    "prdspec": prdspec,
+                    "proposed_subtasks": [
+                        {
+                            "title": st.get("title", "Subtask"),
+                            "description": st.get("description", ""),
+                            "estimate": int(st.get("estimate", 3)),
+                            "priority": st.get("priority", "medium").lower(),
+                        }
+                        for st in subtasks
+                    ],
+                }
+        except Exception:
+            pass
+
+    # Deterministic fallback adhering to plan2
     prdspec = (
         f"# Technical Breakdown & PRD: {parent_title}\n\n"
         "## Architecture & Implementation Scope\n"

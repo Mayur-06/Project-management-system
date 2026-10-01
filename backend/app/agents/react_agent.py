@@ -108,6 +108,15 @@ class LinearAskAgent:
             else:
                 summary = "I inspected your workspace issues and found no direct blockers or matching open tickets for your query."
 
+            # Dynamic LLM synthesis if API key is provided
+            from app.core.ai_client import generate_llm_completion
+            llm_summary = generate_llm_completion(
+                prompt=f"User asked: '{query}'\nTool results from issues database: {json.dumps(tool_res)}\nSummarize these results clearly and concisely for the user.",
+                system_instruction="You are Linear Ask, a helpful, ultra-concise assistant for a modern engineering project management system."
+            )
+            if llm_summary:
+                summary = llm_summary.strip()
+
             for word in summary.split(" "):
                 if request and await request.is_disconnected():
                     return

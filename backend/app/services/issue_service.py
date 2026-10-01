@@ -184,6 +184,19 @@ class IssueService:
             "changes": {"title": created["title"], "identifier": identifier},
         }).execute()
 
+        # Generate & persist issue vector embedding asynchronously/safely
+        try:
+            from app.core.ai_client import get_embedding
+            text_to_embed = f"{created['title']} {created.get('description_text') or ''}".strip()
+            emb = get_embedding(text_to_embed)
+            db.table("issue_embeddings").insert({
+                "issue_id": created["id"],
+                "organization_id": team["organization_id"],
+                "embedding": emb,
+            }).execute()
+        except Exception:
+            pass
+
         return IssueResponse(**created)
 
     @classmethod
@@ -261,6 +274,20 @@ class IssueService:
                 "action": "issue_updated",
                 "changes": changes,
             }).execute()
+
+            # Refresh embedding if title or description changed
+            if "title" in changes or "description_text" in changes:
+                try:
+                    from app.core.ai_client import get_embedding
+                    text_to_embed = f"{updated['title']} {updated.get('description_text') or ''}".strip()
+                    emb = get_embedding(text_to_embed)
+                    db.table("issue_embeddings").upsert({
+                        "issue_id": issue_id,
+                        "organization_id": current_issue["organization_id"],
+                        "embedding": emb,
+                    }).execute()
+                except Exception:
+                    pass
 
         return IssueResponse(**updated)
 
