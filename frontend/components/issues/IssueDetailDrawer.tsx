@@ -34,6 +34,7 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   onClose,
   onUpdateIssue,
 }) => {
+  const activeStates = states.filter((s) => s.category !== 'triage');
   const [activeTab, setActiveTab] = useState<'comments' | 'activity' | 'ai_breakdown' | 'attachments'>('comments');
   const [comments, setComments] = useState<IssueComment[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -49,6 +50,11 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   const [proposedSubtasks, setProposedSubtasks] = useState<string[]>([]);
   const [breakdownComplete, setBreakdownComplete] = useState(false);
 
+  // Manual subtask creation state
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   useEffect(() => {
     if (issue) {
       api.getComments(issue.id).then(setComments);
@@ -58,10 +64,54 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       setBreakdownThreadId(null);
       setBreakdownComplete(false);
       setUploadError(null);
+      setNewSubtaskTitle('');
     }
   }, [issue]);
 
   if (!issue) return null;
+
+  const handleCreateSubtask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubtaskTitle.trim() || isAddingSubtask) return;
+    setIsAddingSubtask(true);
+    try {
+      const created = await api.createSubtask(issue.id, {
+        title: newSubtaskTitle.trim(),
+        priority: 'none',
+      });
+      if (created) {
+        const updated = {
+          ...issue,
+          subtasks: [...(issue.subtasks || []), created],
+        };
+        onUpdateIssue(updated);
+        window.dispatchEvent(new CustomEvent('issueCreated', { detail: created }));
+        setNewSubtaskTitle('');
+      }
+    } catch (err) {
+      console.error('Failed to create subtask', err);
+    } finally {
+      setIsAddingSubtask(false);
+    }
+  };
+
+  const handleDeleteIssue = async () => {
+    if (!window.confirm(`Are you sure you want to permanently delete ${issue.identifier}: "${issue.title}"? This cannot be undone.`)) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      const ok = await api.deleteIssue(issue.id, true);
+      if (ok) {
+        window.dispatchEvent(new CustomEvent('issueDeleted', { detail: issue.id }));
+        onClose();
+      }
+    } catch (err) {
+      console.error('Failed to delete issue', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleStatusChange = async (stateId: string) => {
     try {
@@ -111,8 +161,10 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
     if (res?.thread_id) {
       setBreakdownThreadId(res.thread_id);
     }
-    if (res?.proposed_tasks) {
+    if (res?.proposed_tasks && res.proposed_tasks.length > 0) {
       setProposedSubtasks(res.proposed_tasks);
+    } else if (res?.proposed_subtasks && res.proposed_subtasks.length > 0) {
+      setProposedSubtasks(res.proposed_subtasks.map((p: any) => typeof p === 'string' ? p : p.title));
     } else {
       setProposedSubtasks([
         `Configure backend endpoints for ${issue.identifier}`,
@@ -126,40 +178,71 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   const handleApproveSubtasks = async () => {
     setBreakdownComplete(true);
 
+    const existingTitles = new Set((issue.subtasks || []).map((s) => s.title.toLowerCase().trim()));
+    const createdSubtasks: Issue[] = [];
+
     if (breakdownThreadId) {
-      const persisted = await api.resumeBreakdown(breakdownThreadId, proposedSubtasks);
-      if (persisted && persisted.length > 0) {
-        const updated = {
-          ...issue,
-          subtasks: [...(issue.subtasks || []), ...persisted],
+      const persisted: any = await api.resumeBreakdown(breakdownThreadId, proposedSubtasks);
+      const createdIds: string[] = persisted?.created_subtask_ids || [];
+
+      proposedSubtasks.forEach((taskTitle, idx) => {
+        if (existingTitles.has(taskTitle.toLowerCase().trim())) {
+          return;
+        }
+        existingTitles.add(taskTitle.toLowerCase().trim());
+        const subIndex = (issue.subtasks?.length || 0) + createdSubtasks.length + 1;
+        const subIssue: Issue = {
+          id: createdIds[idx] || `iss_sub_${Date.now()}_${idx}`,
+          organization_id: issue.organization_id,
+          team_id: issue.team_id,
+          number: (issue.number || 100) + subIndex,
+          identifier: `${issue.identifier}-sub${subIndex}`,
+          title: taskTitle,
+          priority: 'medium' as IssuePriority,
+          state_id: activeStates[0]?.id || issue.state_id,
+          state: activeStates[0] || issue.state,
+          creator_id: issue.creator_id,
+          parent_id: issue.id,
+          sort_order: `${subIndex}|sub:`,
+          version: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         };
-        onUpdateIssue(updated);
-        return;
-      }
+        createdSubtasks.push(subIssue);
+        window.dispatchEvent(new CustomEvent('issueCreated', { detail: subIssue }));
+      });
+    } else {
+      proposedSubtasks.forEach((taskTitle, idx) => {
+        if (existingTitles.has(taskTitle.toLowerCase().trim())) {
+          return;
+        }
+        existingTitles.add(taskTitle.toLowerCase().trim());
+        const subIndex = (issue.subtasks?.length || 0) + createdSubtasks.length + 1;
+        const subIssue: Issue = {
+          id: `iss_sub_${Date.now()}_${idx}`,
+          organization_id: issue.organization_id,
+          team_id: issue.team_id,
+          number: (issue.number || 100) + subIndex,
+          identifier: `${issue.identifier}-sub${subIndex}`,
+          title: taskTitle,
+          priority: 'medium' as IssuePriority,
+          state_id: activeStates[0]?.id || issue.state_id,
+          state: activeStates[0] || issue.state,
+          creator_id: issue.creator_id,
+          parent_id: issue.id,
+          sort_order: `${subIndex}|sub:`,
+          version: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        createdSubtasks.push(subIssue);
+        window.dispatchEvent(new CustomEvent('issueCreated', { detail: subIssue }));
+      });
     }
 
     const updated = {
       ...issue,
-      subtasks: [
-        ...(issue.subtasks || []),
-        ...proposedSubtasks.map((taskTitle, idx) => ({
-          id: `iss_sub_${Date.now()}_${idx}`,
-          organization_id: issue.organization_id,
-          team_id: issue.team_id,
-          number: (issue.number || 100) + idx + 1,
-          identifier: `${issue.identifier}-sub${idx + 1}`,
-          title: taskTitle,
-          priority: 'medium' as IssuePriority,
-          state_id: states[0]?.id || issue.state_id,
-          state: states[0] || issue.state,
-          creator_id: issue.creator_id,
-          parent_id: issue.id,
-          sort_order: `${idx}|sub:`,
-          version: 1,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })),
-      ],
+      subtasks: [...(issue.subtasks || []), ...createdSubtasks],
     };
     onUpdateIssue(updated);
   };
@@ -248,6 +331,14 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               <span>AI Spec Breakdown</span>
             </button>
             <button
+              onClick={handleDeleteIssue}
+              disabled={isDeleting}
+              className="w-7 h-7 rounded text-zinc-500 hover:text-red-400 hover:bg-red-950/40 flex items-center justify-center transition-colors cursor-pointer"
+              title="Delete Issue Permanently"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <button
               onClick={onClose}
               className="w-7 h-7 rounded text-zinc-400 hover:text-white hover:bg-zinc-900 flex items-center justify-center transition-colors cursor-pointer"
             >
@@ -279,25 +370,59 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                 </h3>
               </div>
 
+              {/* Inline Add Sub-task form */}
+              <form onSubmit={handleCreateSubtask} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newSubtaskTitle}
+                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                  placeholder="+ Add sub-task title (press Enter to save)..."
+                  className="flex-1 bg-zinc-950 border border-zinc-800 focus:border-zinc-500 rounded px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none"
+                />
+                {newSubtaskTitle.trim() && (
+                  <button
+                    type="submit"
+                    disabled={isAddingSubtask}
+                    className="px-2.5 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-medium cursor-pointer"
+                  >
+                    {isAddingSubtask ? 'Adding...' : 'Add'}
+                  </button>
+                )}
+              </form>
+
               {issue.subtasks && issue.subtasks.length > 0 ? (
                 <div className="space-y-1.5">
-                  {issue.subtasks.map((sub) => (
+                  {issue.subtasks.map((sub, idx) => (
                     <div
                       key={sub.id}
-                      className="p-2.5 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between text-xs"
+                      className="p-2.5 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 flex items-center justify-between text-xs transition-colors"
                     >
-                      <div className="flex items-center gap-2">
-                        <CornerDownRight className="w-3.5 h-3.5 text-zinc-500" />
-                        <span className="font-mono text-zinc-400 text-[11px]">{sub.identifier}</span>
-                        <span className="text-zinc-200">{sub.title}</span>
+                      <div className="flex items-center gap-2 min-w-0 flex-1 mr-3">
+                        <CornerDownRight className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                        <span className="font-mono text-zinc-400 text-[11px] shrink-0 bg-zinc-900 px-1 rounded border border-zinc-800">
+                          {issue.identifier}-sub{idx + 1}
+                        </span>
+                        <span className="text-zinc-200 truncate">{sub.title}</span>
                       </div>
-                      <StateBadge state={sub.state} />
+                      <div className="flex items-center gap-2 shrink-0">
+                        {sub.assignee ? (
+                          <img
+                            src={sub.assignee.avatar_url}
+                            alt={sub.assignee.name}
+                            className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
+                            title={sub.assignee.name}
+                          />
+                        ) : (
+                          <span className="text-[10px] text-zinc-500 font-mono">Unassigned</span>
+                        )}
+                        <StateBadge state={sub.state} />
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="py-4 text-center rounded border border-dashed border-zinc-800 text-xs text-zinc-500">
-                  No sub-tasks attached.
+                <div className="py-3 text-center rounded border border-dashed border-zinc-900 text-xs text-zinc-500">
+                  No sub-tasks yet. Use "+ Add sub-task" above or click "AI Spec Breakdown".
                 </div>
               )}
             </div>
@@ -540,8 +665,8 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                 onChange={(e) => handleStatusChange(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
               >
-                {states.length > 0 ? (
-                  states.map((s) => (
+                {activeStates.length > 0 ? (
+                  activeStates.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
                     </option>

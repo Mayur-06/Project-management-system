@@ -66,6 +66,18 @@ class Phase4Service:
             "storage_path": storage_path,
         }).execute()
 
+        # Log activity
+        try:
+            db.table("activity_logs").insert({
+                "organization_id": issue["organization_id"],
+                "issue_id": data.issue_id,
+                "actor_id": user_id,
+                "action": "attachment_uploaded",
+                "changes": {"file_name": data.file_name, "file_size": data.file_size, "attachment_id": attachment_id},
+            }).execute()
+        except Exception:
+            pass
+
         # Generate upload URL using configured Supabase URL
         base_url = settings.SUPABASE_URL.rstrip("/")
         upload_url = f"{base_url}/storage/v1/object/upload/sign/attachments/{storage_path}?token=signed_upload_token"
@@ -85,14 +97,16 @@ class Phase4Service:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found")
         att = att_res.data[0]
 
+        iss_res = db.table("issues").select("organization_id").eq("id", att["issue_id"]).limit(1).execute()
+        org_id = iss_res.data[0]["organization_id"] if iss_res.data else "00000000-0000-0000-0000-000000000001"
+
         # Author or admin check
         if att["user_id"] != user_id:
-            iss_res = db.table("issues").select("organization_id").eq("id", att["issue_id"]).limit(1).execute()
             if iss_res.data:
                 mem = (
                     db.table("workspace_members")
                     .select("role")
-                    .eq("organization_id", iss_res.data[0]["organization_id"])
+                    .eq("organization_id", org_id)
                     .eq("user_id", user_id)
                     .limit(1)
                     .execute()
@@ -101,6 +115,18 @@ class Phase4Service:
                     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only attachment uploader or admin can delete")
 
         db.table("issue_attachments").delete().eq("id", attachment_id).execute()
+
+        # Log activity
+        try:
+            db.table("activity_logs").insert({
+                "organization_id": org_id,
+                "issue_id": att["issue_id"],
+                "actor_id": user_id,
+                "action": "attachment_deleted",
+                "changes": {"file_name": att["file_name"], "attachment_id": attachment_id},
+            }).execute()
+        except Exception:
+            pass
 
     @classmethod
     def list_attachments(cls, issue_id: str, user_id: str, db: Client) -> List[AttachmentResponse]:
@@ -137,11 +163,25 @@ class Phase4Service:
     def check_duplicates(
         cls, data: DuplicateCheckRequest, user_id: str, db: Client
     ) -> DuplicateCheckResponse:
+        org_id = data.organization_id
+        if not org_id:
+            mem_lookup = (
+                db.table("workspace_members")
+                .select("organization_id")
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            if mem_lookup.data:
+                org_id = mem_lookup.data[0]["organization_id"]
+            else:
+                org_id = "00000000-0000-0000-0000-000000000001"
+
         # Verify org access
         mem = (
             db.table("workspace_members")
             .select("id")
-            .eq("organization_id", data.organization_id)
+            .eq("organization_id", org_id)
             .eq("user_id", user_id)
             .limit(1)
             .execute()
@@ -162,7 +202,7 @@ class Phase4Service:
                     "query_embedding": query_embedding,
                     "match_threshold": data.threshold,
                     "match_count": data.limit,
-                    "p_organization_id": data.organization_id,
+                    "p_organization_id": org_id,
                 },
             ).execute()
             matches_data = rpc_res.data or []
@@ -193,7 +233,7 @@ class Phase4Service:
         if not results:
             words = [w for w in data.title.split() if len(w) > 3]
             if words:
-                query = db.table("issues").select("id, identifier, title, state_id").eq("organization_id", data.organization_id).is_("deleted_at", "null")
+                query = db.table("issues").select("id, identifier, title, state_id").eq("organization_id", org_id).is_("deleted_at", "null")
                 query = query.ilike("title", f"%{words[0]}%").limit(data.limit)
                 text_res = query.execute()
                 for iss in (text_res.data or []):
@@ -211,6 +251,7 @@ class Phase4Service:
             duplicates_found=len(results) > 0,
             count=len(results),
             matches=results,
+            duplicates=[{"id": m.issue_id, "title": m.title, "similarity": m.similarity} for m in results],
         )
 
     # ==============================================================================
@@ -276,6 +317,9 @@ class Phase4Service:
         thread_id = f"{parent['organization_id']}:{user_id}:{uuid.uuid4()}"
         config = {"configurable": {"thread_id": thread_id, "db": db}}
 
+        existing_sub_res = db.table("issues").select("title").eq("parent_id", data.issue_id).is_("deleted_at", "null").execute()
+        existing_subtasks = [s["title"] for s in (existing_sub_res.data or [])]
+
         # Run breakdown_graph until it hits Node 2 (human_review_gate with interrupt())
         try:
             # In LangGraph 0.2+, interrupt() raises a GraphInterrupt or halts state execution
@@ -286,6 +330,8 @@ class Phase4Service:
                     "team_id": parent["team_id"],
                     "user_id": user_id,
                     "prdspec": parent["title"],
+                    "description": parent.get("description_text") or "",
+                    "existing_subtasks": existing_subtasks,
                 },
                 config=config,
             )
@@ -365,7 +411,7 @@ class Phase4Service:
 
 
         config = {"configurable": {"thread_id": data.thread_id, "db": db}}
-        approved_subtasks_dicts = [p.model_dump() for p in data.approved_subtasks]
+        approved_subtasks_dicts = [p.model_dump() for p in (data.approved_subtasks or [])]
 
         created_ids: List[str] = []
         try:
@@ -388,7 +434,16 @@ class Phase4Service:
             team = team_res.data[0]
             counter = team["issue_counter"]
 
-            for item in data.approved_subtasks:
+            try:
+                existing_sub_res = db.table("issues").select("title").eq("parent_id", parent_id).is_("deleted_at", "null").execute()
+                existing_titles = {s["title"].strip().lower() for s in (existing_sub_res.data or [])}
+            except Exception:
+                existing_titles = set()
+
+            for item in (data.approved_subtasks or []):
+                if item.title.strip().lower() in existing_titles:
+                    continue
+                existing_titles.add(item.title.strip().lower())
                 counter += 1
                 identifier = f"{team['key']}-{counter}"
                 sub_payload = {

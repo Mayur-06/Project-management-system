@@ -109,6 +109,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         isOpen={isNewIssueOpen}
         onClose={() => setIsNewIssueOpen(false)}
         teamKey={teamKey.toUpperCase()}
+        teamId={teams.find((t) => t.key.toUpperCase() === teamKey.toUpperCase())?.id || teams[0]?.id}
         onCreated={(issue) => {
           window.dispatchEvent(new CustomEvent('issueCreated', { detail: issue }));
         }}

@@ -99,14 +99,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
             </div>
           </div>
-
-          <button
-            onClick={onOpenNewIssue}
-            className="w-7 h-7 rounded bg-white hover:bg-zinc-200 text-black flex items-center justify-center transition-all shadow-xs active:scale-95 cursor-pointer"
-            title="Create Issue (C)"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-          </button>
         </div>
 
         {/* Quick Action Buttons */}

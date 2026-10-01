@@ -128,15 +128,16 @@ async def update_issue(
 @router.delete(
     "/issues/{issue_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Soft-delete an issue (cascades to subtasks via database trigger)",
+    summary="Soft or hard delete an issue",
 )
 async def delete_issue(
     issue_id: str,
     client_session_id: Optional[str] = Query(None, description="Client session ID for echo suppression"),
+    hard: bool = Query(False, description="Permanently delete issue and its related data"),
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
 ):
-    IssueService.delete_issue(issue_id, current_user.id, db, client_session_id=client_session_id)
+    IssueService.delete_issue(issue_id, current_user.id, db, client_session_id=client_session_id, hard=hard)
 
 
 @router.put(

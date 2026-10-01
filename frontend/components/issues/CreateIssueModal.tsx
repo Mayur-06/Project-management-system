@@ -19,6 +19,7 @@ interface CreateIssueModalProps {
   projects?: Project[];
   cycles?: Cycle[];
   teamKey?: string;
+  teamId?: string;
 }
 
 export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
@@ -32,6 +33,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   projects = [],
   cycles = [],
   teamKey = 'ENG',
+  teamId,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -48,11 +50,15 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const activeStates = states.filter((s) => s.category !== 'triage');
+
   useEffect(() => {
-    if (states.length > 0 && !stateId) {
-      setStateId(states[0].id);
+    if (initialStateId) {
+      setStateId(initialStateId);
+    } else if (activeStates.length > 0 && !stateId) {
+      setStateId(activeStates[0].id);
     }
-  }, [states, stateId]);
+  }, [initialStateId, isOpen, states]);
 
   useEffect(() => {
     if (title.trim().length < 10) {
@@ -78,7 +84,9 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
 
     setIsSubmitting(true);
     try {
+      const resolvedTeamId = teamId || states[0]?.team_id;
       const created = await api.createIssue({
+        team_id: resolvedTeamId,
         title,
         description_text: description,
         priority,
@@ -169,7 +177,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
                 onChange={(e) => setStateId(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
               >
-                {states.map((s) => (
+                {activeStates.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>

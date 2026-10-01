@@ -13,7 +13,8 @@ class IssuePriority(str, Enum):
 
 
 class IssueCreate(BaseModel):
-    team_id: str
+    team_id: Optional[str] = None
+    team_key: Optional[str] = None
     title: str = Field(..., max_length=500)
     description_json: Optional[Dict[str, Any]] = None
     description_text: Optional[str] = None
@@ -124,19 +125,20 @@ class ActivityLogResponse(BaseModel):
     organization_id: str
     issue_id: Optional[str] = None
     actor_id: str
+    actor: Optional[Dict[str, Any]] = None
     action: str
     changes: Optional[Dict[str, Any]] = None
     created_at: datetime
 
 
 class CommentCreate(BaseModel):
-    body_json: Dict[str, Any]
-    body_text: str
+    body_json: Optional[Dict[str, Any]] = None
+    body_text: str = Field(..., min_length=1)
 
 
 class CommentUpdate(BaseModel):
-    body_json: Dict[str, Any]
-    body_text: str
+    body_json: Optional[Dict[str, Any]] = None
+    body_text: str = Field(..., min_length=1)
 
 
 class CommentReactionToggle(BaseModel):

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ==============================================================================
@@ -38,7 +38,7 @@ class AttachmentResponse(BaseModel):
 # ==============================================================================
 
 class DuplicateCheckRequest(BaseModel):
-    organization_id: str
+    organization_id: Optional[str] = None
     title: str = Field(..., min_length=10, max_length=500)
     description: Optional[str] = None
     threshold: float = Field(0.75, ge=0.0, le=1.0)
@@ -57,6 +57,7 @@ class DuplicateCheckResponse(BaseModel):
     duplicates_found: bool
     count: int
     matches: List[DuplicateIssueItem]
+    duplicates: Optional[List[Dict[str, Any]]] = None
 
 
 # ==============================================================================
@@ -103,7 +104,32 @@ class BreakdownStartResponse(BaseModel):
 
 class BreakdownResumeRequest(BaseModel):
     thread_id: str
-    approved_subtasks: List[ProposedSubtask]
+    approved_subtasks: Optional[List[ProposedSubtask]] = None
+    approved_tasks: Optional[List[Any]] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_subtasks(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("approved_subtasks") and data.get("approved_tasks"):
+                raw_tasks = data["approved_tasks"]
+                normalized = []
+                for t in raw_tasks:
+                    if isinstance(t, str):
+                        normalized.append({"title": t, "priority": "medium"})
+                    elif isinstance(t, dict):
+                        normalized.append(t)
+                data["approved_subtasks"] = normalized
+            elif data.get("approved_subtasks"):
+                raw_tasks = data["approved_subtasks"]
+                normalized = []
+                for t in raw_tasks:
+                    if isinstance(t, str):
+                        normalized.append({"title": t, "priority": "medium"})
+                    elif isinstance(t, dict):
+                        normalized.append(t)
+                data["approved_subtasks"] = normalized
+        return data
 
 
 class BreakdownResumeResponse(BaseModel):

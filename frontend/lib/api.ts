@@ -101,16 +101,29 @@ export const api = {
     });
   },
 
-  async deleteIssue(id: string): Promise<boolean> {
+  async createSubtask(
+    issueId: string,
+    subtask: { title: string; assignee_id?: string; estimate?: number; priority?: string }
+  ): Promise<Issue | null> {
+    return await fetchWithAuth<Issue>(`/issues/${issueId}/subtasks`, {
+      method: 'POST',
+      body: JSON.stringify(subtask),
+    });
+  },
+
+  async deleteIssue(id: string, hard: boolean = false): Promise<boolean> {
     const sessionId = getClientSessionId();
     const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
     try {
-      const response = await fetch(`${API_BASE}/issues/${id}?client_session_id=${encodeURIComponent(sessionId)}`, {
-        method: 'DELETE',
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
+      const response = await fetch(
+        `${API_BASE}/issues/${id}?hard=${hard}&client_session_id=${encodeURIComponent(sessionId)}`,
+        {
+          method: 'DELETE',
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        }
+      );
       return response.ok;
     } catch {
       return false;
@@ -126,7 +139,10 @@ export const api = {
   async addComment(issueId: string, bodyText: string): Promise<IssueComment | null> {
     return await fetchWithAuth<IssueComment>(`/issues/${issueId}/comments`, {
       method: 'POST',
-      body: JSON.stringify({ body_text: bodyText }),
+      body: JSON.stringify({
+        body_text: bodyText,
+        body_json: { type: 'doc', content: [] },
+      }),
     });
   },
 
@@ -149,15 +165,28 @@ export const api = {
   },
 
   // AI Duplicates Check
-  async checkDuplicates(title: string): Promise<{ duplicates: { id: string; title: string; similarity: number }[] }> {
-    const data = await fetchWithAuth<{ duplicates: { id: string; title: string; similarity: number }[] }>(
+  async checkDuplicates(
+    title: string,
+    organizationId?: string
+  ): Promise<{ duplicates: { id: string; title: string; similarity: number }[] }> {
+    const data = await fetchWithAuth<any>(
       `/ai/duplicates/check`,
       {
         method: 'POST',
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({
+          title,
+          ...(organizationId ? { organization_id: organizationId } : {}),
+        }),
       }
     );
-    return data || { duplicates: [] };
+    const rawMatches = data?.matches || data?.duplicates || [];
+    return {
+      duplicates: rawMatches.map((m: any) => ({
+        id: m.issue_id || m.id,
+        title: m.title,
+        similarity: m.similarity,
+      })),
+    };
   },
 
   // AI Auto-Triage
@@ -169,17 +198,39 @@ export const api = {
   },
 
   // AI Sub-task Breakdown
-  async startBreakdown(issueId: string, threadId?: string): Promise<{ thread_id: string; proposed_tasks: string[] } | null> {
-    return await fetchWithAuth(`/ai/breakdown/start`, {
+  async startBreakdown(
+    issueId: string,
+    threadId?: string
+  ): Promise<{ thread_id: string; proposed_subtasks?: any[]; proposed_tasks?: string[] } | null> {
+    const res = await fetchWithAuth<any>(`/ai/breakdown/start`, {
       method: 'POST',
       body: JSON.stringify({ issue_id: issueId, thread_id: threadId }),
     });
+    if (!res) return null;
+    const proposed = res.proposed_subtasks || res.proposed_tasks || [];
+    return {
+      thread_id: res.thread_id,
+      proposed_subtasks: proposed,
+      proposed_tasks: proposed.map((p: any) => (typeof p === 'string' ? p : p.title)),
+    };
   },
 
-  async resumeBreakdown(threadId: string, approvedTasks: string[]): Promise<Issue[] | null> {
+  async resumeBreakdown(
+    threadId: string,
+    approvedTasks: (string | { title: string; description?: string; estimate?: number; priority?: string })[]
+  ): Promise<Issue[] | null> {
+    const formatted = approvedTasks.map((t) =>
+      typeof t === 'string'
+        ? { title: t, description: '', estimate: 2, priority: 'medium' }
+        : t
+    );
     return await fetchWithAuth(`/ai/breakdown/resume`, {
       method: 'POST',
-      body: JSON.stringify({ thread_id: threadId, approved_tasks: approvedTasks }),
+      body: JSON.stringify({
+        thread_id: threadId,
+        approved_subtasks: formatted,
+        approved_tasks: formatted,
+      }),
     });
   },
 

@@ -100,13 +100,20 @@ export default function IssuesPage() {
     const handleUpdated = (e: any) => {
       setIssues((prev) => prev.map((i) => (i.id === e.detail.id ? e.detail : i)));
     };
+    const handleDeleted = (e: any) => {
+      const deletedId = typeof e.detail === 'string' ? e.detail : e.detail?.id;
+      setIssues((prev) => prev.filter((i) => i.id !== deletedId));
+      setSelectedIssue((prev) => (prev?.id === deletedId ? null : prev));
+    };
 
     window.addEventListener('issueCreated', handleCreated);
     window.addEventListener('issueUpdated', handleUpdated);
+    window.addEventListener('issueDeleted', handleDeleted);
 
     return () => {
       window.removeEventListener('issueCreated', handleCreated);
       window.removeEventListener('issueUpdated', handleUpdated);
+      window.removeEventListener('issueDeleted', handleDeleted);
     };
   }, []);
 
@@ -116,12 +123,32 @@ export default function IssuesPage() {
       i.identifier.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleMoveIssueState = async (issueId: string, newStateId: string) => {
+  const handleMoveIssueState = async (
+    issueId: string,
+    newStateId: string,
+    prevRank?: string,
+    nextRank?: string
+  ) => {
+    let newRank = '0|h00000:';
+    if (prevRank && nextRank) {
+      newRank = `${prevRank.slice(0, 4)}${Date.now() % 1000}:`;
+    } else if (prevRank) {
+      newRank = `${prevRank}1:`;
+    } else if (nextRank) {
+      newRank = `0|0${Date.now() % 100}:`;
+    }
+
     // Optimistic UI update
     setIssues((prev) =>
-      prev.map((i) => (i.id === issueId ? { ...i, state_id: newStateId } : i))
+      prev.map((i) => (i.id === issueId ? { ...i, state_id: newStateId, sort_order: newRank } : i))
     );
-    await api.reorderIssue(issueId, newStateId, '0|new:');
+    await api.reorderIssue(issueId, newStateId, newRank);
+  };
+
+  const handleDeleteIssue = async (issueId: string) => {
+    setIssues((prev) => prev.filter((i) => i.id !== issueId));
+    if (selectedIssue?.id === issueId) setSelectedIssue(null);
+    await api.deleteIssue(issueId, true);
   };
 
   return (
@@ -158,6 +185,7 @@ export default function IssuesPage() {
               setIsNewIssueOpen(true);
             }}
             onMoveIssueState={handleMoveIssueState}
+            onDeleteIssue={handleDeleteIssue}
           />
         ) : (
           <IssueListView issues={filteredIssues} onSelectIssue={setSelectedIssue} />
@@ -171,7 +199,17 @@ export default function IssuesPage() {
         onClose={() => setSelectedIssue(null)}
         onUpdateIssue={(updated) => {
           setSelectedIssue(updated);
-          setIssues((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+          setIssues((prev) => {
+            let next = prev.map((i) => (i.id === updated.id ? updated : i));
+            if (updated.subtasks && updated.subtasks.length > 0) {
+              const existingIds = new Set(next.map((i) => i.id));
+              const newSubs = updated.subtasks.filter((s) => !existingIds.has(s.id));
+              if (newSubs.length > 0) {
+                next = [...newSubs, ...next];
+              }
+            }
+            return next;
+          });
         }}
       />
 
@@ -181,6 +219,7 @@ export default function IssuesPage() {
         initialStateId={initialStateId}
         states={states}
         teamKey={teamKey}
+        teamId={currentTeam?.id}
         onClose={() => setIsNewIssueOpen(false)}
         onCreated={(newIssue) => {
           setIssues((prev) => [newIssue, ...prev]);

@@ -23,12 +23,14 @@ class ProposedSubtaskDict(TypedDict):
     priority: str
 
 
-class BreakdownAgentState(TypedDict):
+class BreakdownAgentState(TypedDict, total=False):
     parent_issue_id: str
     organization_id: str
     team_id: str
     user_id: str
     prdspec: str
+    description: Optional[str]
+    existing_subtasks: Optional[List[str]]
     proposed_subtasks: List[ProposedSubtaskDict]
     approved_subtasks: List[ProposedSubtaskDict]
     created_subtask_ids: List[str]
@@ -40,12 +42,20 @@ def generate_proposal_node(state: BreakdownAgentState) -> Dict[str, Any]:
     from app.core.ai_client import generate_llm_completion
 
     parent_title = state.get("prdspec", "Feature Epic")
+    parent_desc = state.get("description") or ""
+    existing_tasks = state.get("existing_subtasks") or []
+
+    existing_ctx = f"\nExisting subtasks already tracked:\n- " + "\n- ".join(existing_tasks) if existing_tasks else ""
+    desc_ctx = f"\nIssue Details & Specifications:\n{parent_desc}" if parent_desc else ""
 
     # Attempt dynamic LLM breakdown if Gemini API key is configured
     prompt = (
         f"You are a Principal Software Architect decomposing an issue or epic.\n"
-        f"Initiative Title: {parent_title}\n\n"
+        f"Initiative Title: {parent_title}"
+        f"{desc_ctx}"
+        f"{existing_ctx}\n\n"
         f"Formulate a structured PRD summary and decompose this problem into 3 to 5 atomic child subtasks.\n"
+        f"Do NOT duplicate any existing subtasks listed above.\n"
         f"Return STRICT JSON with keys:\n"
         f"- prdspec: string formatted markdown containing high-level architectural specification\n"
         f"- subtasks: array of objects with keys:\n"
@@ -147,11 +157,17 @@ def batch_persist_node(state: BreakdownAgentState, config: Optional[RunnableConf
         team = team_res.data[0]
         counter = team["issue_counter"]
 
-        # Fetch default parent state
-        p_res = db.table("issues").select("state_id").eq("id", parent_id).limit(1).execute()
-        state_id = p_res.data[0]["state_id"] if p_res.data else "00000000-0000-0000-0000-000000000000"
+        # Check existing subtasks to prevent duplicates if user runs breakdown multiple times
+        try:
+            existing_sub_res = db.table("issues").select("title").eq("parent_id", parent_id).is_("deleted_at", "null").execute()
+            existing_titles = {s["title"].strip().lower() for s in (existing_sub_res.data or [])}
+        except Exception:
+            existing_titles = set()
 
         for item in approved:
+            if item["title"].strip().lower() in existing_titles:
+                continue
+            existing_titles.add(item["title"].strip().lower())
             counter += 1
             identifier = f"{team['key']}-{counter}"
             payload = {
