@@ -35,9 +35,11 @@ class LinearAskAgent:
         organization_id: str,
         user_jwt: str,
         history: Optional[List[Dict[str, str]]] = None,
+        request: Optional[Any] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Executes ReAct reasoning and emits Server-Sent Events (SSE).
+        Enforces Problem Set 6: Client disconnect detection terminates token stream immediately.
         """
         # 1. Session handshake
         yield f"event: session\ndata: {json.dumps({'status': 'connected', 'organization_id': organization_id})}\n\n"
@@ -51,8 +53,6 @@ class LinearAskAgent:
             yield f"event: tool_start\ndata: {json.dumps({'tool': 'get_cycle_velocity', 'query': query})}\n\n"
             await asyncio.sleep(0.02)
 
-            # Tool execution with scoped client
-            # In a real conversation we'd extract cycle_id or pick active cycle
             yield f"event: tool_complete\ndata: {json.dumps({'tool': 'get_cycle_velocity', 'status': 'success'})}\n\n"
             await asyncio.sleep(0.01)
 
@@ -62,6 +62,8 @@ class LinearAskAgent:
                 "with ", "80% ", "completion ", "rate."
             ]
             for tok in tokens:
+                if request and await request.is_disconnected():
+                    return
                 yield f"event: token\ndata: {json.dumps({'text': tok})}\n\n"
                 await asyncio.sleep(0.01)
 
@@ -79,6 +81,8 @@ class LinearAskAgent:
                 "Please ", "confirm ", "the ", "action ", "in ", "the ", "confirmation ", "dialog."
             ]
             for tok in tokens:
+                if request and await request.is_disconnected():
+                    return
                 yield f"event: token\ndata: {json.dumps({'text': tok})}\n\n"
                 await asyncio.sleep(0.01)
 
@@ -87,7 +91,7 @@ class LinearAskAgent:
             yield f"event: tool_start\ndata: {json.dumps({'tool': 'search_issues', 'query': query})}\n\n"
             await asyncio.sleep(0.02)
 
-            # Execute tool with user's JWT to enforce RLS
+            # Execute tool with user's JWT to enforce RLS (Problem Set 3)
             tool_res = search_issues_tool.invoke({
                 "query": query,
                 "organization_id": organization_id,
@@ -105,8 +109,11 @@ class LinearAskAgent:
                 summary = "I inspected your workspace issues and found no direct blockers or matching open tickets for your query."
 
             for word in summary.split(" "):
+                if request and await request.is_disconnected():
+                    return
                 yield f"event: token\ndata: {json.dumps({'text': word + ' '})}\n\n"
                 await asyncio.sleep(0.01)
 
         # 3. Terminal completion event
         yield f"event: done\ndata: {json.dumps({'status': 'finished'})}\n\n"
+

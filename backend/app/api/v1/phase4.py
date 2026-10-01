@@ -127,11 +127,14 @@ async def resume_breakdown(
 from app.agents.react_agent import LinearAskAgent
 
 
+from fastapi import Request
+
 @router.post(
     "/ai/chat/stream",
     summary="Server-Sent Events (SSE) stream for Linear Ask ReAct agent with tool execution",
 )
 async def chat_stream(
+    request: Request,
     payload: ChatStreamRequest,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
@@ -143,6 +146,7 @@ async def chat_stream(
             organization_id=payload.organization_id,
             user_jwt=current_user.raw_token,
             history=[m.model_dump() for m in payload.messages],
+            request=request,
         ),
         media_type="text/event-stream",
         headers={
@@ -151,4 +155,5 @@ async def chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
 
