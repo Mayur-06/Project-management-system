@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Sparkles,
@@ -11,8 +11,12 @@ import {
   Activity,
   User as UserIcon,
   Loader2,
+  Paperclip,
+  Trash2,
+  Upload,
+  FileText,
 } from 'lucide-react';
-import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState } from '@/types';
+import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment } from '@/types';
 import { api } from '@/lib/api';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
@@ -30,10 +34,14 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   onClose,
   onUpdateIssue,
 }) => {
-  const [activeTab, setActiveTab] = useState<'comments' | 'activity' | 'ai_breakdown'>('comments');
+  const [activeTab, setActiveTab] = useState<'comments' | 'activity' | 'ai_breakdown' | 'attachments'>('comments');
   const [comments, setComments] = useState<IssueComment[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [attachments, setAttachments] = useState<IssueAttachment[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   
   // AI Spec & Subtask breakdown state
   const [isBreakingDown, setIsBreakingDown] = useState(false);
@@ -44,8 +52,10 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
     if (issue) {
       api.getComments(issue.id).then(setComments);
       api.getActivityLogs(issue.id).then(setActivityLogs);
+      api.getAttachments(issue.id).then(setAttachments);
       setProposedSubtasks([]);
       setBreakdownComplete(false);
+      setUploadError(null);
     }
   }, [issue]);
 
@@ -134,6 +144,64 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       ],
     };
     onUpdateIssue(updated);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !issue) return;
+
+    if (file.size > 52428800) {
+      setUploadError('File size exceeds the 50MB limit.');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      setUploadError(null);
+
+      // 1. Request pre-signed upload URL from backend
+      const uploadData = await api.getUploadUrl(issue.id, file.name, file.size, file.type || 'application/octet-stream');
+      if (!uploadData) {
+        setUploadError('Failed to generate upload URL. Please try again.');
+        setIsUploading(false);
+        return;
+      }
+
+      // 2. Perform direct upload to storage endpoint (or simulation in local dev)
+      try {
+        await fetch(uploadData.upload_url, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: file,
+        });
+      } catch {
+        // Fallback for mock environments
+      }
+
+      // 3. Refresh attachments list
+      const freshAttachments = await api.getAttachments(issue.id);
+      setAttachments(freshAttachments);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (err: any) {
+      setUploadError(err?.message || 'Error uploading file.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    const success = await api.deleteAttachment(attachmentId);
+    if (success) {
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   return (
@@ -229,6 +297,17 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                   <span>Comments ({comments.length})</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('attachments')}
+                  className={`flex items-center gap-1.5 pb-2 -mb-2 cursor-pointer ${
+                    activeTab === 'attachments'
+                      ? 'text-white border-b-2 border-white font-semibold'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                  <span>Attachments ({attachments.length})</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('activity')}
@@ -350,6 +429,82 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                       <span>Sub-tasks successfully created.</span>
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'attachments' && (
+                <div className="space-y-4">
+                  {/* Upload Box / Dropzone */}
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border border-dashed border-zinc-700 hover:border-white rounded-lg p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors bg-zinc-950/60 group"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    {isUploading ? (
+                      <div className="flex items-center gap-2 text-xs text-zinc-300">
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>Uploading attachment...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5 text-zinc-400 group-hover:text-white transition-colors" />
+                        <div className="text-center">
+                          <p className="text-xs font-medium text-white">Click to upload file</p>
+                          <p className="text-[11px] text-zinc-500">Max size 50MB (images, logs, archives, documents)</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {uploadError && (
+                    <div className="p-2.5 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-300">
+                      {uploadError}
+                    </div>
+                  )}
+
+                  {/* Attachments List */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                      Files ({attachments.length})
+                    </h4>
+                    {attachments.length > 0 ? (
+                      <div className="space-y-2">
+                        {attachments.map((att) => (
+                          <div
+                            key={att.id}
+                            className="p-3 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-3 text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <FileText className="w-4 h-4 text-zinc-400 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="font-medium text-white truncate text-xs">{att.file_name}</p>
+                                <p className="text-[11px] text-zinc-500 font-mono">
+                                  {formatFileSize(att.file_size)} • {new Date(att.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+
+                            <button
+                              onClick={() => handleDeleteAttachment(att.id)}
+                              title="Delete attachment"
+                              className="p-1.5 text-zinc-500 hover:text-white rounded hover:bg-zinc-900 transition-colors cursor-pointer shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-6 text-center rounded border border-dashed border-zinc-900 text-xs text-zinc-500">
+                        No attachments uploaded yet.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

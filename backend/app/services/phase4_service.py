@@ -102,6 +102,33 @@ class Phase4Service:
 
         db.table("issue_attachments").delete().eq("id", attachment_id).execute()
 
+    @classmethod
+    def list_attachments(cls, issue_id: str, user_id: str, db: Client) -> List[AttachmentResponse]:
+        iss_res = db.table("issues").select("organization_id").eq("id", issue_id).limit(1).execute()
+        if not iss_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+        issue = iss_res.data[0]
+
+        mem = (
+            db.table("workspace_members")
+            .select("id")
+            .eq("organization_id", issue["organization_id"])
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not mem.data:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+        res = (
+            db.table("issue_attachments")
+            .select("*")
+            .eq("issue_id", issue_id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return [AttachmentResponse(**item) for item in (res.data or [])]
+
     # ==============================================================================
     # 2. AI Duplicate Detection (Vector Search / pgvector)
     # ==============================================================================

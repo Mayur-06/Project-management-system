@@ -1,6 +1,6 @@
 import json
 import asyncio
-from typing import AsyncGenerator
+from typing import AsyncGenerator, List
 from fastapi import APIRouter, Depends, status, HTTPException
 from fastapi.responses import StreamingResponse
 from supabase import Client
@@ -10,6 +10,7 @@ from app.core.dependencies import get_current_user, get_admin_db
 from app.schemas.phase4 import (
     AttachmentUploadRequest,
     AttachmentUploadResponse,
+    AttachmentResponse,
     DuplicateCheckRequest,
     DuplicateCheckResponse,
     TriageClassifyRequest,
@@ -41,6 +42,19 @@ async def generate_upload_url(
     db: Client = Depends(get_admin_db),
 ):
     return Phase4Service.create_attachment_upload_url(payload, current_user.id, db)
+
+
+@router.get(
+    "/issues/{issue_id}/attachments",
+    response_model=List[AttachmentResponse],
+    summary="List all file attachments for an issue",
+)
+async def list_attachments(
+    issue_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return Phase4Service.list_attachments(issue_id, current_user.id, db)
 
 
 @router.delete(

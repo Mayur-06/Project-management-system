@@ -170,3 +170,15 @@ export interface TriageOutput {
   suggested_assignee?: User;
   reasoning: string;
 }
+
+export interface IssueAttachment {
+  id: string;
+  issue_id: string;
+  user_id: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  storage_path: string;
+  created_at: string;
+}
+

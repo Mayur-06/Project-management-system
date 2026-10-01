@@ -8,6 +8,7 @@ import {
   TriageOutput,
   Team,
   Organization,
+  IssueAttachment,
 } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
@@ -151,5 +152,43 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ thread_id: threadId, approved_tasks: approvedTasks }),
     });
+  },
+
+  // Attachments
+  async getAttachments(issueId: string): Promise<IssueAttachment[]> {
+    const data = await fetchWithAuth<IssueAttachment[]>(`/issues/${issueId}/attachments`);
+    return data || [];
+  },
+
+  async getUploadUrl(
+    issueId: string,
+    fileName: string,
+    fileSize: number,
+    mimeType: string
+  ): Promise<{ attachment_id: string; issue_id: string; upload_url: string; storage_path: string; file_name: string } | null> {
+    return await fetchWithAuth(`/attachments/upload-url`, {
+      method: 'POST',
+      body: JSON.stringify({
+        issue_id: issueId,
+        file_name: fileName,
+        file_size: fileSize,
+        mime_type: mimeType,
+      }),
+    });
+  },
+
+  async deleteAttachment(attachmentId: string): Promise<boolean> {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
+    try {
+      const response = await fetch(`${API_BASE}/attachments/${attachmentId}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
   },
 };
