@@ -13,6 +13,16 @@ class TeamCreate(TeamBase):
     pass
 
 
+class TeamMemberAdd(BaseModel):
+    user_id: str
+
+
+class TeamUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Team display name")
+    key: Optional[str] = Field(None, min_length=1, max_length=10, pattern=r"^[A-Z0-9]+$", description="Team issue prefix key (e.g. ENG, PROD)")
+    cycle_duration_weeks: Optional[int] = Field(None, ge=1, le=12, description="Default cycle duration in weeks")
+
+
 class TeamResponse(TeamBase):
     model_config = ConfigDict(from_attributes=True)
 

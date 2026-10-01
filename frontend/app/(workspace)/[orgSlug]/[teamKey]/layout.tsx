@@ -4,11 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { WorkspaceSidebar } from '@/components/sidebar/WorkspaceSidebar';
 import { CommandPalette } from '@/components/command/CommandPalette';
-import { LinearAskModal } from '@/components/ai/LinearAskModal';
+import { AIAssistantModal } from '@/components/ai/AIAssistantModal';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 import { IssueDetailDrawer } from '@/components/issues/IssueDetailDrawer';
 import { Issue, Organization, Team, User } from '@/types';
 import { api } from '@/lib/api';
+
+import { supabase } from '@/lib/supabase/client';
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
@@ -23,10 +25,40 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const [isAIAskOpen, setIsAIAskOpen] = useState(false);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
 
   useEffect(() => {
     api.getWorkspace(orgSlug).then(setOrganization);
     api.getTeams(orgSlug).then(setTeams);
+    api.getWorkspaceMembers(orgSlug).then((members) => {
+      const active = (members || [])
+        .filter((m) => m.status !== 'invited' && m.user)
+        .map((m) => ({
+          id: m.user_id,
+          name: m.user?.name || m.user?.email || 'Member',
+          email: m.user?.email || '',
+        }));
+      setWorkspaceUsers(active);
+    }).catch(() => {});
+
+    // Resolve current user from Supabase auth
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        setCurrentUser({
+          id: user.id,
+          email: user.email || 'user@example.com',
+          name: (user.user_metadata?.full_name as string) || user.email?.split('@')[0] || 'Workspace User',
+          avatar_url: (user.user_metadata?.avatar_url as string) || undefined,
+        });
+      } else {
+        // Fallback default user for dev mode
+        setCurrentUser({
+          id: '00000000-0000-0000-0000-000000000001',
+          email: 'alex@acme.inc',
+          name: 'Alex Rivera',
+        });
+      }
+    });
   }, [orgSlug]);
 
   // Global Keyboard Shortcuts (Cmd+K for palette, C for new issue)
@@ -50,7 +82,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   }, []);
 
   return (
-    <div className="flex h-screen w-screen bg-[#08090a] text-zinc-100 overflow-hidden font-sans">
+    <div className="flex h-screen w-screen bg-black text-white overflow-hidden font-sans">
       {/* Sidebar with dynamic workspace data */}
       <WorkspaceSidebar
         currentOrgSlug={orgSlug}
@@ -64,7 +96,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       />
 
       {/* Main View Area */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-[#08090a]">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-black">
         {children}
       </main>
 
@@ -78,7 +110,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         teams={teams}
       />
 
-      <LinearAskModal
+      <AIAssistantModal
         isOpen={isAIAskOpen}
         onClose={() => setIsAIAskOpen(false)}
         currentUser={currentUser}
@@ -88,6 +120,8 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         isOpen={isNewIssueOpen}
         onClose={() => setIsNewIssueOpen(false)}
         teamKey={teamKey.toUpperCase()}
+        teamId={teams.find((t) => t.key.toUpperCase() === teamKey.toUpperCase())?.id || teams[0]?.id}
+        users={workspaceUsers}
         onCreated={(issue) => {
           window.dispatchEvent(new CustomEvent('issueCreated', { detail: issue }));
         }}
@@ -95,6 +129,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
       <IssueDetailDrawer
         issue={selectedIssue}
+        users={workspaceUsers}
         onClose={() => setSelectedIssue(null)}
         onUpdateIssue={(updated) => {
           setSelectedIssue(updated);

@@ -31,22 +31,22 @@ export default function ProjectsPage() {
     switch (health) {
       case 'on_track':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-800/50">
-            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700">
+            <CheckCircle2 className="w-3 h-3 text-white" />
             <span>On Track</span>
           </span>
         );
       case 'at_risk':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-800/50">
-            <AlertTriangle className="w-3 h-3 text-amber-400" />
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+            <AlertTriangle className="w-3 h-3 text-zinc-300" />
             <span>At Risk</span>
           </span>
         );
       case 'off_track':
         return (
-          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-400 bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-800/50">
-            <XCircle className="w-3 h-3 text-rose-400" />
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
+            <XCircle className="w-3 h-3 text-zinc-400" />
             <span>Off Track</span>
           </span>
         );
@@ -54,7 +54,7 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="flex flex-col flex-1 h-full overflow-hidden">
+    <div className="flex flex-col flex-1 h-full overflow-hidden font-sans">
       <TopNav
         title="Projects Roadmap"
         subtitle={`${projects.length} initiatives`}
@@ -66,7 +66,7 @@ export default function ProjectsPage() {
           {projects.map((project) => (
             <div
               key={project.id}
-              className="p-5 rounded-2xl bg-[#0f1014] border border-[#1f222a] hover:border-[#2f3440] transition-all space-y-4 shadow-lg flex flex-col justify-between group"
+              className="p-5 rounded-xl bg-zinc-950 border border-zinc-800 hover:border-zinc-700 transition-all space-y-4 shadow-xs flex flex-col justify-between group"
             >
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
@@ -77,7 +77,7 @@ export default function ProjectsPage() {
                   </span>
                 </div>
 
-                <h3 className="text-base font-semibold text-zinc-100 group-hover:text-indigo-400 transition-colors">
+                <h3 className="text-base font-semibold text-white group-hover:text-zinc-200 transition-colors">
                   {project.name}
                 </h3>
 
@@ -86,16 +86,16 @@ export default function ProjectsPage() {
                 </p>
               </div>
 
-              <div className="space-y-3 pt-3 border-t border-[#181a20]">
+              <div className="space-y-3 pt-3 border-t border-zinc-800">
                 {/* Progress bar */}
                 <div className="space-y-1">
                   <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
                     <span>Progress</span>
-                    <span className="text-zinc-200 font-bold">{project.progress}%</span>
+                    <span className="text-white font-bold">{project.progress}%</span>
                   </div>
-                  <div className="w-full h-2 bg-[#181a22] rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
                     <div
-                      className="h-full bg-indigo-500 rounded-full"
+                      className="h-full bg-white rounded-full"
                       style={{ width: `${project.progress}%` }}
                     />
                   </div>
@@ -107,7 +107,7 @@ export default function ProjectsPage() {
                     <img
                       src={project.lead?.avatar_url}
                       alt={project.lead?.name}
-                      className="w-5 h-5 rounded-full object-cover"
+                      className="w-5 h-5 rounded-full object-cover ring-1 ring-zinc-700"
                     />
                     <span className="text-zinc-300">{project.lead?.name}</span>
                   </div>

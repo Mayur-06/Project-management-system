@@ -30,12 +30,21 @@ def verify_supabase_token(token: str) -> AuthenticatedUser:
                 options={"verify_signature": False, "verify_aud": False}
             )
         else:
-            payload = jwt.decode(
-                token,
-                secret,
-                algorithms=["HS256"],
-                audience="authenticated",
-            )
+            try:
+                payload = jwt.decode(
+                    token,
+                    secret,
+                    algorithms=["HS256"],
+                    audience="authenticated",
+                )
+            except Exception as decode_err:
+                if settings.ENVIRONMENT == "development":
+                    payload = jwt.decode(
+                        token,
+                        options={"verify_signature": False, "verify_aud": False}
+                    )
+                else:
+                    raise decode_err
 
         user_id = payload.get("sub")
         if not user_id:

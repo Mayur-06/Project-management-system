@@ -95,14 +95,14 @@ export const TopNav: React.FC<TopNavProps> = ({
           </div>
         )}
 
-        {/* Linear Ask AI Button */}
+        {/* AI Assistant Button */}
         {onOpenAIAsk && (
           <button
             onClick={onOpenAIAsk}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-indigo-300 bg-indigo-950/40 hover:bg-indigo-900/40 border border-indigo-800/40 hover:border-indigo-700/60 transition-colors shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-colors shadow-xs cursor-pointer"
           >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Linear Ask</span>
+            <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
+            <span>AI Assistant</span>
           </button>
         )}
 
@@ -110,9 +110,9 @@ export const TopNav: React.FC<TopNavProps> = ({
         {onOpenNewIssue && (
           <button
             onClick={onOpenNewIssue}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors shadow-md active:scale-95 cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-black bg-white hover:bg-zinc-200 transition-colors shadow-xs active:scale-95 cursor-pointer"
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>New Issue</span>
           </button>
         )}

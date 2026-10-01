@@ -13,7 +13,8 @@ class IssuePriority(str, Enum):
 
 
 class IssueCreate(BaseModel):
-    team_id: str
+    team_id: Optional[str] = None
+    team_key: Optional[str] = None
     title: str = Field(..., max_length=500)
     description_json: Optional[Dict[str, Any]] = None
     description_text: Optional[str] = None
@@ -25,6 +26,7 @@ class IssueCreate(BaseModel):
     cycle_id: Optional[str] = None
     parent_id: Optional[str] = None
     due_date: Optional[date] = None
+    client_session_id: Optional[str] = None
 
 
 class IssueUpdate(BaseModel):
@@ -84,6 +86,13 @@ class SubtaskCreate(BaseModel):
     priority: IssuePriority = IssuePriority.NONE
 
 
+class IssueAssigneeUser(BaseModel):
+    id: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
 class IssueResponse(BaseModel):
     id: str
     organization_id: str
@@ -96,7 +105,9 @@ class IssueResponse(BaseModel):
     priority: str
     estimate: Optional[int] = None
     state_id: str
+    state: Optional[Dict[str, Any]] = None
     assignee_id: Optional[str] = None
+    assignee: Optional[IssueAssigneeUser] = None
     creator_id: str
     project_id: Optional[str] = None
     cycle_id: Optional[str] = None
@@ -107,6 +118,7 @@ class IssueResponse(BaseModel):
     snoozed_until: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None
+    last_modified_by_session: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None
@@ -122,19 +134,20 @@ class ActivityLogResponse(BaseModel):
     organization_id: str
     issue_id: Optional[str] = None
     actor_id: str
+    actor: Optional[Dict[str, Any]] = None
     action: str
     changes: Optional[Dict[str, Any]] = None
     created_at: datetime
 
 
 class CommentCreate(BaseModel):
-    body_json: Dict[str, Any]
-    body_text: str
+    body_json: Optional[Dict[str, Any]] = None
+    body_text: str = Field(..., min_length=1)
 
 
 class CommentUpdate(BaseModel):
-    body_json: Dict[str, Any]
-    body_text: str
+    body_json: Optional[Dict[str, Any]] = None
+    body_text: str = Field(..., min_length=1)
 
 
 class CommentReactionToggle(BaseModel):

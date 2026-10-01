@@ -20,6 +20,16 @@ class OrganizationCreate(OrganizationBase):
     pass
 
 
+class OrganizationUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    logo_url: Optional[str] = None
+
+
+class MemberInviteRequest(BaseModel):
+    email: str = Field(..., min_length=3)
+    role: MemberRole = MemberRole.MEMBER
+
+
 class OrganizationResponse(OrganizationBase):
     model_config = ConfigDict(from_attributes=True)
 
@@ -43,6 +53,7 @@ class WorkspaceMemberResponse(BaseModel):
     user_id: str
     role: MemberRole
     created_at: datetime
+    status: Optional[str] = "active"
     user: Optional[WorkspaceMemberUser] = None
 
 

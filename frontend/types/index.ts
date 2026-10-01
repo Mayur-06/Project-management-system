@@ -29,6 +29,7 @@ export interface WorkspaceMember {
   organization_id: string;
   user_id: string;
   role: MemberRole;
+  status?: 'active' | 'invited' | 'pending';
   user?: User;
   created_at: string;
 }
@@ -133,6 +134,7 @@ export interface Issue {
   snoozed_until?: string;
   completed_at?: string;
   canceled_at?: string;
+  last_modified_by_session?: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;
@@ -170,3 +172,16 @@ export interface TriageOutput {
   suggested_assignee?: User;
   reasoning: string;
 }
+
+export interface IssueAttachment {
+  id: string;
+  issue_id: string;
+  user_id: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  storage_path: string;
+  file_url?: string;
+  created_at: string;
+}
+

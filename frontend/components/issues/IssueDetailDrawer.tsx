@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Sparkles,
@@ -11,8 +11,13 @@ import {
   Activity,
   User as UserIcon,
   Loader2,
+  Paperclip,
+  Trash2,
+  Upload,
+  FileText,
+  Download,
 } from 'lucide-react';
-import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState } from '@/types';
+import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User } from '@/types';
 import { api } from '@/lib/api';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
@@ -20,6 +25,7 @@ import { StateBadge } from '@/components/ui/StateBadge';
 interface IssueDetailDrawerProps {
   issue: Issue | null;
   states?: WorkflowState[];
+  users?: User[];
   onClose: () => void;
   onUpdateIssue: (updated: Issue) => void;
 }
@@ -27,29 +33,115 @@ interface IssueDetailDrawerProps {
 export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   issue,
   states = [],
+  users = [],
   onClose,
   onUpdateIssue,
 }) => {
-  const [activeTab, setActiveTab] = useState<'comments' | 'activity' | 'ai_breakdown'>('comments');
+  const activeStates = states.filter((s) => s.category !== 'triage');
+  const [activeTab, setActiveTab] = useState<'comments' | 'activity' | 'ai_breakdown' | 'attachments'>('comments');
   const [comments, setComments] = useState<IssueComment[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [attachments, setAttachments] = useState<IssueAttachment[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   
   // AI Spec & Subtask breakdown state
   const [isBreakingDown, setIsBreakingDown] = useState(false);
+  const [breakdownThreadId, setBreakdownThreadId] = useState<string | null>(null);
   const [proposedSubtasks, setProposedSubtasks] = useState<string[]>([]);
   const [breakdownComplete, setBreakdownComplete] = useState(false);
+
+  // Manual subtask creation state
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [newSubtaskPriority, setNewSubtaskPriority] = useState<IssuePriority>('none');
+  const [newSubtaskEstimate, setNewSubtaskEstimate] = useState<number | undefined>(undefined);
+  const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState<string>('');
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [isAddingSubtask, setIsAddingSubtask] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const assignableUsers: User[] = React.useMemo(() => {
+    const map = new Map<string, User>();
+    (users || []).forEach((u) => {
+      if (u.id) map.set(u.id, u);
+    });
+    teamMembers.forEach((tm) => {
+      const u = tm.user || { id: tm.user_id, name: tm.user_id };
+      if (u.id && !map.has(u.id)) {
+        map.set(u.id, { id: u.id, name: u.name || u.email, email: u.email });
+      }
+    });
+    return Array.from(map.values());
+  }, [users, teamMembers]);
 
   useEffect(() => {
     if (issue) {
       api.getComments(issue.id).then(setComments);
       api.getActivityLogs(issue.id).then(setActivityLogs);
+      api.getAttachments(issue.id).then(setAttachments);
+      api.getTeamMembers(issue.team_id).then(setTeamMembers).catch(() => setTeamMembers([]));
       setProposedSubtasks([]);
+      setBreakdownThreadId(null);
       setBreakdownComplete(false);
+      setUploadError(null);
+      setNewSubtaskTitle('');
+      setNewSubtaskPriority('none');
+      setNewSubtaskEstimate(undefined);
+      setNewSubtaskAssigneeId('');
     }
   }, [issue]);
 
   if (!issue) return null;
+
+  const handleCreateSubtask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubtaskTitle.trim() || isAddingSubtask) return;
+    setIsAddingSubtask(true);
+    try {
+      const created = await api.createSubtask(issue.id, {
+        title: newSubtaskTitle.trim(),
+        priority: newSubtaskPriority,
+        estimate: newSubtaskEstimate ? Number(newSubtaskEstimate) : undefined,
+        assignee_id: newSubtaskAssigneeId || undefined,
+      });
+      if (created) {
+        const updated = {
+          ...issue,
+          subtasks: [...(issue.subtasks || []), created],
+        };
+        onUpdateIssue(updated);
+        window.dispatchEvent(new CustomEvent('issueCreated', { detail: created }));
+        setNewSubtaskTitle('');
+        setNewSubtaskPriority('none');
+        setNewSubtaskEstimate(undefined);
+        setNewSubtaskAssigneeId('');
+      }
+    } catch (err) {
+      console.error('Failed to create subtask', err);
+    } finally {
+      setIsAddingSubtask(false);
+    }
+  };
+
+  const handleDeleteIssue = async () => {
+    if (!window.confirm(`Are you sure you want to permanently delete ${issue.identifier}: "${issue.title}"? This cannot be undone.`)) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      const ok = await api.deleteIssue(issue.id, true);
+      if (ok) {
+        window.dispatchEvent(new CustomEvent('issueDeleted', { detail: issue.id }));
+        onClose();
+      }
+    } catch (err) {
+      console.error('Failed to delete issue', err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleStatusChange = async (stateId: string) => {
     try {
@@ -96,8 +188,13 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
     setActiveTab('ai_breakdown');
 
     const res = await api.startBreakdown(issue.id);
-    if (res?.proposed_tasks) {
+    if (res?.thread_id) {
+      setBreakdownThreadId(res.thread_id);
+    }
+    if (res?.proposed_tasks && res.proposed_tasks.length > 0) {
       setProposedSubtasks(res.proposed_tasks);
+    } else if (res?.proposed_subtasks && res.proposed_subtasks.length > 0) {
+      setProposedSubtasks(res.proposed_subtasks.map((p: any) => typeof p === 'string' ? p : p.title));
     } else {
       setProposedSubtasks([
         `Configure backend endpoints for ${issue.identifier}`,
@@ -110,44 +207,146 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
 
   const handleApproveSubtasks = async () => {
     setBreakdownComplete(true);
-    const updated = {
-      ...issue,
-      subtasks: [
-        ...(issue.subtasks || []),
-        ...proposedSubtasks.map((taskTitle, idx) => ({
-          id: `iss_sub_${Date.now()}_${idx}`,
+
+    const existingTitles = new Set((issue.subtasks || []).map((s) => s.title.toLowerCase().trim()));
+    const createdSubtasks: Issue[] = [];
+
+    if (breakdownThreadId) {
+      const persisted: any = await api.resumeBreakdown(breakdownThreadId, proposedSubtasks);
+      const createdIds: string[] = persisted?.created_subtask_ids || [];
+
+      proposedSubtasks.forEach((taskTitle, idx) => {
+        if (existingTitles.has(taskTitle.toLowerCase().trim())) {
+          return;
+        }
+        existingTitles.add(taskTitle.toLowerCase().trim());
+        const subIndex = (issue.subtasks?.length || 0) + createdSubtasks.length + 1;
+        const subIssue: Issue = {
+          id: createdIds[idx] || `iss_sub_${Date.now()}_${idx}`,
           organization_id: issue.organization_id,
           team_id: issue.team_id,
-          number: (issue.number || 100) + idx + 1,
-          identifier: `${issue.identifier}-sub${idx + 1}`,
+          number: (issue.number || 100) + subIndex,
+          identifier: `${issue.identifier}-sub${subIndex}`,
           title: taskTitle,
           priority: 'medium' as IssuePriority,
-          state_id: states[0]?.id || issue.state_id,
-          state: states[0] || issue.state,
+          state_id: activeStates[0]?.id || issue.state_id,
+          state: activeStates[0] || issue.state,
           creator_id: issue.creator_id,
           parent_id: issue.id,
-          sort_order: `${idx}|sub:`,
+          sort_order: `${subIndex}|sub:`,
           version: 1,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        })),
-      ],
+        };
+        createdSubtasks.push(subIssue);
+        window.dispatchEvent(new CustomEvent('issueCreated', { detail: subIssue }));
+      });
+    } else {
+      proposedSubtasks.forEach((taskTitle, idx) => {
+        if (existingTitles.has(taskTitle.toLowerCase().trim())) {
+          return;
+        }
+        existingTitles.add(taskTitle.toLowerCase().trim());
+        const subIndex = (issue.subtasks?.length || 0) + createdSubtasks.length + 1;
+        const subIssue: Issue = {
+          id: `iss_sub_${Date.now()}_${idx}`,
+          organization_id: issue.organization_id,
+          team_id: issue.team_id,
+          number: (issue.number || 100) + subIndex,
+          identifier: `${issue.identifier}-sub${subIndex}`,
+          title: taskTitle,
+          priority: 'medium' as IssuePriority,
+          state_id: activeStates[0]?.id || issue.state_id,
+          state: activeStates[0] || issue.state,
+          creator_id: issue.creator_id,
+          parent_id: issue.id,
+          sort_order: `${subIndex}|sub:`,
+          version: 1,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        createdSubtasks.push(subIssue);
+        window.dispatchEvent(new CustomEvent('issueCreated', { detail: subIssue }));
+      });
+    }
+
+    const updated = {
+      ...issue,
+      subtasks: [...(issue.subtasks || []), ...createdSubtasks],
     };
     onUpdateIssue(updated);
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !issue) return;
+
+    if (file.size > 52428800) {
+      setUploadError('File size exceeds the 50MB limit.');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      setUploadError(null);
+
+      // 1. Request pre-signed upload URL from backend
+      const uploadData = await api.getUploadUrl(issue.id, file.name, file.size, file.type || 'application/octet-stream');
+      if (!uploadData) {
+        setUploadError('Failed to generate upload URL. Please try again.');
+        setIsUploading(false);
+        return;
+      }
+
+      // 2. Perform direct upload to storage endpoint (or simulation in local dev)
+      try {
+        await fetch(uploadData.upload_url, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: file,
+        });
+      } catch {
+        // Fallback for mock environments
+      }
+
+      // 3. Refresh attachments list
+      const freshAttachments = await api.getAttachments(issue.id);
+      setAttachments(freshAttachments);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (err: any) {
+      setUploadError(err?.message || 'Error uploading file.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDeleteAttachment = async (attachmentId: string) => {
+    const success = await api.deleteAttachment(attachmentId);
+    if (success) {
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-fade-in">
-      <div className="w-full max-w-3xl h-full bg-[#0d0e11] border-l border-[#20232a] flex flex-col shadow-2xl overflow-hidden animate-fade-in">
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/80 backdrop-blur-xs animate-fade-in font-sans">
+      <div className="w-full max-w-3xl h-full bg-black border-l border-zinc-800 flex flex-col shadow-2xl overflow-hidden animate-fade-in">
         {/* Drawer Header */}
-        <div className="px-6 py-3 border-b border-[#1c1f26] flex items-center justify-between bg-[#0a0b0e]">
+        <div className="px-6 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
           <div className="flex items-center gap-2 text-xs">
-            <span className="font-mono font-bold text-indigo-400 bg-indigo-950/50 px-2 py-0.5 rounded border border-indigo-900/60">
+            <span className="font-mono font-bold text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700">
               {issue.identifier}
             </span>
             {issue.creator?.name && (
               <>
-                <span className="text-zinc-500">•</span>
+                <span className="text-zinc-600">•</span>
                 <span className="text-zinc-400">Created by {issue.creator.name}</span>
               </>
             )}
@@ -156,14 +355,22 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={handleStartAIBreakdown}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-purple-300 bg-purple-950/40 hover:bg-purple-900/40 border border-purple-800/50 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 transition-colors cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <Sparkles className="w-3.5 h-3.5 text-zinc-300" />
               <span>AI Spec Breakdown</span>
             </button>
             <button
+              onClick={handleDeleteIssue}
+              disabled={isDeleting}
+              className="w-7 h-7 rounded text-zinc-500 hover:text-red-400 hover:bg-red-950/40 flex items-center justify-center transition-colors cursor-pointer"
+              title="Delete Issue Permanently"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <button
               onClick={onClose}
-              className="w-7 h-7 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-[#181a20] flex items-center justify-center transition-colors cursor-pointer"
+              className="w-7 h-7 rounded text-zinc-400 hover:text-white hover:bg-zinc-900 flex items-center justify-center transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -174,12 +381,12 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
         <div className="flex-1 flex overflow-hidden">
           {/* Main Column */}
           <div className="flex-1 p-6 overflow-y-auto space-y-6">
-            <h2 className="text-lg font-semibold text-zinc-100 leading-snug">{issue.title}</h2>
+            <h2 className="text-lg font-semibold text-white leading-snug">{issue.title}</h2>
 
             {/* Description */}
             <div className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Description</h3>
-              <div className="p-3.5 rounded-xl bg-[#121418] border border-[#1e2128] text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">
+              <div className="p-3.5 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">
                 {issue.description_text || 'No description provided.'}
               </div>
             </div>
@@ -189,53 +396,166 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-2">
                   <span>Sub-tasks</span>
-                  <span className="text-zinc-500 font-mono">({issue.subtasks?.length || 0})</span>
+                  <span className="text-zinc-400 font-mono">({issue.subtasks?.length || 0})</span>
                 </h3>
               </div>
 
+              {/* Inline Add Sub-task form with properties */}
+              <form onSubmit={handleCreateSubtask} className="space-y-2 p-2.5 bg-zinc-950/80 border border-zinc-800 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newSubtaskTitle}
+                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                    placeholder="+ Add sub-task title..."
+                    className="flex-1 bg-zinc-900/60 border border-zinc-800 focus:border-indigo-500 rounded px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!newSubtaskTitle.trim() || isAddingSubtask}
+                    className="px-3 py-1.5 rounded bg-white hover:bg-zinc-200 text-black text-xs font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isAddingSubtask ? 'Adding...' : 'Add Subtask'}
+                  </button>
+                </div>
+
+                {/* Subtask Property Selectors */}
+                <div className="flex items-center gap-2 pt-1 flex-wrap text-xs">
+                  {/* Assignee Selector */}
+                  <select
+                    value={newSubtaskAssigneeId}
+                    onChange={(e) => setNewSubtaskAssigneeId(e.target.value)}
+                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
+                  >
+                    <option value="">👤 Unassigned</option>
+                    {assignableUsers.map((m: any) => (
+                      <option key={m.id || m.user_id} value={m.user_id || m.id}>
+                        {m.name || m.user?.name || m.user?.email || 'Member'}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Priority Selector */}
+                  <select
+                    value={newSubtaskPriority}
+                    onChange={(e) => setNewSubtaskPriority(e.target.value as IssuePriority)}
+                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
+                  >
+                    <option value="none">Priority: None</option>
+                    <option value="low">Priority: Low</option>
+                    <option value="medium">Priority: Medium</option>
+                    <option value="high">Priority: High</option>
+                    <option value="urgent">Priority: Urgent</option>
+                  </select>
+
+                  {/* Points / Estimate Selector */}
+                  <select
+                    value={newSubtaskEstimate !== undefined ? String(newSubtaskEstimate) : ''}
+                    onChange={(e) => setNewSubtaskEstimate(e.target.value ? Number(e.target.value) : undefined)}
+                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
+                  >
+                    <option value="">Estimate: None</option>
+                    <option value="1">1 pt</option>
+                    <option value="2">2 pts</option>
+                    <option value="3">3 pts</option>
+                    <option value="5">5 pts</option>
+                    <option value="8">8 pts</option>
+                  </select>
+                </div>
+              </form>
+
               {issue.subtasks && issue.subtasks.length > 0 ? (
                 <div className="space-y-1.5">
-                  {issue.subtasks.map((sub) => (
+                  {issue.subtasks.map((sub, idx) => (
                     <div
                       key={sub.id}
-                      className="p-2.5 rounded-lg bg-[#121418] border border-[#1e2128] flex items-center justify-between text-xs"
+                      className="p-2.5 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 flex items-center justify-between text-xs transition-colors"
                     >
-                      <div className="flex items-center gap-2">
-                        <CornerDownRight className="w-3.5 h-3.5 text-zinc-500" />
-                        <span className="font-mono text-zinc-400 text-[11px]">{sub.identifier}</span>
-                        <span className="text-zinc-200">{sub.title}</span>
+                      <div className="flex items-center gap-2 min-w-0 flex-1 mr-3">
+                        <CornerDownRight className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                        <span className="font-mono text-zinc-400 text-[11px] shrink-0 bg-zinc-900 px-1 rounded border border-zinc-800">
+                          {issue.identifier}-sub{idx + 1}
+                        </span>
+                        <span className="text-zinc-200 truncate">{sub.title}</span>
                       </div>
-                      <StateBadge state={sub.state} />
+                      <div className="flex items-center gap-2 shrink-0">
+                        {(() => {
+                          const resolvedSubAssignee = sub.assignee || (sub.assignee_id ? users.find((u) => u.id === sub.assignee_id) : null);
+                          if (!resolvedSubAssignee) {
+                            return <span className="text-[10px] text-zinc-500 font-mono">Unassigned</span>;
+                          }
+                          const name = resolvedSubAssignee.name || resolvedSubAssignee.email || 'Member';
+                          const initials = name
+                            .split(' ')
+                            .filter(Boolean)
+                            .map((n: string) => n[0])
+                            .slice(0, 2)
+                            .join('')
+                            .toUpperCase() || 'M';
+
+                          if (resolvedSubAssignee.avatar_url) {
+                            return (
+                              <img
+                                src={resolvedSubAssignee.avatar_url}
+                                alt={name}
+                                className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
+                                title={name}
+                              />
+                            );
+                          }
+
+                          return (
+                            <div
+                              className="w-4 h-4 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[8px] font-bold"
+                              title={name}
+                            >
+                              {initials}
+                            </div>
+                          );
+                        })()}
+                        <StateBadge state={sub.state} />
+                      </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="py-4 text-center rounded-xl border border-dashed border-[#1f2229] text-xs text-zinc-500">
-                  No sub-tasks attached.
+                <div className="py-3 text-center rounded border border-dashed border-zinc-900 text-xs text-zinc-500">
+                  No sub-tasks yet. Use "+ Add sub-task" above or click "AI Spec Breakdown".
                 </div>
               )}
             </div>
 
             {/* Tabs: Comments vs Activity vs AI Breakdown */}
-            <div className="border-t border-[#1a1c22] pt-4 space-y-4">
-              <div className="flex items-center gap-4 border-b border-[#1c1f26] pb-2 text-xs font-medium">
+            <div className="border-t border-zinc-800 pt-4 space-y-4">
+              <div className="flex items-center gap-4 border-b border-zinc-800 pb-2 text-xs font-medium">
                 <button
                   onClick={() => setActiveTab('comments')}
                   className={`flex items-center gap-1.5 pb-2 -mb-2 cursor-pointer ${
                     activeTab === 'comments'
-                      ? 'text-indigo-400 border-b-2 border-indigo-500 font-semibold'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'text-white border-b-2 border-white font-semibold'
+                      : 'text-zinc-400 hover:text-white'
                   }`}
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                   <span>Comments ({comments.length})</span>
                 </button>
                 <button
+                  onClick={() => setActiveTab('attachments')}
+                  className={`flex items-center gap-1.5 pb-2 -mb-2 cursor-pointer ${
+                    activeTab === 'attachments'
+                      ? 'text-white border-b-2 border-white font-semibold'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                  <span>Attachments ({attachments.length})</span>
+                </button>
+                <button
                   onClick={() => setActiveTab('activity')}
                   className={`flex items-center gap-1.5 pb-2 -mb-2 cursor-pointer ${
                     activeTab === 'activity'
-                      ? 'text-indigo-400 border-b-2 border-indigo-500 font-semibold'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'text-white border-b-2 border-white font-semibold'
+                      : 'text-zinc-400 hover:text-white'
                   }`}
                 >
                   <Activity className="w-3.5 h-3.5" />
@@ -245,11 +565,11 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                   onClick={() => setActiveTab('ai_breakdown')}
                   className={`flex items-center gap-1.5 pb-2 -mb-2 cursor-pointer ${
                     activeTab === 'ai_breakdown'
-                      ? 'text-purple-400 border-b-2 border-purple-500 font-semibold'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'text-white border-b-2 border-white font-semibold'
+                      : 'text-zinc-400 hover:text-white'
                   }`}
                 >
-                  <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                  <Sparkles className="w-3.5 h-3.5 text-zinc-300" />
                   <span>AI Breakdown Gate</span>
                 </button>
               </div>
@@ -258,10 +578,10 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                 <div className="space-y-4">
                   <div className="space-y-3">
                     {comments.map((cmt) => (
-                      <div key={cmt.id} className="p-3 rounded-xl bg-[#121418] border border-[#1e2128] space-y-2">
+                      <div key={cmt.id} className="p-3 rounded bg-zinc-950 border border-zinc-800 space-y-2">
                         <div className="flex items-center justify-between text-[11px]">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-zinc-200">{cmt.user?.name || 'User'}</span>
+                            <span className="font-semibold text-white">{cmt.user?.name || 'User'}</span>
                             <span className="text-zinc-500">{new Date(cmt.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                         </div>
@@ -279,12 +599,12 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
                       placeholder="Leave a comment..."
-                      className="flex-1 bg-[#14161b] text-xs text-zinc-100 placeholder-zinc-500 px-3.5 py-2 rounded-xl border border-[#23262e] focus:border-indigo-500 focus:outline-none"
+                      className="flex-1 bg-zinc-900 text-xs text-white placeholder-zinc-500 px-3.5 py-2 rounded border border-zinc-800 focus:border-white focus:outline-none"
                     />
                     <button
                       type="submit"
                       disabled={!newComment.trim()}
-                      className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 transition-colors shadow-md cursor-pointer"
+                      className="px-4 py-2 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 disabled:opacity-30 transition-colors shadow-xs cursor-pointer"
                     >
                       <Send className="w-3.5 h-3.5" />
                     </button>
@@ -295,10 +615,10 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               {activeTab === 'activity' && (
                 <div className="space-y-2 text-xs">
                   {activityLogs.map((log) => (
-                    <div key={log.id} className="p-2.5 rounded-lg bg-[#121418] border border-[#1e2128] flex items-center justify-between">
+                    <div key={log.id} className="p-2.5 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-medium text-zinc-300">{log.actor?.name || 'User'}</span>
-                        <span className="text-zinc-500 font-mono text-[11px]">{log.action}</span>
+                        <span className="font-medium text-white">{log.actor?.name || 'User'}</span>
+                        <span className="text-zinc-400 font-mono text-[11px]">{log.action}</span>
                       </div>
                       <span className="text-[10px] text-zinc-500">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
@@ -310,13 +630,13 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               )}
 
               {activeTab === 'ai_breakdown' && (
-                <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-900/40 space-y-4">
+                <div className="p-4 rounded bg-zinc-950 border border-zinc-800 space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-purple-300">
-                      <Sparkles className="w-4 h-4 text-purple-400" />
-                      <span>LangGraph Review Gate</span>
+                    <div className="flex items-center gap-2 text-xs font-semibold text-white">
+                      <Sparkles className="w-4 h-4 text-zinc-300" />
+                      <span>Review Gate</span>
                     </div>
-                    {isBreakingDown && <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />}
+                    {isBreakingDown && <Loader2 className="w-4 h-4 text-white animate-spin" />}
                   </div>
 
                   {proposedSubtasks.length > 0 && !breakdownComplete && (
@@ -326,8 +646,8 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                       </p>
                       <div className="space-y-1.5 pl-2">
                         {proposedSubtasks.map((task, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-xs text-zinc-200">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" />
+                          <div key={idx} className="flex items-center gap-2 text-xs text-white">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-white" />
                             <span>{task}</span>
                           </div>
                         ))}
@@ -336,7 +656,7 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                       <div className="pt-2 flex justify-end">
                         <button
                           onClick={handleApproveSubtasks}
-                          className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 transition-colors shadow-md cursor-pointer"
+                          className="px-4 py-1.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors shadow-xs cursor-pointer"
                         >
                           Approve & Insert Sub-tasks
                         </button>
@@ -345,19 +665,110 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                   )}
 
                   {breakdownComplete && (
-                    <div className="p-3 bg-emerald-950/40 border border-emerald-800/40 rounded-lg text-xs text-emerald-300 flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <div className="p-3 bg-zinc-900 border border-zinc-700 rounded text-xs text-white flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-white" />
                       <span>Sub-tasks successfully created.</span>
                     </div>
                   )}
+                </div>
+              )}
+
+              {activeTab === 'attachments' && (
+                <div className="space-y-4">
+                  {/* Upload Box / Dropzone */}
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border border-dashed border-zinc-700 hover:border-white rounded-lg p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors bg-zinc-950/60 group"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    {isUploading ? (
+                      <div className="flex items-center gap-2 text-xs text-zinc-300">
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>Uploading attachment...</span>
+                      </div>
+                    ) : (
+                      <>
+                        <Upload className="w-5 h-5 text-zinc-400 group-hover:text-white transition-colors" />
+                        <div className="text-center">
+                          <p className="text-xs font-medium text-white">Click to upload file</p>
+                          <p className="text-[11px] text-zinc-500">Max size 50MB (images, logs, archives, documents)</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {uploadError && (
+                    <div className="p-2.5 rounded bg-zinc-900 border border-zinc-700 text-xs text-zinc-300">
+                      {uploadError}
+                    </div>
+                  )}
+
+                  {/* Attachments List */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                      Files ({attachments.length})
+                    </h4>
+                    {attachments.length > 0 ? (
+                      <div className="space-y-2">
+                        {attachments.map((att) => (
+                          <div
+                            key={att.id}
+                            className="p-3 rounded bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-3 text-xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <FileText className="w-4 h-4 text-zinc-400 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="font-medium text-white truncate text-xs">{att.file_name}</p>
+                                <p className="text-[11px] text-zinc-500 font-mono">
+                                  {formatFileSize(att.file_size)} • {new Date(att.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <a
+                                href={
+                                  att.file_url ||
+                                  `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'}/storage/v1/object/public/attachments/${att.storage_path}`
+                                }
+                                download={att.file_name}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Download attachment"
+                                className="p-1.5 text-zinc-400 hover:text-white rounded hover:bg-zinc-900 transition-colors cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </a>
+                              <button
+                                onClick={() => handleDeleteAttachment(att.id)}
+                                title="Delete attachment"
+                                className="p-1.5 text-zinc-500 hover:text-red-400 rounded hover:bg-zinc-900 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-6 text-center rounded border border-dashed border-zinc-900 text-xs text-zinc-500">
+                        No attachments uploaded yet.
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
           {/* Right Properties Sidebar */}
-          <div className="w-64 border-l border-[#1c1f26] p-4 bg-[#0a0b0e] space-y-4 text-xs">
-            <h3 className="font-semibold uppercase tracking-wider text-zinc-500 text-[11px]">Properties</h3>
+          <div className="w-64 border-l border-zinc-800 p-4 bg-zinc-950 space-y-4 text-xs">
+            <h3 className="font-semibold uppercase tracking-wider text-zinc-400 text-[11px]">Properties</h3>
 
             {/* Status */}
             <div>
@@ -365,10 +776,10 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               <select
                 value={issue.state_id}
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full bg-[#121418] border border-[#20232a] text-xs text-zinc-200 rounded-lg p-2 focus:border-indigo-500 focus:outline-none"
+                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
               >
-                {states.length > 0 ? (
-                  states.map((s) => (
+                {activeStates.length > 0 ? (
+                  activeStates.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
                     </option>
@@ -385,7 +796,7 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               <select
                 value={issue.priority}
                 onChange={(e) => handlePriorityChange(e.target.value as IssuePriority)}
-                className="w-full bg-[#121418] border border-[#20232a] text-xs text-zinc-200 rounded-lg p-2 focus:border-indigo-500 focus:outline-none"
+                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
               >
                 <option value="none">None</option>
                 <option value="low">Low</option>
@@ -398,24 +809,37 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
             {/* Assignee */}
             <div>
               <label className="text-[11px] text-zinc-400 block mb-1">Assignee</label>
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-[#121418] border border-[#20232a]">
-                {issue.assignee?.avatar_url ? (
-                  <img
-                    src={issue.assignee.avatar_url}
-                    alt={issue.assignee.name}
-                    className="w-5 h-5 rounded-full object-cover"
-                  />
-                ) : (
-                  <UserIcon className="w-4 h-4 text-zinc-500" />
-                )}
-                <span className="text-zinc-200">{issue.assignee?.name || 'Unassigned'}</span>
-              </div>
+              <select
+                value={issue.assignee_id || ''}
+                onChange={async (e) => {
+                  const newAssigneeId = e.target.value || null;
+                  try {
+                    const updated = await api.updateIssue(issue.id, {
+                      expected_version: issue.version,
+                      assignee_id: newAssigneeId as any,
+                    });
+                    if (updated) {
+                      onUpdateIssue(updated);
+                    }
+                  } catch (err) {
+                    console.error('Failed to update assignee', err);
+                  }
+                }}
+                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 rounded p-2 focus:border-indigo-500 focus:outline-none cursor-pointer"
+              >
+                <option value="">👤 Unassigned</option>
+                {assignableUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name || u.email}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Estimate Points */}
             <div>
               <label className="text-[11px] text-zinc-400 block mb-1">Estimate Points</label>
-              <div className="p-2 rounded-lg bg-[#121418] border border-[#20232a] font-mono text-zinc-200">
+              <div className="p-2 rounded bg-zinc-900 border border-zinc-800 font-mono text-white">
                 {issue.estimate || 1} points
               </div>
             </div>
@@ -424,7 +848,7 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
             {issue.project && (
               <div>
                 <label className="text-[11px] text-zinc-400 block mb-1">Project</label>
-                <div className="p-2 rounded-lg bg-[#121418] border border-[#20232a] text-zinc-200">
+                <div className="p-2 rounded bg-zinc-900 border border-zinc-800 text-zinc-200">
                   {issue.project.name}
                 </div>
               </div>
@@ -434,7 +858,7 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
             {issue.cycle && (
               <div>
                 <label className="text-[11px] text-zinc-400 block mb-1">Cycle</label>
-                <div className="p-2 rounded-lg bg-[#121418] border border-[#20232a] text-zinc-200">
+                <div className="p-2 rounded bg-zinc-900 border border-zinc-800 text-zinc-200">
                   {issue.cycle.name}
                 </div>
               </div>

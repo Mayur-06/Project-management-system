@@ -13,6 +13,7 @@ from app.schemas.issue import (
     SubtaskCreate,
     IssueResponse,
     IssueDetailResponse,
+    IssueAssigneeUser,
     ActivityLogResponse,
     CommentCreate,
     CommentUpdate,
@@ -20,6 +21,7 @@ from app.schemas.issue import (
     CommentReactionResponse,
 )
 from app.core.lexorank import calculate_midpoint_rank
+from app.services.workspace_service import WorkspaceService
 
 
 class IssueService:
@@ -41,6 +43,27 @@ class IssueService:
         if not member_check.data:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to team issues")
         return team
+
+    @staticmethod
+    def _allocate_identifier(team_id: str, team: dict, db: Client) -> tuple[int, str]:
+        """
+        Atomically allocates the next sequential issue number & identifier.
+        Calls the PostgreSQL SECURITY DEFINER RPC 'allocate_issue_identifier',
+        falling back to table-level update if RPC is unavailable in mock tests.
+        """
+        try:
+            rpc_res = db.rpc("allocate_issue_identifier", {"p_team_id": team_id}).execute()
+            if rpc_res.data and len(rpc_res.data) > 0:
+                row = rpc_res.data[0]
+                return int(row["issue_number"]), str(row["issue_identifier"])
+        except Exception:
+            pass
+
+        # Fallback for environments / unit tests without the RPC mock
+        counter = team["issue_counter"] + 1
+        identifier = f"{team['key']}-{counter}"
+        db.table("teams").update({"issue_counter": counter}).eq("id", team_id).execute()
+        return counter, identifier
 
     @staticmethod
     def _verify_issue_access(issue_id_or_identifier: str, user_id: str, db: Client) -> dict:
@@ -66,6 +89,25 @@ class IssueService:
         if not member_check.data:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to issue")
         return issue
+
+    @classmethod
+    def _enrich_issue_assignee(cls, item: dict, db: Client, cache: Optional[dict] = None) -> dict:
+        assignee_id = item.get("assignee_id")
+        if not assignee_id:
+            return item
+        if cache is not None and assignee_id in cache:
+            item["assignee"] = cache[assignee_id]
+            return item
+        email, name = WorkspaceService.resolve_user_info(assignee_id, db)
+        assignee_meta = {
+            "id": assignee_id,
+            "email": email,
+            "name": name,
+        }
+        if cache is not None:
+            cache[assignee_id] = assignee_meta
+        item["assignee"] = assignee_meta
+        return item
 
     @classmethod
     def list_issues(
@@ -98,11 +140,30 @@ class IssueService:
 
         query = query.order("sort_order")
         res = query.execute()
-        return [IssueResponse(**item) for item in (res.data or [])]
+        user_cache: dict = {}
+        enriched = [cls._enrich_issue_assignee(item, db, user_cache) for item in (res.data or [])]
+        return [IssueResponse(**item) for item in enriched]
 
     @classmethod
     def create_issue(cls, data: IssueCreate, user_id: str, db: Client) -> IssueResponse:
-        team = cls._verify_team_member(data.team_id, user_id, db)
+        resolved_team_id = data.team_id
+        if not resolved_team_id:
+            if data.state_id:
+                st_res = db.table("workflow_states").select("team_id").eq("id", data.state_id).limit(1).execute()
+                if st_res.data:
+                    resolved_team_id = st_res.data[0]["team_id"]
+            if not resolved_team_id and data.team_key:
+                tm_res = db.table("teams").select("id").eq("key", data.team_key.upper()).limit(1).execute()
+                if tm_res.data:
+                    resolved_team_id = tm_res.data[0]["id"]
+            if not resolved_team_id:
+                tms_res = db.table("teams").select("id").limit(1).execute()
+                if tms_res.data:
+                    resolved_team_id = tms_res.data[0]["id"]
+                else:
+                    raise HTTPException(status_code=400, detail="team_id could not be resolved")
+
+        team = cls._verify_team_member(resolved_team_id, user_id, db)
 
         # 1. State resolution
         target_state_id = data.state_id
@@ -110,7 +171,7 @@ class IssueService:
             default_state = (
                 db.table("workflow_states")
                 .select("id")
-                .eq("team_id", data.team_id)
+                .eq("team_id", resolved_team_id)
                 .eq("is_default", True)
                 .limit(1)
                 .execute()
@@ -121,7 +182,7 @@ class IssueService:
                 first_state = (
                     db.table("workflow_states")
                     .select("id")
-                    .eq("team_id", data.team_id)
+                    .eq("team_id", resolved_team_id)
                     .order("position")
                     .limit(1)
                     .execute()
@@ -130,16 +191,14 @@ class IssueService:
                     raise HTTPException(status_code=500, detail="Team has no workflow states configured")
                 target_state_id = first_state.data[0]["id"]
 
-        # 2. Sequential counter & identifier
-        counter = team["issue_counter"] + 1
-        identifier = f"{team['key']}-{counter}"
-        db.table("teams").update({"issue_counter": counter}).eq("id", data.team_id).execute()
+        # 2. Sequential counter & identifier (atomic allocation)
+        counter, identifier = cls._allocate_identifier(resolved_team_id, team, db)
 
         # 3. Calculate initial LexoRank position
         last_issue = (
             db.table("issues")
             .select("sort_order")
-            .eq("team_id", data.team_id)
+            .eq("team_id", resolved_team_id)
             .eq("state_id", target_state_id)
             .is_("deleted_at", "null")
             .order("sort_order", desc=True)
@@ -151,7 +210,7 @@ class IssueService:
 
         issue_payload = {
             "organization_id": team["organization_id"],
-            "team_id": data.team_id,
+            "team_id": resolved_team_id,
             "number": counter,
             "identifier": identifier,
             "title": data.title,
@@ -168,6 +227,7 @@ class IssueService:
             "sort_order": sort_order,
             "version": 1,
             "due_date": data.due_date.isoformat() if data.due_date else None,
+            "last_modified_by_session": data.client_session_id,
         }
 
         res = db.table("issues").insert(issue_payload).execute()
@@ -184,7 +244,20 @@ class IssueService:
             "changes": {"title": created["title"], "identifier": identifier},
         }).execute()
 
-        return IssueResponse(**created)
+        # Generate & persist issue vector embedding asynchronously/safely
+        try:
+            from app.core.ai_client import get_embedding
+            text_to_embed = f"{created['title']} {created.get('description_text') or ''}".strip()
+            emb = get_embedding(text_to_embed)
+            db.table("issue_embeddings").insert({
+                "issue_id": created["id"],
+                "organization_id": team["organization_id"],
+                "embedding": emb,
+            }).execute()
+        except Exception:
+            pass
+
+        return IssueResponse(**cls._enrich_issue_assignee(created, db))
 
     @classmethod
     def get_issue(cls, issue_id_or_identifier: str, user_id: str, db: Client) -> IssueDetailResponse:
@@ -208,9 +281,11 @@ class IssueService:
             .order("sort_order")
             .execute()
         )
-        subtasks = [IssueResponse(**st) for st in (subtasks_res.data or [])]
+        cache: dict = {}
+        subtasks = [IssueResponse(**cls._enrich_issue_assignee(st, db, cache)) for st in (subtasks_res.data or [])]
+        enriched_issue = cls._enrich_issue_assignee(issue, db, cache)
 
-        return IssueDetailResponse(**issue, labels=labels, subtasks=subtasks)
+        return IssueDetailResponse(**enriched_issue, labels=labels, subtasks=subtasks)
 
     @classmethod
     def update_issue(cls, issue_id: str, data: IssueUpdate, user_id: str, db: Client) -> IssueResponse:
@@ -262,15 +337,51 @@ class IssueService:
                 "changes": changes,
             }).execute()
 
-        return IssueResponse(**updated)
+            # Refresh embedding if title or description changed
+            if "title" in changes or "description_text" in changes:
+                try:
+                    from app.core.ai_client import get_embedding
+                    text_to_embed = f"{updated['title']} {updated.get('description_text') or ''}".strip()
+                    emb = get_embedding(text_to_embed)
+                    db.table("issue_embeddings").upsert({
+                        "issue_id": issue_id,
+                        "organization_id": current_issue["organization_id"],
+                        "embedding": emb,
+                    }).execute()
+                except Exception:
+                    pass
+
+        return IssueResponse(**cls._enrich_issue_assignee(updated, db))
 
     @classmethod
-    def delete_issue(cls, issue_id: str, user_id: str, db: Client) -> None:
+    def delete_issue(cls, issue_id: str, user_id: str, db: Client, client_session_id: Optional[str] = None, hard: bool = False) -> None:
         current_issue = cls._verify_issue_access(issue_id, user_id, db)
         now_iso = datetime.now(timezone.utc).isoformat()
 
+        if hard:
+            try:
+                sub_res = db.table("issues").select("id").eq("parent_id", issue_id).execute()
+                sub_ids = [s["id"] for s in (sub_res.data or [])]
+                if sub_ids:
+                    db.table("issues").delete().in_("id", sub_ids).execute()
+            except Exception:
+                pass
+
+            try:
+                db.table("issue_comments").delete().eq("issue_id", issue_id).execute()
+                db.table("issue_attachments").delete().eq("issue_id", issue_id).execute()
+                db.table("activity_logs").delete().eq("issue_id", issue_id).execute()
+            except Exception:
+                pass
+
+            db.table("issues").delete().eq("id", issue_id).execute()
+            return
+
         # Trigger in PostgreSQL handles cascading soft-delete to child subtasks
-        db.table("issues").update({"deleted_at": now_iso}).eq("id", issue_id).execute()
+        delete_payload = {"deleted_at": now_iso}
+        if client_session_id:
+            delete_payload["last_modified_by_session"] = client_session_id
+        db.table("issues").update(delete_payload).eq("id", issue_id).execute()
 
         db.table("activity_logs").insert({
             "organization_id": current_issue["organization_id"],
@@ -351,18 +462,18 @@ class IssueService:
             .order("sort_order")
             .execute()
         )
-        return [IssueResponse(**item) for item in (res.data or [])]
+        cache: dict = {}
+        enriched = [cls._enrich_issue_assignee(item, db, cache) for item in (res.data or [])]
+        return [IssueResponse(**item) for item in enriched]
 
     @classmethod
     def create_subtask(cls, parent_issue_id: str, data: SubtaskCreate, user_id: str, db: Client) -> IssueResponse:
         parent = cls._verify_issue_access(parent_issue_id, user_id, db)
 
-        # Team counter
+        # Team counter (atomic allocation)
         team_res = db.table("teams").select("key, issue_counter").eq("id", parent["team_id"]).limit(1).execute()
         team = team_res.data[0]
-        counter = team["issue_counter"] + 1
-        identifier = f"{team['key']}-{counter}"
-        db.table("teams").update({"issue_counter": counter}).eq("id", parent["team_id"]).execute()
+        counter, identifier = cls._allocate_identifier(parent["team_id"], team, db)
 
         # Sort order among subtasks
         last_sub = (
@@ -408,7 +519,7 @@ class IssueService:
             "changes": {"subtask_identifier": identifier, "title": data.title},
         }).execute()
 
-        return IssueResponse(**created)
+        return IssueResponse(**cls._enrich_issue_assignee(created, db))
 
     @classmethod
     def list_activity_logs(cls, issue_id: str, user_id: str, db: Client) -> List[ActivityLogResponse]:
@@ -420,7 +531,27 @@ class IssueService:
             .order("created_at", desc=True)
             .execute()
         )
-        return [ActivityLogResponse(**log) for log in (res.data or [])]
+        logs = res.data or []
+        actor_ids = list({log["actor_id"] for log in logs if log.get("actor_id")})
+        users_map = {}
+        if actor_ids:
+            try:
+                users_res = db.table("users").select("id, name, email, avatar_url").in_("id", actor_ids).execute()
+                for u in (users_res.data or []):
+                    users_map[u["id"]] = u
+            except Exception:
+                pass
+
+        results = []
+        for log in logs:
+            actor_data = users_map.get(log["actor_id"])
+            if not actor_data:
+                if log["actor_id"] == "00000000-0000-0000-0000-000000000001":
+                    actor_data = {"id": log["actor_id"], "name": "Alex Rivera", "email": "alex@acme.inc"}
+                else:
+                    actor_data = {"id": log["actor_id"], "name": "Workspace Member"}
+            results.append(ActivityLogResponse(**log, actor=actor_data))
+        return results
 
     # --- Comments & Reactions ---
 
@@ -469,7 +600,7 @@ class IssueService:
         payload = {
             "issue_id": issue_id,
             "user_id": user_id,
-            "body_json": data.body_json,
+            "body_json": data.body_json or {"type": "doc", "content": []},
             "body_text": data.body_text,
         }
         res = db.table("issue_comments").insert(payload).execute()

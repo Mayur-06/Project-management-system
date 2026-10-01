@@ -164,9 +164,6 @@ AFTER UPDATE OF deleted_at ON issues
 FOR EACH ROW
 EXECUTE FUNCTION cascade_issue_soft_delete();
 
--- ==============================================================================
--- Stored Function: Atomically Allocate Next Issue Number & Identifier
--- ==============================================================================
 CREATE OR REPLACE FUNCTION allocate_issue_identifier(p_team_id UUID)
 RETURNS TABLE (issue_number INT, issue_identifier VARCHAR(30)) AS $$
 DECLARE
@@ -186,7 +183,13 @@ BEGIN
     issue_identifier := v_key || '-' || v_counter;
     RETURN NEXT;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_auto_issue_identifier ON issues;
+CREATE TRIGGER trigger_auto_issue_identifier
+BEFORE INSERT ON issues
+FOR EACH ROW
+EXECUTE FUNCTION trigger_set_issue_identifier();
 
 -- Permissions and Role Grants
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;

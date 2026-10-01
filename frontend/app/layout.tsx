@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Linear System — Project Management & AI Agents',
+  title: 'Project Management & AI Workspace',
   description: 'High-speed keyboard-first project management system with LangGraph agentic runtime',
 };
 
@@ -27,7 +27,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col bg-[#08090a] text-zinc-100">{children}</body>
+      <body className="min-h-full flex flex-col bg-black text-white">{children}</body>
     </html>
   );
 }

@@ -65,10 +65,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
     },
     {
-      id: 'linear_ask',
-      title: 'Ask Linear AI Assistant',
+      id: 'ai_assistant',
+      title: 'Ask AI Assistant',
       shortcut: 'AI',
-      icon: <Sparkles className="w-4 h-4 text-purple-400" />,
+      icon: <Sparkles className="w-4 h-4 text-white" />,
       run: () => {
         onClose();
         onOpenAIAsk();
@@ -183,16 +183,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   key={action.id}
                   onClick={() => handleSelect(idx)}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
-                    isSelected ? 'bg-indigo-600/20 text-indigo-200 border border-indigo-500/30' : 'text-zinc-300 hover:bg-[#16181e]'
+                  className={`flex items-center justify-between px-3 py-2 rounded text-xs cursor-pointer transition-colors ${
+                    isSelected ? 'bg-white text-black font-semibold' : 'text-zinc-300 hover:bg-zinc-900'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     {action.icon}
-                    <span className="font-medium">{action.title}</span>
+                    <span>{action.title}</span>
                   </div>
                   {action.shortcut && (
-                    <kbd className="text-[10px] bg-[#1a1d24] text-zinc-400 px-1.5 py-0.5 rounded border border-[#272b35] font-mono">
+                    <kbd className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                      isSelected ? 'bg-black text-white' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                    }`}>
                       {action.shortcut}
                     </kbd>
                   )}
