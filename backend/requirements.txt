@@ -1,0 +1,30 @@
+# FastAPI Core & Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+
+# Schema Validation & Settings (Pydantic v2)
+pydantic>=2.8.0
+pydantic-settings>=2.4.0
+
+# Database & Supabase Platform
+supabase>=2.8.0
+postgrest>=0.16.0
+psycopg2-binary>=2.9.9
+asyncpg>=0.29.0
+
+# Authentication & Security
+pyjwt[crypto]>=2.9.0
+cryptography>=43.0.0
+
+# HTTP Client & Environment
+httpx>=0.27.0
+python-dotenv>=1.0.1
+
+# AI & Workflow Automation (Phase 4 LangGraph / LangChain)
+langgraph>=0.2.0
+langchain-core>=0.3.0
+
+# Testing & Quality Assurance
+pytest>=8.3.0
+pytest-asyncio>=0.24.0
+pytest-mock>=3.14.0

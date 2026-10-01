@@ -14,7 +14,7 @@ This implementation plan outlines the production-ready architecture and executio
  ┌──────────────────────────────────────┐      ┌──────────────────────────┐
  │       Backend API (FastAPI)          │      │     Supabase Platform    │
  │  Pydantic v2 • Async Routes • Auth   │◄────►│  PostgreSQL 16 + RLS     │
- │  Optimistic Lock (409) • Webhooks    │      │  Realtime Broadcast / CDC│
+ │  Optimistic Lock (409) • Audit Logs  │      │  Realtime Broadcast / CDC│
  └──────────────────┬───────────────────┘      │  Supabase Auth & Storage │
                     │                          │  pgvector (Embeddings)   │
                     ▼                          │  AsyncPostgresSaver (LG) │
@@ -26,7 +26,7 @@ This implementation plan outlines the production-ready architecture and executio
 ```
 
 ### Architectural Principles & Write-Path Rule
-* **Single Authoritative Write Path:** The Next.js frontend **never** mutates database tables directly via PostgREST. All mutations (`POST`, `PATCH`, `PUT`, `DELETE`) flow strictly through FastAPI to guarantee server-side schema validation, activity audit logging, atomic transactions, and webhook dispatches.
+* **Single Authoritative Write Path:** The Next.js frontend **never** mutates database tables directly via PostgREST. All mutations (`POST`, `PATCH`, `PUT`, `DELETE`) flow strictly through FastAPI to guarantee server-side schema validation, activity audit logging, and atomic transactions.
 * **Supabase Client in Frontend:** Restricted exclusively to:
   1. **Authentication Session Management:** (`supabase.auth.getSession()`, OAuth flows).
   2. **Realtime Channels:** Multi-client live synchronization via Realtime Broadcast & Postgres Changes with client-side echo suppression.
@@ -42,7 +42,7 @@ This implementation plan outlines the production-ready architecture and executio
 | **Styling & Components** | **shadcn/ui + Tailwind CSS + Lucide Icons** | Accessible UI primitives (Dialog, DropdownMenu, Tabs, Popover, Sheet, Command, Badge). |
 | **State Management** | **Zustand + TanStack Query v5** | Zero-latency local optimistic state updates with rollback on network/409 conflict errors. |
 | **Editor & Keyboard** | **TipTap Editor + `cmdk`** | Rich markdown issue editor with slash commands; universal `Cmd+K` command palette & hotkeys. |
-| **Backend API** | **FastAPI (Python 3.12) + Pydantic v2** | Asynchronous REST API, HMAC webhook handlers, concurrency lock management, and SSE streaming. |
+| **Backend API** | **FastAPI (Python 3.12) + Pydantic v2** | Asynchronous REST API, concurrency lock management, activity auditing, and SSE streaming. |
 | **Database & Auth** | **Supabase (PostgreSQL 16)** | Multi-tenant RLS, Supabase Auth (JWT/OAuth), Supabase Storage, and `pgvector`. |
 | **Realtime Engine** | **Supabase Realtime (Broadcast + CDC)** | Scoped Broadcast channels for sub-50ms collaborative board updates with fallback to Postgres CDC. |
 | **Vector Database** | **Supabase `pgvector`** | Vector embeddings (`VECTOR(768)`) with HNSW index and `hnsw.iterative_scan` for multi-tenant isolation. |
@@ -102,7 +102,7 @@ CREATE TABLE team_members (
     UNIQUE(team_id, user_id)
 );
 
--- 5. Workflow States
+-- 5. Standard Fixed Workflow States (Triage, Backlog, Unstarted, Started, Completed, Canceled)
 CREATE TYPE state_category AS ENUM ('triage', 'backlog', 'unstarted', 'started', 'completed', 'canceled');
 
 CREATE TABLE workflow_states (
@@ -113,7 +113,8 @@ CREATE TABLE workflow_states (
     category state_category NOT NULL,
     position VARCHAR(255) COLLATE "C" NOT NULL,
     is_default BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(team_id, category) -- Enforces exactly one instance per fixed category per team
 );
 
 -- 6. Cycles (Sprints)
@@ -137,10 +138,7 @@ CREATE TABLE projects (
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(255) NOT NULL,
-    summary TEXT,
-    lead_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     health project_health DEFAULT 'on_track',
-    target_date DATE,
     sort_order VARCHAR(255) COLLATE "C" NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(organization_id, slug)
@@ -153,15 +151,6 @@ CREATE TABLE project_milestones (
     target_date DATE,
     completed_at TIMESTAMPTZ,
     sort_order VARCHAR(255) COLLATE "C" NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE project_updates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    author_id UUID NOT NULL REFERENCES auth.users(id),
-    health project_health NOT NULL,
-    body_text TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -216,20 +205,7 @@ CREATE TABLE issue_labels (
     PRIMARY KEY (issue_id, label_id)
 );
 
--- 11. Issue Relations (Dependencies: blocks, blocked_by, relates_to, duplicate_of)
-CREATE TYPE issue_relation_type AS ENUM ('blocks', 'blocked_by', 'relates_to', 'duplicate_of');
-
-CREATE TABLE issue_relations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_issue_id UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
-    target_issue_id UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
-    relation_type issue_relation_type NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(source_issue_id, target_issue_id, relation_type),
-    CONSTRAINT chk_no_self_relation CHECK (source_issue_id != target_issue_id)
-);
-
--- 12. Issue Comments & Emoji Reactions
+-- 11. Issue Comments & Emoji Reactions
 CREATE TABLE issue_comments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     issue_id UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
@@ -358,8 +334,7 @@ All endpoints are versioned under `/api/v1` and protected by Supabase JWT Bearer
 | `GET` | `/api/v1/workspaces/{org_slug}/teams` | List all teams within an organization. |
 | `POST` | `/api/v1/workspaces/{org_slug}/teams` | Create a new team (with custom identifier key, e.g., `ENG`). |
 | `GET` | `/api/v1/teams/{team_id}/members` | List members and assignable users for a specific team. |
-| `GET` | `/api/v1/teams/{team_id}/states` | List customizable workflow states for a team in display order. |
-| `PUT` | `/api/v1/teams/{team_id}/states/reorder` | Reorder team workflow states (fractional indexing). |
+| `GET` | `/api/v1/teams/{team_id}/states` | List the 6 fixed workflow states for a team in system display order. |
 
 ### 📌 Issues & Sub-Issues
 | Method | Endpoint | Description |
@@ -372,7 +347,7 @@ All endpoints are versioned under `/api/v1` and protected by Supabase JWT Bearer
 | `PUT` | `/api/v1/issues/{issue_id}/reorder` | Reorder issue in Kanban column or List view using LexoRank / fractional index. |
 | `POST` | `/api/v1/issues/batch-reorder` | Atomically reorder a list of issues via PostgreSQL RPC (`batch_reorder_issues`). |
 | `POST` | `/api/v1/issues/batch-update` | Apply bulk updates to selected issues (bulk status change, assign, delete). |
-| `GET` | `/api/v1/issues/{issue_id}/subtasks` | Retrieve all child sub-issues and dependency relations (`issue_relations`). |
+| `GET` | `/api/v1/issues/{issue_id}/subtasks` | Retrieve all child sub-issues for an issue. |
 | `POST` | `/api/v1/issues/{issue_id}/subtasks` | Create a new sub-issue under a parent issue. |
 | `GET` | `/api/v1/issues/{issue_id}/activity` | Fetch chronological activity audit log and changesets for an issue. |
 
@@ -397,11 +372,12 @@ All endpoints are versioned under `/api/v1` and protected by Supabase JWT Bearer
 ### 🗺️ Projects & Milestones
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/v1/organizations/{org_slug}/projects` | List all projects with progress percentage, health status, and target dates. |
-| `POST` | `/api/v1/organizations/{org_slug}/projects` | Create a new project initiative. |
-| `GET` | `/api/v1/projects/{project_id}` | Get project overview, milestones, linked issues, and lead information. |
-| `PATCH` | `/api/v1/projects/{project_id}` | Update project metadata (`health`, `target_date`, `lead_id`, `summary`). |
-| `POST` | `/api/v1/projects/{project_id}/updates` | Post a project progress update (`on_track`, `at_risk`, `off_track` with summary). |
+| `GET` | `/api/v1/organizations/{org_slug}/projects` | List all projects with progress percentage, health status, and milestone counts. |
+| `POST` | `/api/v1/organizations/{org_slug}/projects` | Create a new project container. |
+| `GET` | `/api/v1/projects/{project_id}` | Get project overview, milestones, and linked issues. |
+| `PATCH` | `/api/v1/projects/{project_id}` | Update project metadata or direct health status (`on_track`, `at_risk`, `off_track`). |
+| `POST` | `/api/v1/projects/{project_id}/milestones` | Create a milestone checkpoint for the project. |
+| `PATCH` | `/api/v1/milestones/{milestone_id}` | Update milestone checkpoint details or set `completed_at`. |
 
 ### 📥 Triage Inbox
 | Method | Endpoint | Description |
@@ -420,11 +396,6 @@ All endpoints are versioned under `/api/v1` and protected by Supabase JWT Bearer
 | `POST` | `/api/v1/ai/breakdown/resume` | Resumes LangGraph breakdown with user-approved sub-tasks and batch-inserts child issues. |
 | `POST` | `/api/v1/ai/chat/stream` | Server-Sent Events (SSE) stream for Linear Ask ReAct agent with tool execution. |
 
-### 🔌 Webhooks & Integrations
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `POST` | `/api/v1/webhooks/github` | Validates HMAC signature, checks idempotency in Redis, and dispatches background verification. |
-
 ### 📁 Attachments & Storage
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -436,7 +407,7 @@ All endpoints are versioned under `/api/v1` and protected by Supabase JWT Bearer
 ## 5. Phased Implementation Roadmap
 
 * **Phase 1 (Foundation & Security):** 15-table DB schema, `SECURITY DEFINER` atomic trigger, RLS policies, Next.js SSR Auth, and FastAPI JWT middleware.
-* **Phase 2 (Core Issue Engine):** LexoRank RPC, custom workflow states, TipTap slash commands, activity audit log.
+* **Phase 2 (Core Issue Engine):** LexoRank RPC, fixed 6 workflow states (`Triage`, `Backlog`, `Unstarted`, `Started`, `Completed`, `Canceled`), TipTap slash commands, activity audit log.
 * **Phase 3 (Fast UI & Realtime):** Virtualized table/board (`@dnd-kit`), `cmdk` hotkeys, Supabase Realtime Broadcast + echo suppression.
 * **Phase 4 (AI Automation Fleet):** Draft duplicate check, full LangGraph Triage, LangGraph Breakdown with `interrupt()` and `AsyncPostgresSaver`, ReAct Chat agent.
-* **Phase 5 (Webhooks & Production):** GitHub Webhook (HMAC + `BackgroundTasks`), automated testing suite (`pgTAP`, concurrency, LexoRank).
+* **Phase 5 (Testing & Hardening):** Concurrency conflict validation, automated testing suite (`pgTAP`, concurrency, LexoRank), performance benchmarking.
