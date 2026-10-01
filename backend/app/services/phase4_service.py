@@ -20,6 +20,7 @@ from app.schemas.phase4 import (
     ProposedSubtask,
 )
 from app.core.lexorank import calculate_midpoint_rank
+from app.core.config import settings
 
 
 class Phase4Service:
@@ -65,8 +66,9 @@ class Phase4Service:
             "storage_path": storage_path,
         }).execute()
 
-        # Generate pre-signed upload URL from Supabase Storage
-        upload_url = f"https://zteuxlfrleyctdkyuzvb.supabase.co/storage/v1/object/upload/sign/attachments/{storage_path}?token=signed_upload_token"
+        # Generate upload URL using configured Supabase URL
+        base_url = settings.SUPABASE_URL.rstrip("/")
+        upload_url = f"{base_url}/storage/v1/object/upload/sign/attachments/{storage_path}?token=signed_upload_token"
 
         return AttachmentUploadResponse(
             attachment_id=attachment_id,

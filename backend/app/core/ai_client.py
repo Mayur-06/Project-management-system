@@ -1,16 +1,17 @@
 import logging
 from typing import List, Optional
-import google.generativeai as genai
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Configure Google Generative AI if key is present
+# Initialize Google GenAI client if GEMINI_API_KEY is configured
+_genai_client = None
 if settings.GEMINI_API_KEY:
     try:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
+        from google import genai
+        _genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
     except Exception as e:
-        logger.warning(f"Failed to configure Google Generative AI: {e}")
+        logger.warning(f"Failed to initialize google-genai client: {e}")
 
 
 def get_embedding(text: str) -> List[float]:
@@ -18,24 +19,33 @@ def get_embedding(text: str) -> List[float]:
     Generates a 768-dimensional embedding vector using Google Gemini text-embedding-004.
     Falls back gracefully to deterministic normalized vector if API key is not configured or fails.
     """
-    if settings.GEMINI_API_KEY:
+    global _genai_client
+    if _genai_client:
         try:
-            model = settings.GEMINI_EMBEDDING_MODEL or "models/text-embedding-004"
-            if not model.startswith("models/"):
-                model = f"models/{model}"
-            result = genai.embed_content(
+            model = settings.GEMINI_EMBEDDING_MODEL or "text-embedding-004"
+            if model.startswith("models/"):
+                model = model.replace("models/", "")
+
+            response = _genai_client.models.embed_content(
                 model=model,
-                content=text,
-                task_type="retrieval_document",
+                contents=text,
             )
-            emb = result.get("embedding")
-            if emb and len(emb) == 768:
-                return emb
-            elif emb:
-                # If dimension differs, pad or slice to 768 to fit schema vector(768)
-                if len(emb) > 768:
-                    return emb[:768]
-                return emb + [0.0] * (768 - len(emb))
+            # Retrieve embedding list
+            if hasattr(response, "embeddings") and response.embeddings:
+                emb = response.embeddings[0].values
+            elif hasattr(response, "embedding") and response.embedding:
+                emb = response.embedding.values
+            else:
+                emb = None
+
+            if emb:
+                emb_list = list(emb)
+                if len(emb_list) == 768:
+                    return emb_list
+                elif len(emb_list) > 768:
+                    return emb_list[:768]
+                else:
+                    return emb_list + [0.0] * (768 - len(emb_list))
         except Exception as err:
             logger.warning(f"Gemini embedding API call failed: {err}. Falling back to deterministic vector.")
 
@@ -56,17 +66,23 @@ def get_embedding(text: str) -> List[float]:
 
 def generate_llm_completion(prompt: str, system_instruction: Optional[str] = None) -> Optional[str]:
     """
-    Generates text completion using Gemini LLM if configured.
+    Generates text completion using the modern Google GenAI SDK if configured.
     Returns None if not configured, allowing caller heuristics to handle gracefully.
     """
-    if not settings.GEMINI_API_KEY:
+    global _genai_client
+    if not _genai_client:
         return None
     try:
-        model = genai.GenerativeModel(
-            model_name=settings.GEMINI_MODEL or "gemini-2.5-flash",
-            system_instruction=system_instruction,
+        from google.genai import types
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction
+        ) if system_instruction else None
+
+        response = _genai_client.models.generate_content(
+            model=settings.GEMINI_MODEL or "gemini-2.5-flash",
+            contents=prompt,
+            config=config,
         )
-        response = model.generate_content(prompt)
         return response.text
     except Exception as err:
         logger.warning(f"Gemini LLM generation failed: {err}")
