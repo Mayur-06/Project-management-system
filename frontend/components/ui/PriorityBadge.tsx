@@ -11,34 +11,34 @@ interface PriorityBadgeProps {
 export const PriorityBadge: React.FC<PriorityBadgeProps> = ({ priority, showLabel = false, className = '' }) => {
   const configs: Record<IssuePriority, { icon: React.ReactNode; color: string; label: string; bg: string }> = {
     urgent: {
-      icon: <AlertCircle className="w-3.5 h-3.5 text-rose-500" />,
-      color: 'text-rose-400',
+      icon: <AlertCircle className="w-3.5 h-3.5 text-white" />,
+      color: 'text-white font-semibold',
       label: 'Urgent',
-      bg: 'bg-rose-500/10 border-rose-500/20',
+      bg: 'bg-white text-black border-white',
     },
     high: {
-      icon: <ArrowUp className="w-3.5 h-3.5 text-orange-400" />,
-      color: 'text-orange-400',
+      icon: <ArrowUp className="w-3.5 h-3.5 text-zinc-200" />,
+      color: 'text-zinc-200',
       label: 'High',
-      bg: 'bg-orange-500/10 border-orange-500/20',
+      bg: 'bg-zinc-800 text-zinc-200 border-zinc-700',
     },
     medium: {
-      icon: <ArrowRight className="w-3.5 h-3.5 text-yellow-400" />,
-      color: 'text-yellow-400',
+      icon: <ArrowRight className="w-3.5 h-3.5 text-zinc-300" />,
+      color: 'text-zinc-300',
       label: 'Medium',
-      bg: 'bg-yellow-500/10 border-yellow-500/20',
+      bg: 'bg-zinc-900 text-zinc-300 border-zinc-800',
     },
     low: {
-      icon: <ArrowDown className="w-3.5 h-3.5 text-blue-400" />,
-      color: 'text-blue-400',
+      icon: <ArrowDown className="w-3.5 h-3.5 text-zinc-400" />,
+      color: 'text-zinc-400',
       label: 'Low',
-      bg: 'bg-blue-500/10 border-blue-500/20',
+      bg: 'bg-zinc-900/60 text-zinc-400 border-zinc-800',
     },
     none: {
       icon: <Minus className="w-3.5 h-3.5 text-zinc-500" />,
       color: 'text-zinc-500',
-      label: 'No Priority',
-      bg: 'bg-zinc-800/40 border-zinc-700/30',
+      label: 'None',
+      bg: 'bg-zinc-950 text-zinc-500 border-zinc-900',
     },
   };
 

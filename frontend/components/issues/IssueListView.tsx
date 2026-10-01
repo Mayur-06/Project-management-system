@@ -12,10 +12,10 @@ interface IssueListViewProps {
 
 export const IssueListView: React.FC<IssueListViewProps> = ({ issues, onSelectIssue }) => {
   return (
-    <div className="flex-1 p-6 select-none overflow-x-auto">
-      <div className="w-full bg-[#0c0d10] border border-[#1e2026] rounded-xl overflow-hidden shadow-md">
+    <div className="flex-1 p-6 select-none overflow-x-auto font-sans">
+      <div className="w-full bg-black border border-zinc-800 rounded-xl overflow-hidden shadow-xs">
         {/* Table Header */}
-        <div className="grid grid-cols-12 gap-4 px-4 py-2.5 bg-[#101216] border-b border-[#1c1f26] text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+        <div className="grid grid-cols-12 gap-4 px-4 py-2.5 bg-zinc-950 border-b border-zinc-800 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
           <div className="col-span-2">Identifier</div>
           <div className="col-span-5">Title</div>
           <div className="col-span-2">Status</div>
@@ -25,17 +25,17 @@ export const IssueListView: React.FC<IssueListViewProps> = ({ issues, onSelectIs
         </div>
 
         {/* Rows */}
-        <div className="divide-y divide-[#181a20]">
+        <div className="divide-y divide-zinc-800">
           {issues.map((issue) => (
             <div
               key={issue.id}
               onClick={() => onSelectIssue(issue)}
-              className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-[#14161c] transition-colors cursor-pointer text-xs text-zinc-300"
+              className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-zinc-900 transition-colors cursor-pointer text-xs text-zinc-300"
             >
-              <div className="col-span-2 font-mono font-medium text-zinc-400 flex items-center gap-2">
-                <span className="text-indigo-400">{issue.identifier}</span>
+              <div className="col-span-2 font-mono font-medium text-white flex items-center gap-2">
+                <span>{issue.identifier}</span>
               </div>
-              <div className="col-span-5 font-medium text-zinc-100 truncate pr-4">{issue.title}</div>
+              <div className="col-span-5 font-medium text-white truncate pr-4">{issue.title}</div>
               <div className="col-span-2">
                 <StateBadge state={issue.state} />
               </div>
@@ -47,11 +47,11 @@ export const IssueListView: React.FC<IssueListViewProps> = ({ issues, onSelectIs
                   <img
                     src={issue.assignee.avatar_url}
                     alt={issue.assignee.name}
-                    className="w-5 h-5 rounded-full object-cover"
+                    className="w-5 h-5 rounded-full object-cover ring-1 ring-zinc-700"
                     title={issue.assignee.name}
                   />
                 ) : (
-                  <span className="text-zinc-600 text-[10px]">Unassigned</span>
+                  <span className="text-zinc-500 text-[10px]">Unassigned</span>
                 )}
               </div>
               <div className="col-span-1 text-right font-mono text-zinc-400">

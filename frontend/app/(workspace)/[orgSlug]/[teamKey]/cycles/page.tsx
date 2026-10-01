@@ -45,17 +45,17 @@ export default function CyclesPage() {
         breadcrumbs={['Acme Corp', teamKey, 'Cycles']}
       />
 
-      <div className="flex-1 p-8 overflow-y-auto space-y-8 max-w-6xl mx-auto w-full">
+      <div className="flex-1 p-8 overflow-y-auto space-y-8 max-w-6xl mx-auto w-full font-sans">
         {/* Active Cycle Hero Card */}
         {activeCycle && (
-          <div className="p-6 rounded-2xl bg-[#0f1014] border border-[#1f222a] space-y-6 shadow-xl">
+          <div className="p-6 rounded-xl bg-zinc-950 border border-zinc-800 space-y-6 shadow-xs">
             <div className="flex items-start justify-between">
               <div>
-                <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 mb-1">
-                  <Flame className="w-4 h-4 text-amber-500" />
+                <div className="flex items-center gap-2 text-xs font-semibold text-zinc-400 mb-1">
+                  <Flame className="w-4 h-4 text-white" />
                   <span>CURRENT ACTIVE SPRINT</span>
                 </div>
-                <h2 className="text-2xl font-bold text-zinc-100">{activeCycle.name}</h2>
+                <h2 className="text-2xl font-bold text-white">{activeCycle.name}</h2>
                 <div className="flex items-center gap-2 text-xs text-zinc-400 mt-1">
                   <Calendar className="w-3.5 h-3.5 text-zinc-500" />
                   <span>
@@ -66,8 +66,8 @@ export default function CyclesPage() {
               </div>
 
               <div className="text-right">
-                <div className="text-3xl font-mono font-bold text-indigo-400">{activeCycle.progress}%</div>
-                <div className="text-xs text-zinc-500">
+                <div className="text-3xl font-mono font-bold text-white">{activeCycle.progress}%</div>
+                <div className="text-xs text-zinc-400">
                   {activeCycle.completed_points} / {activeCycle.total_points} points completed
                 </div>
               </div>
@@ -75,13 +75,13 @@ export default function CyclesPage() {
 
             {/* Visual Progress Bar */}
             <div className="space-y-2">
-              <div className="w-full h-3 bg-[#181a22] rounded-full overflow-hidden border border-[#232632]">
+              <div className="w-full h-3 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
                 <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500"
+                  className="h-full bg-white rounded-full transition-all duration-500"
                   style={{ width: `${activeCycle.progress}%` }}
                 />
               </div>
-              <div className="flex justify-between text-[11px] text-zinc-500 font-mono">
+              <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
                 <span>Scope: 34 pts</span>
                 <span>Burnup Rate: 2.3 pts/day</span>
                 <span>Remaining: 11 pts</span>
@@ -89,18 +89,18 @@ export default function CyclesPage() {
             </div>
 
             {/* Velocity Metrics Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-[#1a1c24]">
-              <div className="p-3 bg-[#14161d] rounded-xl border border-[#20232e]">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2 border-t border-zinc-800">
+              <div className="p-3 bg-black rounded border border-zinc-800">
                 <span className="text-[11px] text-zinc-400 block mb-1">Cycle Velocity</span>
-                <span className="text-lg font-bold text-zinc-100 font-mono">38.5 pts avg</span>
+                <span className="text-lg font-bold text-white font-mono">38.5 pts avg</span>
               </div>
-              <div className="p-3 bg-[#14161d] rounded-xl border border-[#20232e]">
+              <div className="p-3 bg-black rounded border border-zinc-800">
                 <span className="text-[11px] text-zinc-400 block mb-1">Days Remaining</span>
-                <span className="text-lg font-bold text-amber-400 font-mono">6 days</span>
+                <span className="text-lg font-bold text-white font-mono">6 days</span>
               </div>
-              <div className="p-3 bg-[#14161d] rounded-xl border border-[#20232e]">
+              <div className="p-3 bg-black rounded border border-zinc-800">
                 <span className="text-[11px] text-zinc-400 block mb-1">Rollover Risk</span>
-                <span className="text-lg font-bold text-emerald-400 font-mono">Low (0 overdue)</span>
+                <span className="text-lg font-bold text-zinc-300 font-mono">Low (0 overdue)</span>
               </div>
             </div>
           </div>
@@ -113,12 +113,12 @@ export default function CyclesPage() {
             <span className="text-zinc-500 font-mono">({cycleIssues.length})</span>
           </h3>
 
-          <div className="bg-[#0e0f13] border border-[#1e2027] rounded-xl overflow-hidden divide-y divide-[#181a20]">
+          <div className="bg-black border border-zinc-800 rounded-xl overflow-hidden divide-y divide-zinc-800">
             {cycleIssues.map((issue) => (
-              <div key={issue.id} className="p-3.5 flex items-center justify-between hover:bg-[#14161c] transition-colors text-xs">
+              <div key={issue.id} className="p-3.5 flex items-center justify-between hover:bg-zinc-900 transition-colors text-xs">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="font-mono font-medium text-indigo-400">{issue.identifier}</span>
-                  <span className="text-zinc-100 font-medium truncate">{issue.title}</span>
+                  <span className="font-mono font-medium text-white">{issue.identifier}</span>
+                  <span className="text-white font-medium truncate">{issue.title}</span>
                 </div>
                 <div className="flex items-center gap-4 shrink-0">
                   <StateBadge state={issue.state} />

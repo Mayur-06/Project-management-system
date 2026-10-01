@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { WorkspaceSidebar } from '@/components/sidebar/WorkspaceSidebar';
 import { CommandPalette } from '@/components/command/CommandPalette';
-import { LinearAskModal } from '@/components/ai/LinearAskModal';
+import { AIAssistantModal } from '@/components/ai/AIAssistantModal';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 import { IssueDetailDrawer } from '@/components/issues/IssueDetailDrawer';
 import { Issue, Organization, Team, User } from '@/types';
@@ -50,7 +50,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   }, []);
 
   return (
-    <div className="flex h-screen w-screen bg-[#08090a] text-zinc-100 overflow-hidden font-sans">
+    <div className="flex h-screen w-screen bg-black text-white overflow-hidden font-sans">
       {/* Sidebar with dynamic workspace data */}
       <WorkspaceSidebar
         currentOrgSlug={orgSlug}
@@ -64,7 +64,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       />
 
       {/* Main View Area */}
-      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-[#08090a]">
+      <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-black">
         {children}
       </main>
 
@@ -78,7 +78,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         teams={teams}
       />
 
-      <LinearAskModal
+      <AIAssistantModal
         isOpen={isAIAskOpen}
         onClose={() => setIsAIAskOpen(false)}
         currentUser={currentUser}

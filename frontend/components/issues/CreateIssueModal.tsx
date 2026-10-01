@@ -103,17 +103,17 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-fade-in">
-      <div className="w-full max-w-2xl bg-[#0f1013] border border-[#23262e] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fade-in font-sans">
+      <div className="w-full max-w-2xl bg-black border border-zinc-800 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
         {/* Modal Header */}
-        <div className="px-5 py-3 border-b border-[#1c1f26] flex items-center justify-between bg-[#0b0c0f]">
+        <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-indigo-400 bg-indigo-950/40 px-2 py-0.5 rounded border border-indigo-900/50 font-mono">
+            <span className="text-xs font-semibold text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700 font-mono">
               {teamKey}
             </span>
-            <span className="text-xs text-zinc-500 font-medium">New Issue</span>
+            <span className="text-xs text-zinc-400 font-medium">New Issue</span>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 p-1">
+          <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 cursor-pointer">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -127,22 +127,22 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Issue title"
-              className="w-full bg-transparent text-base font-semibold text-zinc-100 placeholder-zinc-500 focus:outline-none"
+              className="w-full bg-transparent text-base font-semibold text-white placeholder-zinc-500 focus:outline-none"
             />
           </div>
 
           {/* Real-time Semantic Duplicate Banner */}
           {duplicateMatches.length > 0 && (
-            <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl space-y-1.5 animate-fade-in">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-400">
+            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-lg space-y-1.5 animate-fade-in">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-white">
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>Potential Similar Issues Found:</span>
               </div>
               <div className="space-y-1 pl-5">
                 {duplicateMatches.map((m) => (
-                  <div key={m.id} className="text-xs text-amber-200/80 flex items-center justify-between">
+                  <div key={m.id} className="text-xs text-zinc-300 flex items-center justify-between">
                     <span className="truncate max-w-[80%]">• {m.title}</span>
-                    <span className="text-[10px] text-amber-400 font-mono">{Math.round(m.similarity * 100)}% match</span>
+                    <span className="text-[10px] text-zinc-400 font-mono">{Math.round(m.similarity * 100)}% match</span>
                   </div>
                 ))}
               </div>
@@ -155,7 +155,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add description..."
-              className="w-full bg-[#14161b] text-xs text-zinc-200 placeholder-zinc-500 p-3 rounded-xl border border-[#23262e] focus:border-indigo-500 focus:outline-none resize-none leading-relaxed"
+              className="w-full bg-zinc-900 text-xs text-zinc-200 placeholder-zinc-500 p-3 rounded border border-zinc-800 focus:border-white focus:outline-none resize-none leading-relaxed"
             />
           </div>
 
@@ -167,7 +167,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               <select
                 value={stateId}
                 onChange={(e) => setStateId(e.target.value)}
-                className="w-full bg-[#14161b] border border-[#23262e] text-xs text-zinc-200 rounded-lg p-2 focus:border-indigo-500 focus:outline-none"
+                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
               >
                 {states.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -183,7 +183,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as IssuePriority)}
-                className="w-full bg-[#14161b] border border-[#23262e] text-xs text-zinc-200 rounded-lg p-2 focus:border-indigo-500 focus:outline-none"
+                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
               >
                 <option value="none">None</option>
                 <option value="low">Low</option>
@@ -199,7 +199,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full bg-[#14161b] border border-[#23262e] text-xs text-zinc-200 rounded-lg p-2 focus:border-indigo-500 focus:outline-none"
+                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
               >
                 <option value="">Unassigned</option>
                 {users.map((u) => (
@@ -216,7 +216,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               <select
                 value={estimate}
                 onChange={(e) => setEstimate(Number(e.target.value))}
-                className="w-full bg-[#14161b] border border-[#23262e] text-xs text-zinc-200 rounded-lg p-2 focus:border-indigo-500 focus:outline-none"
+                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
               >
                 <option value={1}>1 pt</option>
                 <option value={2}>2 pts</option>
@@ -228,18 +228,18 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
           </div>
 
           {/* Footer Controls */}
-          <div className="pt-4 border-t border-[#1c1f26] flex items-center justify-end gap-2">
+          <div className="pt-4 border-t border-zinc-800 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 hover:bg-[#1a1d24] transition-colors"
+              className="px-3.5 py-1.5 rounded text-xs text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!title.trim() || isSubmitting}
-              className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 transition-colors shadow-md active:scale-95 cursor-pointer"
+              className="px-4 py-1.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 disabled:opacity-30 transition-colors shadow-xs active:scale-95 cursor-pointer"
             >
               {isSubmitting ? 'Creating...' : 'Create Issue'}
             </button>

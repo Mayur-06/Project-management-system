@@ -18,10 +18,10 @@ export const supabase = createSupabaseClient(supabaseUrl, supabaseAnonKey, {
 
 export function getClientSessionId(): string {
   if (typeof window === 'undefined') return 'server';
-  let sid = sessionStorage.getItem('linear_session_id');
+  let sid = sessionStorage.getItem('app_client_session_id');
   if (!sid) {
     sid = `sess_${Math.random().toString(36).substring(2, 9)}`;
-    sessionStorage.setItem('linear_session_id', sid);
+    sessionStorage.setItem('app_client_session_id', sid);
   }
   return sid;
 }

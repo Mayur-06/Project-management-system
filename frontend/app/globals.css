@@ -1,27 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  --background: #08090a;
-  --foreground: #f7f8f8;
-  --surface: #0f1012;
-  --surface-hover: #16181b;
-  --surface-active: #1e2025;
-  --border: #23252a;
-  --border-subtle: #191b1f;
-  --primary: #5e6ad2;
-  --primary-hover: #6875f5;
-  --primary-text: #ffffff;
-  --muted: #8a8f98;
-  --muted-dark: #62666d;
-  --card: #0f1012;
-  --card-border: #1e2025;
-  --card-hover-border: #2e3238;
+  --background: #000000;
+  --foreground: #ffffff;
+  --surface: #0a0a0a;
+  --surface-hover: #141414;
+  --surface-active: #1f1f1f;
+  --border: #262626;
+  --border-subtle: #171717;
+  --primary: #ffffff;
+  --primary-hover: #e5e5e5;
+  --primary-text: #000000;
+  --muted: #a3a3a3;
+  --muted-dark: #737373;
+  --card: #0a0a0a;
+  --card-border: #262626;
+  --card-hover-border: #404040;
   
-  --priority-urgent: #f43f5e;
-  --priority-high: #f97316;
-  --priority-medium: #eab308;
-  --priority-low: #3b82f6;
-  --priority-none: #71717a;
+  --priority-urgent: #ffffff;
+  --priority-high: #e5e5e5;
+  --priority-medium: #a3a3a3;
+  --priority-low: #737373;
+  --priority-none: #525252;
 }
 
 @theme inline {
@@ -50,7 +50,7 @@ html, body {
   height: 100%;
 }
 
-/* Custom Linear-style Scrollbar */
+/* Custom Monochrome Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
