@@ -2,7 +2,7 @@ from typing import List
 from fastapi import HTTPException, status
 from supabase import Client
 
-from app.schemas.team import TeamCreate, TeamResponse, TeamMemberResponse, TeamMemberUser
+from app.schemas.team import TeamCreate, TeamUpdate, TeamResponse, TeamMemberResponse, TeamMemberUser
 from app.schemas.state import StateCategory
 
 
@@ -165,3 +165,40 @@ class TeamService:
             )
 
         return results
+
+    @classmethod
+    def update_team(cls, team_id: str, data: TeamUpdate, user_id: str, db: Client) -> TeamResponse:
+        team_res = db.table("teams").select("*").eq("id", team_id).limit(1).execute()
+        if not team_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Team not found",
+            )
+        team = team_res.data[0]
+
+        member_check = (
+            db.table("workspace_members")
+            .select("role")
+            .eq("organization_id", team["organization_id"])
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not member_check.data or member_check.data[0].get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only workspace admins can update team settings",
+            )
+
+        update_dict = {}
+        if data.name is not None:
+            update_dict["name"] = data.name
+        if data.cycle_duration_weeks is not None:
+            update_dict["cycle_duration_weeks"] = data.cycle_duration_weeks
+
+        if update_dict:
+            res = db.table("teams").update(update_dict).eq("id", team_id).execute()
+            if res.data:
+                team = res.data[0]
+
+        return TeamResponse(**team)

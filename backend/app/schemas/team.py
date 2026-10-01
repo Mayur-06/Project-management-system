@@ -13,6 +13,11 @@ class TeamCreate(TeamBase):
     pass
 
 
+class TeamUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Team display name")
+    cycle_duration_weeks: Optional[int] = Field(None, ge=1, le=12, description="Default cycle duration in weeks")
+
+
 class TeamResponse(TeamBase):
     model_config = ConfigDict(from_attributes=True)
 

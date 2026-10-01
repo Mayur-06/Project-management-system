@@ -4,7 +4,10 @@ from supabase import Client
 
 from app.schemas.workspace import (
     OrganizationCreate,
+    OrganizationUpdate,
     OrganizationResponse,
+    WorkspaceMemberResponse,
+    WorkspaceMemberUser,
     UserWorkspaceItem,
     TeamSummary,
     MemberRole,
@@ -147,3 +150,95 @@ class WorkspaceService:
         ).execute()
 
         return OrganizationResponse(**created_org)
+
+    @staticmethod
+    def update_workspace(
+        slug: str, data: OrganizationUpdate, user_id: str, db: Client
+    ) -> OrganizationResponse:
+        org_res = db.table("organizations").select("*").eq("slug", slug).limit(1).execute()
+        if not org_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workspace with slug '{slug}' not found",
+            )
+        org = org_res.data[0]
+
+        member_check = (
+            db.table("workspace_members")
+            .select("role")
+            .eq("organization_id", org["id"])
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not member_check.data or member_check.data[0].get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization admins can update workspace settings",
+            )
+
+        update_dict = {}
+        if data.name is not None:
+            update_dict["name"] = data.name
+        if data.logo_url is not None:
+            update_dict["logo_url"] = data.logo_url
+
+        if update_dict:
+            res = db.table("organizations").update(update_dict).eq("id", org["id"]).execute()
+            if res.data:
+                org = res.data[0]
+
+        return OrganizationResponse(**org)
+
+    @staticmethod
+    def list_workspace_members(
+        slug: str, user_id: str, db: Client
+    ) -> List[WorkspaceMemberResponse]:
+        org_res = db.table("organizations").select("id").eq("slug", slug).limit(1).execute()
+        if not org_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workspace with slug '{slug}' not found",
+            )
+        org_id = org_res.data[0]["id"]
+
+        member_check = (
+            db.table("workspace_members")
+            .select("id")
+            .eq("organization_id", org_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not member_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this workspace",
+            )
+
+        members_res = (
+            db.table("workspace_members")
+            .select("*")
+            .eq("organization_id", org_id)
+            .order("created_at")
+            .execute()
+        )
+
+        results: List[WorkspaceMemberResponse] = []
+        for m in (members_res.data or []):
+            is_alex = m["user_id"] == "00000000-0000-0000-0000-000000000001" or m["user_id"] == user_id
+            results.append(
+                WorkspaceMemberResponse(
+                    id=m["id"],
+                    organization_id=m["organization_id"],
+                    user_id=m["user_id"],
+                    role=MemberRole(m.get("role", "member")),
+                    created_at=m["created_at"],
+                    user=WorkspaceMemberUser(
+                        id=m["user_id"],
+                        email="alex@acme.inc" if is_alex else f"user-{m['user_id'][:6]}@acme.inc",
+                        name="Alex Chen" if is_alex else f"Team Member {m['user_id'][:4]}",
+                    ),
+                )
+            )
+        return results

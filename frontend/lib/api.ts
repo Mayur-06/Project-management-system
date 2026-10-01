@@ -8,6 +8,7 @@ import {
   TriageOutput,
   Team,
   Organization,
+  WorkspaceMember,
   IssueAttachment,
 } from '@/types';
 import { getClientSessionId } from '@/lib/supabase/client';
@@ -51,9 +52,28 @@ export const api = {
     return await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`);
   },
 
+  async updateWorkspace(orgSlug: string, updates: Partial<Organization>): Promise<Organization | null> {
+    return await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  },
+
+  async getWorkspaceMembers(orgSlug: string): Promise<WorkspaceMember[]> {
+    const data = await fetchWithAuth<WorkspaceMember[]>(`/workspaces/${orgSlug}/members`);
+    return data || [];
+  },
+
   async getTeams(orgSlug: string): Promise<Team[]> {
     const data = await fetchWithAuth<Team[]>(`/workspaces/${orgSlug}/teams`);
     return data || [];
+  },
+
+  async updateTeam(teamId: string, updates: Partial<Team>): Promise<Team | null> {
+    return await fetchWithAuth<Team>(`/teams/${teamId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
   },
 
   async getWorkflowStates(teamId: string): Promise<WorkflowState[]> {

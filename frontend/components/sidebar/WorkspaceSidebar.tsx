@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -19,6 +19,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { Organization, Team, User } from '@/types';
+import { SettingsModal } from '@/components/settings/SettingsModal';
 
 interface WorkspaceSidebarProps {
   currentOrgSlug?: string;
@@ -45,7 +46,28 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 }) => {
   const router = useRouter();
   const pathname = usePathname();
-  const orgName = organization?.name || currentOrgSlug.toUpperCase();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [orgState, setOrgState] = useState<Organization | null>(organization || null);
+  const orgName = orgState?.name || organization?.name || currentOrgSlug.toUpperCase();
+  const activeTeam = teams.find((t) => t.key === currentTeamKey) || teams[0] || null;
+
+  // Listen for Cmd+, or Ctrl+, to open settings
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setIsSettingsOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (organization) {
+      setOrgState(organization);
+    }
+  }, [organization]);
 
   const handleSignOut = async () => {
     try {
@@ -227,13 +249,23 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             <LogOut className="w-3.5 h-3.5" />
           </button>
           <button
-            className="p-1.5 rounded-md hover:bg-[#1a1d22] text-zinc-400 hover:text-zinc-200 transition-colors"
-            title="Settings"
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-1.5 rounded-md hover:bg-[#1a1d22] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
+            title="Settings (Cmd+,)"
           >
             <Settings className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
+
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        organization={orgState}
+        currentTeam={activeTeam}
+        onWorkspaceUpdated={(updated) => setOrgState(updated)}
+        onTeamUpdated={() => router.refresh()}
+      />
     </aside>
   );
 };

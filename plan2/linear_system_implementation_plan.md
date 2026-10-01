@@ -28,8 +28,8 @@ A foundational architectural rule governs all mutations across the system:
 
 ### A. Workspace, Tenant & Access Management
 * **Multi-Tenant Organization Isolation:** Complete separation of company data through dedicated organization entities and tenant identifiers on all downstream records.
-* **Role-Based Access Control (RBAC):** Three-tier hierarchical roles within organizations:
-  * *Admin:* Full administrative control over organization settings, billing, team creation, workflow customization, and member invitation/removal.
+* **Lean Role-Based Access Control (RBAC):** Focused three-tier hierarchical roles within organizations (`Admin`, `Member`, `Guest`). Eliminates complex enterprise 40+ permission matrices in favor of clear, predictable access boundaries.
+  * *Admin:* Full administrative control over organization settings, team creation, and member invitation/removal.
   * *Member:* Standard access to create, update, and manage issues, projects, cycles, and comments across joined teams.
   * *Guest:* Restricted read-only or single-team access for external contractors and stakeholders.
 * **Cross-Team Memberships:** Users can belong to multiple functional teams within an organization, each with independent visibility and notification settings.
@@ -40,13 +40,25 @@ A foundational architectural rule governs all mutations across the system:
 * **Standardized State Visuals:** Each of the 6 fixed states has a system-defined color and fixed column order across Kanban and List views.
 * **Configurable Sprint Cadence:** Teams configure custom cycle lengths (e.g., 1-week, 2-week, or custom durations) and automated cycle rollover rules.
 
-### C. Core Issue & Dependency Engine
+### C. Lean Settings Architecture (Modal & Cmd+,)
+* **Unified Non-Disruptive Modal:** Settings is presented as a high-speed, keyboard-accessible dialog (`Cmd+,` / `Ctrl+,` or sidebar gear button) preserving user context instead of navigating across slow, fragmented route pages.
+* **The 3 Essential Tabs:**
+  1. *Workspace & Team:* Manage Organization name, URL slug, company logo, Team name, Key prefix (e.g. `ENG`), and sprint cycle cadence (duration in weeks).
+  2. *Members & Access:* View active organization members, their role badges (`Admin`, `Member`, `Guest`), and invite new collaborators via email.
+  3. *My Profile:* View display name, email address, avatar initials, dark theme preference, and sign-out action.
+* **Explicitly Removed Administrative Bloat:**
+  * *No Billing/Invoicing Gateways:* Eliminates payment processor bloat and extraneous commercial billing workflows.
+  * *No Custom Workflow State Builder:* Prohibits arbitrary custom state creation to prevent board fragmentation and broken cycle velocity analytics.
+  * *No 40+ Permission Matrices:* Discards tedious enterprise checkbox matrices in favor of clean 3-tier roles.
+  * *No Dedicated Labels CRUD Screen:* Labels are created and tagged directly in-line on issues.
+
+### D. Core Issue & Dependency Engine
 * **Readable Sequential Identifiers:** Automatic sequential numbering per team producing clean identifiers (e.g., ENG-101, ENG-102) managed through transactional database counters.
 * **Rich Markdown Editing:** TipTap-powered editor supporting rich formatting, code blocks, task lists, and slash commands.
 * **Hierarchical Subtasks:** Arbitrary nesting of parent issues and child subtasks with aggregated progress tracking.
 * **Granular Issue Attributes:** Native support for priority tiers (Urgent, High, Medium, Low, None), Fibonacci story point estimates, due dates, assignees, project associations, cycle allocations, and customizable color-coded labels.
 
-### D. High-Speed Keyboard-First User Experience
+### E. High-Speed Keyboard-First User Experience
 * **Universal Command Palette (Cmd+K / Ctrl+K):** Instant global search and action launcher capable of finding issues, navigating views, switching teams, and executing system commands without touching the mouse.
 * **Single-Key Shortcuts:** Industry-standard keyboard shortcuts for rapid issue triage:
   * Status assignment shortcuts.
@@ -55,31 +67,31 @@ A foundational architectural rule governs all mutations across the system:
   * Label filtering and attachment toggles.
 * **Virtualized Data Rendering:** Smooth scrolling across thousands of issues utilizing DOM virtualization for both list tables and Kanban board columns.
 
-### E. Collaborative Real-Time Workspace
+### F. Collaborative Real-Time Workspace
 * **Interactive Kanban Board View:** Drag-and-drop issue movement across workflow columns powered by accessible drag engines.
 * **Synchronized List View:** High-density, configurable data grid supporting multi-column sorting, grouping by priority/assignee/project, and custom filtering.
 * **Sub-50ms Realtime Broadcasting:** Instant state propagation to all active workspace viewers via WebSocket broadcast channels.
 * **Optimistic Local Mutations:** Zero-latency UI response where card positions and field edits reflect immediately on the user's screen before the backend response resolves.
 * **Presence Indicators:** Live indicators showing which team members are currently viewing or modifying specific issues.
 
-### F. Sprint & Cycle Automation
+### G. Sprint & Cycle Automation
 * **Automated Cycle Progression:** Automatic transition of sprints based on configured start and end timestamps.
 * **Cycle Velocity Metrics:** Real-time calculation of completed versus planned story points, total issues closed, and scope changes mid-sprint.
 * **Burnup & Burndown Analytics:** Interactive charts showing progress trends throughout the active cycle lifecycle.
 * **Unfinished Work Rollover Engine:** One-click or automated migration of incomplete issues from a closed cycle to either the team backlog or the immediate next cycle.
 
-### G. Milestones & Health Statuses
+### H. Milestones & Health Statuses
 * **Milestone Sequences:** Granular checkpoints within projects tracking major architectural or business phases.
 * **Project Health Statuses:** Explicit health tracking categorizing projects directly as On Track, At Risk, or Off Track.
 
-### H. Triage Inbox & Inbound Work Routing
+### I. Triage Inbox & Inbound Work Routing
 * **Dedicated Triage Queue:** Holding area for untriaged issues originating from external integrations, customer requests, or cross-departmental tickets.
 * **Three-Way Disposition Actions:**
   * *Accept:* Move issue into an active workflow state, assign a team member, and allocate to a sprint or backlog.
   * *Snooze:* Hide the issue from the active inbox until a specified future date and time.
   * *Decline:* Archive or cancel the issue with an explicit cancellation rationale.
 
-### I. Social, Audit & Media Ecosystem
+### J. Social, Audit & Media Ecosystem
 * **Rich Discussion Threads:** Comment sections supporting TipTap JSON formatting, user mentions, code snippets, and timestamped revisions.
 * **Emoji Reaction System:** Interactive sentiment reactions on comments with multi-user clustering.
 * **Comprehensive Activity Audit Logging:** Immutable audit records capturing every property mutation, state change, and assignee transfer with actor attribution and timestamping.

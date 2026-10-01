@@ -6,7 +6,9 @@ from app.core.security import AuthenticatedUser
 from app.core.dependencies import get_current_user, get_admin_db
 from app.schemas.workspace import (
     OrganizationCreate,
+    OrganizationUpdate,
     OrganizationResponse,
+    WorkspaceMemberResponse,
     UserWorkspacesResponse,
 )
 from app.schemas.team import TeamCreate, TeamResponse
@@ -54,6 +56,33 @@ async def get_workspace(
     db: Client = Depends(get_admin_db),
 ):
     return WorkspaceService.get_workspace_by_slug(org_slug, current_user.id, db)
+
+
+@router.patch(
+    "/{org_slug}",
+    response_model=OrganizationResponse,
+    summary="Update organization workspace settings (name, logo)",
+)
+async def update_workspace(
+    org_slug: str,
+    data: OrganizationUpdate,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return WorkspaceService.update_workspace(org_slug, data, current_user.id, db)
+
+
+@router.get(
+    "/{org_slug}/members",
+    response_model=List[WorkspaceMemberResponse],
+    summary="List all members belonging to an organization workspace",
+)
+async def list_workspace_members(
+    org_slug: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return WorkspaceService.list_workspace_members(org_slug, current_user.id, db)
 
 
 @router.get(

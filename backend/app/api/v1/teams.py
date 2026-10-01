@@ -4,12 +4,26 @@ from supabase import Client
 
 from app.core.security import AuthenticatedUser
 from app.core.dependencies import get_current_user, get_admin_db
-from app.schemas.team import TeamMemberResponse
+from app.schemas.team import TeamMemberResponse, TeamUpdate, TeamResponse
 from app.schemas.state import WorkflowStateResponse, WorkflowStateReorderRequest
 from app.services.team_service import TeamService
 from app.services.state_service import StateService
 
 router = APIRouter(prefix="/teams", tags=["Teams & Workflow States"])
+
+
+@router.patch(
+    "/{team_id}",
+    response_model=TeamResponse,
+    summary="Update team settings (name, sprint cadence)",
+)
+async def update_team(
+    team_id: str,
+    payload: TeamUpdate,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return TeamService.update_team(team_id, payload, current_user.id, db)
 
 
 @router.get(
