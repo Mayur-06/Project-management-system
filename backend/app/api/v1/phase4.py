@@ -124,31 +124,7 @@ async def resume_breakdown(
 # 5. Linear Ask: ReAct Workspace Assistant (SSE Stream)
 # ==============================================================================
 
-async def fake_sse_chat_generator(
-    query: str, org_id: str, user_id: str
-) -> AsyncGenerator[str, None]:
-    """Generates Server-Sent Events for conversational workspace query."""
-    yield f"event: session\ndata: {json.dumps({'status': 'connected', 'org_id': org_id})}\n\n"
-    await asyncio.sleep(0.01)
-
-    # Tool execution notification
-    yield f"event: tool_start\ndata: {json.dumps({'tool': 'search_issues', 'query': query})}\n\n"
-    await asyncio.sleep(0.02)
-    yield f"event: tool_complete\ndata: {json.dumps({'tool': 'search_issues', 'status': 'success'})}\n\n"
-    await asyncio.sleep(0.01)
-
-    # Token streaming
-    tokens = [
-        "I ", "checked ", "your ", "workspace. ",
-        "There ", "are ", "no ", "critical ", "blockers ",
-        "found ", "in ", "the ", "current ", "active ", "sprint."
-    ]
-    for token in tokens:
-        yield f"event: token\ndata: {json.dumps({'text': token})}\n\n"
-        await asyncio.sleep(0.01)
-
-    # Done event
-    yield f"event: done\ndata: {json.dumps({'status': 'finished'})}\n\n"
+from app.agents.react_agent import LinearAskAgent
 
 
 @router.post(
@@ -162,7 +138,12 @@ async def chat_stream(
 ):
     user_query = payload.messages[-1].content if payload.messages else ""
     return StreamingResponse(
-        fake_sse_chat_generator(user_query, payload.organization_id, current_user.id),
+        LinearAskAgent.stream_chat_session(
+            query=user_query,
+            organization_id=payload.organization_id,
+            user_jwt=current_user.raw_token,
+            history=[m.model_dump() for m in payload.messages],
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -170,3 +151,4 @@ async def chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+

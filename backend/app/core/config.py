@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = "placeholder-anon-key"
     SUPABASE_JWT_SECRET: str = "placeholder-jwt-secret-at-least-32-chars-long"
 
+    # AI Configuration (Gemini)
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+
     # CORS origins
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
