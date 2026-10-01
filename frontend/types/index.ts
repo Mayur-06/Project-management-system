@@ -133,6 +133,7 @@ export interface Issue {
   snoozed_until?: string;
   completed_at?: string;
   canceled_at?: string;
+  last_modified_by_session?: string;
   created_at: string;
   updated_at: string;
   deleted_at?: string;

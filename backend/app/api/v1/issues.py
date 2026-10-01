@@ -132,10 +132,11 @@ async def update_issue(
 )
 async def delete_issue(
     issue_id: str,
+    client_session_id: Optional[str] = Query(None, description="Client session ID for echo suppression"),
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
 ):
-    IssueService.delete_issue(issue_id, current_user.id, db)
+    IssueService.delete_issue(issue_id, current_user.id, db, client_session_id=client_session_id)
 
 
 @router.put(

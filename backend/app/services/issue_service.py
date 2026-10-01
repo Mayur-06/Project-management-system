@@ -168,6 +168,7 @@ class IssueService:
             "sort_order": sort_order,
             "version": 1,
             "due_date": data.due_date.isoformat() if data.due_date else None,
+            "last_modified_by_session": data.client_session_id,
         }
 
         res = db.table("issues").insert(issue_payload).execute()
@@ -292,12 +293,15 @@ class IssueService:
         return IssueResponse(**updated)
 
     @classmethod
-    def delete_issue(cls, issue_id: str, user_id: str, db: Client) -> None:
+    def delete_issue(cls, issue_id: str, user_id: str, db: Client, client_session_id: Optional[str] = None) -> None:
         current_issue = cls._verify_issue_access(issue_id, user_id, db)
         now_iso = datetime.now(timezone.utc).isoformat()
 
         # Trigger in PostgreSQL handles cascading soft-delete to child subtasks
-        db.table("issues").update({"deleted_at": now_iso}).eq("id", issue_id).execute()
+        delete_payload = {"deleted_at": now_iso}
+        if client_session_id:
+            delete_payload["last_modified_by_session"] = client_session_id
+        db.table("issues").update(delete_payload).eq("id", issue_id).execute()
 
         db.table("activity_logs").insert({
             "organization_id": current_issue["organization_id"],

@@ -25,6 +25,7 @@ class IssueCreate(BaseModel):
     cycle_id: Optional[str] = None
     parent_id: Optional[str] = None
     due_date: Optional[date] = None
+    client_session_id: Optional[str] = None
 
 
 class IssueUpdate(BaseModel):
@@ -107,6 +108,7 @@ class IssueResponse(BaseModel):
     snoozed_until: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None
+    last_modified_by_session: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None

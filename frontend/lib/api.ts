@@ -92,6 +92,22 @@ export const api = {
     });
   },
 
+  async deleteIssue(id: string): Promise<boolean> {
+    const sessionId = getClientSessionId();
+    const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
+    try {
+      const response = await fetch(`${API_BASE}/issues/${id}?client_session_id=${encodeURIComponent(sessionId)}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  },
+
   // Comments
   async getComments(issueId: string): Promise<IssueComment[]> {
     const data = await fetchWithAuth<IssueComment[]>(`/issues/${issueId}/comments`);
