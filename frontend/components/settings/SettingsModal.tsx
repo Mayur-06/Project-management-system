@@ -5,7 +5,7 @@ import {
   X,
   Building2,
   Users,
-  User,
+  User as UserIcon,
   Check,
   Loader2,
   Mail,
@@ -18,6 +18,7 @@ import {
   UserMinus,
 } from 'lucide-react';
 import { Organization, Team, WorkspaceMember } from '@/types';
+import type { User } from '@/types';
 import { api } from '@/lib/api';
 import { supabase } from '@/lib/supabase/client';
 
@@ -26,6 +27,7 @@ interface SettingsModalProps {
   onClose: () => void;
   organization: Organization | null;
   currentTeam: Team | null;
+  currentUser?: User | null;
   onWorkspaceUpdated?: (updated: Organization) => void;
   onTeamUpdated?: (updated: Team) => void;
 }
@@ -37,6 +39,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   organization,
   currentTeam,
+  currentUser,
   onWorkspaceUpdated,
   onTeamUpdated,
 }) => {
@@ -78,9 +81,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTeamError(null);
   }, [organization, currentTeam, isOpen]);
 
-  // Load members when members tab is active
+  // Load members when modal is open
   useEffect(() => {
-    if (isOpen && activeTab === 'members' && organization?.slug) {
+    if (isOpen && organization?.slug) {
       setIsLoadingMembers(true);
       api
         .getWorkspaceMembers(organization.slug)
@@ -97,7 +100,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           .finally(() => setIsLoadingTeamMembers(false));
       }
     }
-  }, [isOpen, activeTab, organization?.slug, currentTeam?.id]);
+  }, [isOpen, organization?.slug, currentTeam?.id]);
+
+  // Derive current user's role in this organization
+  const currentMember = members.find((m) => m.user_id === currentUser?.id || m.user?.email === currentUser?.email);
+  const currentUserRole = currentMember?.role || (currentUser?.id === '00000000-0000-0000-0000-000000000001' ? 'admin' : 'member');
+  const isAdmin = currentUserRole === 'admin';
 
   // Escape key handler
   useEffect(() => {
@@ -154,6 +162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleAddTeamMember = async (userId: string) => {
     if (!currentTeam?.id || !userId || isAddingTeamMember) return;
     setIsAddingTeamMember(true);
+    setTeamError(null);
     try {
       const added = await api.addTeamMember(currentTeam.id, userId);
       if (added) {
@@ -163,8 +172,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         });
         setSelectedUserToAdd('');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to add team member', err);
+      setTeamError(err?.message || 'Failed to add team member');
     } finally {
       setIsAddingTeamMember(false);
     }
@@ -280,7 +290,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <User className="w-3.5 h-3.5" />
+            <UserIcon className="w-3.5 h-3.5" />
             My Profile
           </button>
         </div>
@@ -296,7 +306,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
                     Organization Details
                   </h3>
-                  <span className="text-[11px] text-zinc-500">Admin Only</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded font-medium ${isAdmin ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'bg-zinc-800 text-zinc-400 border border-zinc-700/50'}`}>
+                    {isAdmin ? 'Admin Edit Access' : 'View Only (Member)'}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -308,8 +320,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       type="text"
                       value={orgName}
                       onChange={(e) => setOrgName(e.target.value)}
+                      disabled={!isAdmin}
                       required
-                      className="w-full bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -329,9 +342,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Team Section */}
               <div className="space-y-4">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                  Team & Sprint Cadence
-                </h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                    Team & Sprint Cadence
+                  </h3>
+                  {!isAdmin && (
+                    <span className="text-[11px] text-zinc-500">Settings managed by workspace admins</span>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -342,8 +360,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       type="text"
                       value={teamName}
                       onChange={(e) => setTeamName(e.target.value)}
+                      disabled={!isAdmin}
                       required
-                      className="w-full bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -357,8 +376,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         value={teamKey}
                         onChange={(e) => setTeamKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
                         maxLength={8}
+                        disabled={!isAdmin}
                         required
-                        className="w-28 bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono font-semibold text-indigo-400 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors uppercase"
+                        className="w-28 bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono font-semibold text-indigo-400 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors uppercase disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                       <span className="text-[11px] text-zinc-500">(Prefix for {teamKey || 'KEY'}-1, {teamKey || 'KEY'}-2)</span>
                     </div>
@@ -373,7 +393,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <select
                       value={cycleWeeks}
                       onChange={(e) => setCycleWeeks(Number(e.target.value))}
-                      className="bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+                      disabled={!isAdmin}
+                      className="bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <option value={1}>1 Week (Weekly)</option>
                       <option value={2}>2 Weeks (Standard Sprint)</option>
@@ -389,79 +410,91 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Save footer */}
-              <div className="pt-2 flex items-center justify-end gap-3">
-                {teamError && (
-                  <span className="text-xs text-red-400">
-                    {teamError}
-                  </span>
-                )}
-                {saveSuccess && (
-                  <span className="flex items-center gap-1 text-xs text-emerald-400">
-                    <Check className="w-3.5 h-3.5" />
-                    Settings saved successfully
-                  </span>
-                )}
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-all disabled:opacity-50 cursor-pointer shadow-sm shadow-indigo-500/20"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    'Save Changes'
+              {isAdmin && (
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  {teamError && (
+                    <span className="text-xs text-red-400">
+                      {teamError}
+                    </span>
                   )}
-                </button>
-              </div>
+                  {saveSuccess && (
+                    <span className="flex items-center gap-1 text-xs text-emerald-400">
+                      <Check className="w-3.5 h-3.5" />
+                      Settings saved successfully
+                    </span>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-all disabled:opacity-50 cursor-pointer shadow-sm shadow-indigo-500/20"
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      'Save Changes'
+                    )}
+                  </button>
+                </div>
+              )}
             </form>
           )}
 
           {/* TAB 2: MEMBERS & ACCESS */}
           {activeTab === 'members' && (
             <div className="space-y-6">
-              {/* Invite member row */}
-              <form onSubmit={handleInviteMember} className="p-3.5 bg-[#14171e]/70 border border-zinc-800 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-zinc-200">Invite New Collaborator</span>
-                  <span className="text-[11px] text-zinc-500">Fast invite via email</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
-                    <input
-                      type="email"
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="teammate@company.com"
-                      required
-                      className="w-full pl-8 pr-3 py-1.5 bg-[#181b22] border border-zinc-800 rounded-lg text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                    />
+              {/* Invite member row (Admin only) */}
+              {isAdmin ? (
+                <form onSubmit={handleInviteMember} className="p-3.5 bg-[#14171e]/70 border border-zinc-800 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-zinc-200">Invite New Collaborator</span>
+                    <span className="text-[11px] text-zinc-500">Fast invite via email</span>
                   </div>
-                  <select
-                    value={inviteRole}
-                    onChange={(e) => setInviteRole(e.target.value as 'member' | 'admin')}
-                    className="bg-[#181b22] border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 transition-colors"
-                  >
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors cursor-pointer"
-                  >
-                    Invite
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
+                      <input
+                        type="email"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="teammate@company.com"
+                        required
+                        className="w-full pl-8 pr-3 py-1.5 bg-[#181b22] border border-zinc-800 rounded-lg text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                      />
+                    </div>
+                    <select
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value as 'member' | 'admin')}
+                      className="bg-[#181b22] border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 transition-colors"
+                    >
+                      <option value="member">Member</option>
+                      <option value="admin">Admin</option>
+                    </select>
+                    <button
+                      type="submit"
+                      disabled={isInviting}
+                      className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      {isInviting ? 'Inviting...' : 'Invite'}
+                    </button>
+                  </div>
+                  {inviteSuccess && (
+                    <p className="text-[11px] text-emerald-400 flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      Invitation dispatched! Member added to workspace.
+                    </p>
+                  )}
+                </form>
+              ) : (
+                <div className="p-3 bg-[#14171e]/40 border border-zinc-800/80 rounded-xl flex items-center justify-between text-xs text-zinc-400">
+                  <span>Only workspace admins can invite new members.</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-500 border border-zinc-700/50">
+                    Member Role
+                  </span>
                 </div>
-                {inviteSuccess && (
-                  <p className="text-[11px] text-emerald-400 flex items-center gap-1">
-                    <Check className="w-3 h-3" />
-                    Invitation dispatched! Member added to workspace.
-                  </p>
-                )}
-              </form>
+              )}
 
               {/* Members table */}
               <div className="space-y-2">
@@ -546,8 +579,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </p>
                     </div>
 
-                    {/* Quick Add Member to Team */}
-                    {members.filter((m) => !teamMembers.some((tm) => tm.user_id === m.user_id)).length > 0 && (
+                    {/* Quick Add Member to Team (Admin only) */}
+                    {isAdmin && members.filter((m) => m.status !== 'invited' && !teamMembers.some((tm) => tm.user_id === m.user_id)).length > 0 && (
                       <div className="flex items-center gap-2">
                         <select
                           value={selectedUserToAdd}
@@ -556,7 +589,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         >
                           <option value="">Select workspace member...</option>
                           {members
-                            .filter((m) => !teamMembers.some((tm) => tm.user_id === m.user_id))
+                            .filter((m) => m.status !== 'invited' && !teamMembers.some((tm) => tm.user_id === m.user_id))
                             .map((m) => (
                               <option key={m.user_id} value={m.user_id}>
                                 {m.user?.name || m.user?.email || m.user_id}
@@ -608,15 +641,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             </div>
                           </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTeamMember(tm.user_id)}
-                            title="Remove from team"
-                            className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-red-400 px-2 py-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
-                          >
-                            <UserMinus className="w-3 h-3" />
-                            Remove
-                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTeamMember(tm.user_id)}
+                              title="Remove from team"
+                              className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-red-400 px-2 py-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                            >
+                              <UserMinus className="w-3 h-3" />
+                              Remove
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -632,16 +667,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Profile Card */}
               <div className="p-4 bg-[#14171e]/70 border border-zinc-800 rounded-xl flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center text-sm font-bold text-white shadow-md">
-                  AC
+                  {currentUser?.name ? currentUser.name.slice(0, 2).toUpperCase() : 'U'}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-zinc-100">Alex Chen</h3>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 font-medium">
-                      Admin
+                    <h3 className="text-sm font-semibold text-zinc-100">{currentUser?.name || 'Workspace Member'}</h3>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                      isAdmin 
+                        ? 'bg-indigo-500/15 border border-indigo-500/30 text-indigo-400' 
+                        : 'bg-zinc-800 border border-zinc-700/50 text-zinc-300'
+                    }`}>
+                      {currentUserRole.charAt(0).toUpperCase() + currentUserRole.slice(1)}
                     </span>
                   </div>
-                  <p className="text-xs text-zinc-400">alex@acme.inc</p>
+                  <p className="text-xs text-zinc-400">{currentUser?.email || 'user@acme.inc'}</p>
                   <p className="text-[10px] text-zinc-500 mt-0.5">Signed in with Supabase Authentication</p>
                 </div>
               </div>

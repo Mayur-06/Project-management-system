@@ -9,6 +9,7 @@ import { StateBadge } from '@/components/ui/StateBadge';
 interface KanbanBoardProps {
   states: WorkflowState[];
   issues: Issue[];
+  users?: { id: string; name?: string; email?: string; avatar_url?: string }[];
   onSelectIssue: (issue: Issue) => void;
   onOpenNewIssueWithState: (stateId: string) => void;
   onMoveIssueState: (issueId: string, newStateId: string, prevRank?: string, nextRank?: string) => void;
@@ -18,6 +19,7 @@ interface KanbanBoardProps {
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   states,
   issues,
+  users = [],
   onSelectIssue,
   onOpenNewIssueWithState,
   onMoveIssueState,
@@ -160,16 +162,40 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   {/* Card Footer: Assignee & Estimate */}
                   <div className="flex items-center justify-between pt-1 border-t border-zinc-800/80 text-[11px] text-zinc-400">
                     <div className="flex items-center gap-1.5">
-                      {issue.assignee ? (
-                        <img
-                          src={issue.assignee.avatar_url}
-                          alt={issue.assignee.name}
-                          className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
-                          title={`Assigned to ${issue.assignee.name}`}
-                        />
-                      ) : (
-                        <span className="text-[10px] text-zinc-500">Unassigned</span>
-                      )}
+                      {(() => {
+                        const resolvedAssignee = issue.assignee || (issue.assignee_id ? users.find((u) => u.id === issue.assignee_id) : null);
+                        if (!resolvedAssignee) {
+                          return <span className="text-[10px] text-zinc-500">Unassigned</span>;
+                        }
+                        const name = resolvedAssignee.name || resolvedAssignee.email || 'Member';
+                        const initials = name
+                          .split(' ')
+                          .filter(Boolean)
+                          .map((n: string) => n[0])
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase() || 'M';
+
+                        if (resolvedAssignee.avatar_url) {
+                          return (
+                            <img
+                              src={resolvedAssignee.avatar_url}
+                              alt={name}
+                              className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
+                              title={`Assigned to ${name}`}
+                            />
+                          );
+                        }
+
+                        return (
+                          <div
+                            className="w-4 h-4 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[8px] font-bold"
+                            title={`Assigned to ${name}`}
+                          >
+                            {initials}
+                          </div>
+                        );
+                      })()}
                       {issue.subtasks && issue.subtasks.length > 0 && (
                         <span className="text-[10px] text-zinc-400 font-mono">
                           {issue.subtasks.filter((s) => s.state?.category === 'completed').length}/{issue.subtasks.length}

@@ -44,6 +44,29 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   const [projectId, setProjectId] = useState<string>('');
   const [cycleId, setCycleId] = useState<string>('');
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [modalUsers, setModalUsers] = useState<User[]>(users);
+
+  useEffect(() => {
+    if (users && users.length > 0) {
+      setModalUsers(users);
+    }
+  }, [users]);
+
+  useEffect(() => {
+    if (isOpen && teamId && (!users || users.length === 0)) {
+      api.getTeamMembers(teamId).then((tms) => {
+        if (tms && tms.length > 0) {
+          setModalUsers(
+            tms.map((tm: any) => ({
+              id: tm.user_id || tm.id,
+              name: tm.user?.name || tm.user?.email || 'Member',
+              email: tm.user?.email || '',
+            }))
+          );
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen, teamId, users]);
   
   // Real-time debounced duplicate check
   const [duplicateMatches, setDuplicateMatches] = useState<{ id: string; title: string; similarity: number }[]>([]);
@@ -207,12 +230,12 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
+                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none cursor-pointer"
               >
-                <option value="">Unassigned</option>
-                {users.map((u) => (
+                <option value="">👤 Unassigned</option>
+                {modalUsers.map((u) => (
                   <option key={u.id} value={u.id}>
-                    {u.name}
+                    {u.name || u.email}
                   </option>
                 ))}
               </select>

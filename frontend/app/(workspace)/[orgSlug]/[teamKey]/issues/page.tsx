@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Issue, WorkflowState, Team } from '@/types';
+import { Issue, WorkflowState, Team, User } from '@/types';
 import { api } from '@/lib/api';
 import { useRealtimeBoard } from '@/hooks/useRealtime';
 import { TopNav } from '@/components/navigation/TopNav';
@@ -25,6 +25,20 @@ export default function IssuesPage() {
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    api.getWorkspaceMembers(orgSlug).then((members) => {
+      const active = (members || [])
+        .filter((m) => m.status !== 'invited' && m.user)
+        .map((m) => ({
+          id: m.user_id,
+          name: m.user?.name || m.user?.email || 'Member',
+          email: m.user?.email || '',
+        }));
+      setWorkspaceUsers(active);
+    }).catch(() => {});
+  }, [orgSlug]);
 
   // 1. Resolve active team dynamically
   useEffect(() => {
@@ -179,6 +193,7 @@ export default function IssuesPage() {
           <KanbanBoard
             states={states}
             issues={filteredIssues}
+            users={workspaceUsers}
             onSelectIssue={setSelectedIssue}
             onOpenNewIssueWithState={(stateId) => {
               setInitialStateId(stateId);
@@ -188,7 +203,7 @@ export default function IssuesPage() {
             onDeleteIssue={handleDeleteIssue}
           />
         ) : (
-          <IssueListView issues={filteredIssues} onSelectIssue={setSelectedIssue} />
+          <IssueListView issues={filteredIssues} users={workspaceUsers} onSelectIssue={setSelectedIssue} />
         )}
       </div>
 
@@ -196,6 +211,7 @@ export default function IssuesPage() {
       <IssueDetailDrawer
         issue={selectedIssue}
         states={states}
+        users={workspaceUsers}
         onClose={() => setSelectedIssue(null)}
         onUpdateIssue={(updated) => {
           setSelectedIssue(updated);
@@ -218,6 +234,7 @@ export default function IssuesPage() {
         isOpen={isNewIssueOpen}
         initialStateId={initialStateId}
         states={states}
+        users={workspaceUsers}
         teamKey={teamKey}
         teamId={currentTeam?.id}
         onClose={() => setIsNewIssueOpen(false)}

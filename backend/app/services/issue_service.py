@@ -13,6 +13,7 @@ from app.schemas.issue import (
     SubtaskCreate,
     IssueResponse,
     IssueDetailResponse,
+    IssueAssigneeUser,
     ActivityLogResponse,
     CommentCreate,
     CommentUpdate,
@@ -20,6 +21,7 @@ from app.schemas.issue import (
     CommentReactionResponse,
 )
 from app.core.lexorank import calculate_midpoint_rank
+from app.services.workspace_service import WorkspaceService
 
 
 class IssueService:
@@ -89,6 +91,25 @@ class IssueService:
         return issue
 
     @classmethod
+    def _enrich_issue_assignee(cls, item: dict, db: Client, cache: Optional[dict] = None) -> dict:
+        assignee_id = item.get("assignee_id")
+        if not assignee_id:
+            return item
+        if cache is not None and assignee_id in cache:
+            item["assignee"] = cache[assignee_id]
+            return item
+        email, name = WorkspaceService.resolve_user_info(assignee_id, db)
+        assignee_meta = {
+            "id": assignee_id,
+            "email": email,
+            "name": name,
+        }
+        if cache is not None:
+            cache[assignee_id] = assignee_meta
+        item["assignee"] = assignee_meta
+        return item
+
+    @classmethod
     def list_issues(
         cls,
         team_id: str,
@@ -119,7 +140,9 @@ class IssueService:
 
         query = query.order("sort_order")
         res = query.execute()
-        return [IssueResponse(**item) for item in (res.data or [])]
+        user_cache: dict = {}
+        enriched = [cls._enrich_issue_assignee(item, db, user_cache) for item in (res.data or [])]
+        return [IssueResponse(**item) for item in enriched]
 
     @classmethod
     def create_issue(cls, data: IssueCreate, user_id: str, db: Client) -> IssueResponse:
@@ -234,7 +257,7 @@ class IssueService:
         except Exception:
             pass
 
-        return IssueResponse(**created)
+        return IssueResponse(**cls._enrich_issue_assignee(created, db))
 
     @classmethod
     def get_issue(cls, issue_id_or_identifier: str, user_id: str, db: Client) -> IssueDetailResponse:
@@ -258,9 +281,11 @@ class IssueService:
             .order("sort_order")
             .execute()
         )
-        subtasks = [IssueResponse(**st) for st in (subtasks_res.data or [])]
+        cache: dict = {}
+        subtasks = [IssueResponse(**cls._enrich_issue_assignee(st, db, cache)) for st in (subtasks_res.data or [])]
+        enriched_issue = cls._enrich_issue_assignee(issue, db, cache)
 
-        return IssueDetailResponse(**issue, labels=labels, subtasks=subtasks)
+        return IssueDetailResponse(**enriched_issue, labels=labels, subtasks=subtasks)
 
     @classmethod
     def update_issue(cls, issue_id: str, data: IssueUpdate, user_id: str, db: Client) -> IssueResponse:
@@ -326,7 +351,7 @@ class IssueService:
                 except Exception:
                     pass
 
-        return IssueResponse(**updated)
+        return IssueResponse(**cls._enrich_issue_assignee(updated, db))
 
     @classmethod
     def delete_issue(cls, issue_id: str, user_id: str, db: Client, client_session_id: Optional[str] = None, hard: bool = False) -> None:
@@ -437,7 +462,9 @@ class IssueService:
             .order("sort_order")
             .execute()
         )
-        return [IssueResponse(**item) for item in (res.data or [])]
+        cache: dict = {}
+        enriched = [cls._enrich_issue_assignee(item, db, cache) for item in (res.data or [])]
+        return [IssueResponse(**item) for item in enriched]
 
     @classmethod
     def create_subtask(cls, parent_issue_id: str, data: SubtaskCreate, user_id: str, db: Client) -> IssueResponse:
@@ -492,7 +519,7 @@ class IssueService:
             "changes": {"subtask_identifier": identifier, "title": data.title},
         }).execute()
 
-        return IssueResponse(**created)
+        return IssueResponse(**cls._enrich_issue_assignee(created, db))
 
     @classmethod
     def list_activity_logs(cls, issue_id: str, user_id: str, db: Client) -> List[ActivityLogResponse]:

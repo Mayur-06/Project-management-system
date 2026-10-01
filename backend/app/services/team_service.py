@@ -1,9 +1,10 @@
-from typing import List
+from typing import List, Optional
 from fastapi import HTTPException, status
 from supabase import Client
 
 from app.schemas.team import TeamCreate, TeamUpdate, TeamResponse, TeamMemberResponse, TeamMemberUser
 from app.schemas.state import StateCategory
+from app.services.workspace_service import WorkspaceService
 
 
 DEFAULT_WORKFLOW_STATES = [
@@ -19,7 +20,10 @@ DEFAULT_WORKFLOW_STATES = [
 
 class TeamService:
     @staticmethod
-    def _get_org_by_slug_and_verify_member(org_slug: str, user_id: str, db: Client) -> dict:
+    def _get_org_by_slug_and_verify_member(org_slug: str, user_id: str, db: Client, email: Optional[str] = None) -> dict:
+        if email:
+            WorkspaceService.reconcile_user_invitations(user_id, email, db)
+
         org_res = db.table("organizations").select("*").eq("slug", org_slug).limit(1).execute()
         if not org_res.data:
             raise HTTPException(
@@ -44,8 +48,8 @@ class TeamService:
         return org
 
     @classmethod
-    def list_teams_by_org_slug(cls, org_slug: str, user_id: str, db: Client) -> List[TeamResponse]:
-        org = cls._get_org_by_slug_and_verify_member(org_slug, user_id, db)
+    def list_teams_by_org_slug(cls, org_slug: str, user_id: str, db: Client, email: Optional[str] = None) -> List[TeamResponse]:
+        org = cls._get_org_by_slug_and_verify_member(org_slug, user_id, db, email=email)
         teams_res = db.table("teams").select("*").eq("organization_id", org["id"]).order("created_at").execute()
         return [TeamResponse(**t) for t in (teams_res.data or [])]
 
@@ -154,7 +158,7 @@ class TeamService:
         results: List[TeamMemberResponse] = []
         for m in (members_res.data or []):
             m_uid = m["user_id"]
-            is_alex = m_uid == "00000000-0000-0000-0000-000000000001" or m_uid == user_id
+            user_email, user_name = WorkspaceService.resolve_user_info(m_uid, db)
             results.append(
                 TeamMemberResponse(
                     id=m["id"],
@@ -163,8 +167,8 @@ class TeamService:
                     created_at=m["created_at"],
                     user=TeamMemberUser(
                         id=m_uid,
-                        email="alex@acme.inc" if is_alex else f"user-{m_uid[:6]}@acme.inc",
-                        name="Alex Chen" if is_alex else f"Member {m_uid[:4]}",
+                        email=user_email,
+                        name=user_name,
                     )
                 )
             )
@@ -241,8 +245,11 @@ class TeamService:
             .limit(1)
             .execute()
         )
-        if not member_check.data:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if not member_check.data or member_check.data[0].get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization admins can manage team members",
+            )
 
         target_check = (
             db.table("workspace_members")
@@ -253,6 +260,19 @@ class TeamService:
             .execute()
         )
         if not target_check.data:
+            inv_check = (
+                db.table("workspace_invitations")
+                .select("email, status")
+                .eq("organization_id", team["organization_id"])
+                .or_(f"id.eq.{member_user_id},email.eq.{member_user_id}")
+                .limit(1)
+                .execute()
+            )
+            if inv_check.data:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This user has an invite pending but has not joined the workspace yet. They must accept their workspace invite before being added to a team.",
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="User is not a member of this workspace organization",
@@ -266,11 +286,11 @@ class TeamService:
             .limit(1)
             .execute()
         )
-        is_alex = member_user_id == "00000000-0000-0000-0000-000000000001" or member_user_id == user_id
+        user_email, user_name = WorkspaceService.resolve_user_info(member_user_id, db)
         user_meta = TeamMemberUser(
             id=member_user_id,
-            email="alex@acme.inc" if is_alex else f"user-{member_user_id[:6]}@acme.inc",
-            name="Alex Chen" if is_alex else f"Member {member_user_id[:4]}",
+            email=user_email,
+            name=user_name,
         )
 
         if existing.data and len(existing.data) > 0:
@@ -312,8 +332,11 @@ class TeamService:
             .limit(1)
             .execute()
         )
-        if not member_check.data:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if not member_check.data or member_check.data[0].get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization admins can manage team members",
+            )
 
         db.table("team_members").delete().eq("team_id", team_id).eq("user_id", target_user_id).execute()
         return {"success": True}

@@ -18,11 +18,50 @@ from app.schemas.workspace import (
 
 class WorkspaceService:
     @staticmethod
-    def get_user_workspaces(user_id: str, db: Client) -> List[UserWorkspaceItem]:
+    def reconcile_user_invitations(user_id: str, email: Optional[str], db: Client) -> None:
+        """
+        Reconciles pending workspace invitations for a newly registered or authenticated user.
+        If any invitations exist matching this user's verified email, adds them to workspace_members
+        and marks the invitation status as 'accepted'.
+        """
+        if not email:
+            return
+        try:
+            email_clean = email.strip().lower()
+            inv_res = (
+                db.table("workspace_invitations")
+                .select("*")
+                .eq("email", email_clean)
+                .eq("status", "pending")
+                .execute()
+            )
+            if inv_res.data:
+                for inv in inv_res.data:
+                    org_id = inv["organization_id"]
+                    role = inv.get("role", "member")
+                    db.table("workspace_members").upsert(
+                        {
+                            "organization_id": org_id,
+                            "user_id": user_id,
+                            "role": role,
+                        },
+                        on_conflict="organization_id,user_id",
+                    ).execute()
+                    db.table("workspace_invitations").update(
+                        {"status": "accepted"}
+                    ).eq("id", inv["id"]).execute()
+        except Exception:
+            pass
+
+    @classmethod
+    def get_user_workspaces(cls, user_id: str, db: Client, email: Optional[str] = None) -> List[UserWorkspaceItem]:
         """
         Retrieves all organizations/workspaces the authenticated user is a member of,
         including their role and available teams.
         """
+        if email:
+            cls.reconcile_user_invitations(user_id, email, db)
+
         # Query workspace_members joining organizations
         member_res = (
             db.table("workspace_members")
@@ -60,11 +99,14 @@ class WorkspaceService:
 
         return workspaces
 
-    @staticmethod
-    def get_workspace_by_slug(slug: str, user_id: str, db: Client) -> OrganizationResponse:
+    @classmethod
+    def get_workspace_by_slug(cls, slug: str, user_id: str, db: Client, email: Optional[str] = None) -> OrganizationResponse:
         """
         Retrieves a workspace by its URL slug, ensuring the user has access.
         """
+        if email:
+            cls.reconcile_user_invitations(user_id, email, db)
+
         org_res = (
             db.table("organizations")
             .select("*")
@@ -193,9 +235,49 @@ class WorkspaceService:
         return OrganizationResponse(**org)
 
     @staticmethod
+    def resolve_user_info(user_id: str, db: Client) -> tuple[str, str]:
+        """
+        Resolves real email and display name for a user_id from Supabase Auth admin
+        or workspace invitations, with graceful fallback.
+        """
+        if user_id == "00000000-0000-0000-0000-000000000001":
+            return "alex@acme.inc", "Alex Chen"
+        try:
+            admin_user = db.auth.admin.get_user_by_id(user_id)
+            if admin_user and hasattr(admin_user, "user") and admin_user.user:
+                raw_email = getattr(admin_user.user, "email", None)
+                if isinstance(raw_email, str) and "@" in raw_email:
+                    meta = getattr(admin_user.user, "user_metadata", {})
+                    raw_name = meta.get("full_name") if isinstance(meta, dict) else None
+                    name = raw_name if isinstance(raw_name, str) else raw_email.split("@")[0]
+                    return raw_email, name
+        except Exception:
+            pass
+
+        try:
+            inv_res = (
+                db.table("workspace_invitations")
+                .select("email")
+                .or_(f"id.eq.{user_id},invited_by.eq.{user_id}")
+                .limit(1)
+                .execute()
+            )
+            if inv_res.data and isinstance(inv_res.data, list) and len(inv_res.data) > 0:
+                raw_email = inv_res.data[0].get("email")
+                if isinstance(raw_email, str) and "@" in raw_email:
+                    return raw_email, raw_email.split("@")[0]
+        except Exception:
+            pass
+
+        return f"user-{str(user_id)[:6]}@acme.inc", f"Team Member {str(user_id)[:4]}"
+
+    @classmethod
     def list_workspace_members(
-        slug: str, user_id: str, db: Client
+        cls, slug: str, user_id: str, db: Client, email: Optional[str] = None
     ) -> List[WorkspaceMemberResponse]:
+        if email:
+            cls.reconcile_user_invitations(user_id, email, db)
+
         org_res = db.table("organizations").select("id").eq("slug", slug).limit(1).execute()
         if not org_res.data:
             raise HTTPException(
@@ -228,19 +310,20 @@ class WorkspaceService:
 
         results: List[WorkspaceMemberResponse] = []
         for m in (members_res.data or []):
-            is_alex = m["user_id"] == "00000000-0000-0000-0000-000000000001" or m["user_id"] == user_id
+            m_uid = m["user_id"]
+            user_email, user_name = cls.resolve_user_info(m_uid, db)
             results.append(
                 WorkspaceMemberResponse(
                     id=m["id"],
                     organization_id=m["organization_id"],
-                    user_id=m["user_id"],
+                    user_id=m_uid,
                     role=MemberRole(m.get("role", "member")),
                     created_at=m["created_at"],
                     status="active",
                     user=WorkspaceMemberUser(
-                        id=m["user_id"],
-                        email="alex@acme.inc" if is_alex else f"user-{m['user_id'][:6]}@acme.inc",
-                        name="Alex Chen" if is_alex else f"Team Member {m['user_id'][:4]}",
+                        id=m_uid,
+                        email=user_email,
+                        name=user_name,
                     ),
                 )
             )

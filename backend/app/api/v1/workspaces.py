@@ -28,7 +28,7 @@ async def get_my_workspaces(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
 ):
-    workspaces = WorkspaceService.get_user_workspaces(current_user.id, db)
+    workspaces = WorkspaceService.get_user_workspaces(current_user.id, db, email=current_user.email)
     return UserWorkspacesResponse(workspaces=workspaces)
 
 
@@ -56,7 +56,7 @@ async def get_workspace(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
 ):
-    return WorkspaceService.get_workspace_by_slug(org_slug, current_user.id, db)
+    return WorkspaceService.get_workspace_by_slug(org_slug, current_user.id, db, email=current_user.email)
 
 
 @router.patch(
@@ -83,7 +83,7 @@ async def list_workspace_members(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
 ):
-    return WorkspaceService.list_workspace_members(org_slug, current_user.id, db)
+    return WorkspaceService.list_workspace_members(org_slug, current_user.id, db, email=current_user.email)
 
 
 @router.post(
@@ -111,7 +111,7 @@ async def list_workspace_teams(
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
 ):
-    return TeamService.list_teams_by_org_slug(org_slug, current_user.id, db)
+    return TeamService.list_teams_by_org_slug(org_slug, current_user.id, db, email=current_user.email)
 
 
 @router.post(

@@ -86,6 +86,13 @@ class SubtaskCreate(BaseModel):
     priority: IssuePriority = IssuePriority.NONE
 
 
+class IssueAssigneeUser(BaseModel):
+    id: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
 class IssueResponse(BaseModel):
     id: str
     organization_id: str
@@ -98,7 +105,9 @@ class IssueResponse(BaseModel):
     priority: str
     estimate: Optional[int] = None
     state_id: str
+    state: Optional[Dict[str, Any]] = None
     assignee_id: Optional[str] = None
+    assignee: Optional[IssueAssigneeUser] = None
     creator_id: str
     project_id: Optional[str] = None
     cycle_id: Optional[str] = None

@@ -25,10 +25,21 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const [isAIAskOpen, setIsAIAskOpen] = useState(false);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
 
   useEffect(() => {
     api.getWorkspace(orgSlug).then(setOrganization);
     api.getTeams(orgSlug).then(setTeams);
+    api.getWorkspaceMembers(orgSlug).then((members) => {
+      const active = (members || [])
+        .filter((m) => m.status !== 'invited' && m.user)
+        .map((m) => ({
+          id: m.user_id,
+          name: m.user?.name || m.user?.email || 'Member',
+          email: m.user?.email || '',
+        }));
+      setWorkspaceUsers(active);
+    }).catch(() => {});
 
     // Resolve current user from Supabase auth
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -110,6 +121,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         onClose={() => setIsNewIssueOpen(false)}
         teamKey={teamKey.toUpperCase()}
         teamId={teams.find((t) => t.key.toUpperCase() === teamKey.toUpperCase())?.id || teams[0]?.id}
+        users={workspaceUsers}
         onCreated={(issue) => {
           window.dispatchEvent(new CustomEvent('issueCreated', { detail: issue }));
         }}
@@ -117,6 +129,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
       <IssueDetailDrawer
         issue={selectedIssue}
+        users={workspaceUsers}
         onClose={() => setSelectedIssue(null)}
         onUpdateIssue={(updated) => {
           setSelectedIssue(updated);

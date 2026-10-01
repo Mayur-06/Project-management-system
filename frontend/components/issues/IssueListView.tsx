@@ -7,10 +7,11 @@ import { StateBadge } from '@/components/ui/StateBadge';
 
 interface IssueListViewProps {
   issues: Issue[];
+  users?: { id: string; name?: string; email?: string; avatar_url?: string }[];
   onSelectIssue: (issue: Issue) => void;
 }
 
-export const IssueListView: React.FC<IssueListViewProps> = ({ issues, onSelectIssue }) => {
+export const IssueListView: React.FC<IssueListViewProps> = ({ issues, users = [], onSelectIssue }) => {
   return (
     <div className="flex-1 p-6 select-none overflow-x-auto font-sans">
       <div className="w-full bg-black border border-zinc-800 rounded-xl overflow-hidden shadow-xs">
@@ -43,16 +44,40 @@ export const IssueListView: React.FC<IssueListViewProps> = ({ issues, onSelectIs
                 <PriorityBadge priority={issue.priority} showLabel={false} />
               </div>
               <div className="col-span-1 flex items-center gap-1.5">
-                {issue.assignee ? (
-                  <img
-                    src={issue.assignee.avatar_url}
-                    alt={issue.assignee.name}
-                    className="w-5 h-5 rounded-full object-cover ring-1 ring-zinc-700"
-                    title={issue.assignee.name}
-                  />
-                ) : (
-                  <span className="text-zinc-500 text-[10px]">Unassigned</span>
-                )}
+                {(() => {
+                  const resolvedAssignee = issue.assignee || (issue.assignee_id ? users.find((u) => u.id === issue.assignee_id) : null);
+                  if (!resolvedAssignee) {
+                    return <span className="text-zinc-500 text-[10px]">Unassigned</span>;
+                  }
+                  const name = resolvedAssignee.name || resolvedAssignee.email || 'Member';
+                  const initials = name
+                    .split(' ')
+                    .filter(Boolean)
+                    .map((n: string) => n[0])
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase() || 'M';
+
+                  if (resolvedAssignee.avatar_url) {
+                    return (
+                      <img
+                        src={resolvedAssignee.avatar_url}
+                        alt={name}
+                        className="w-5 h-5 rounded-full object-cover ring-1 ring-zinc-700"
+                        title={name}
+                      />
+                    );
+                  }
+
+                  return (
+                    <div
+                      className="w-5 h-5 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[9px] font-bold"
+                      title={name}
+                    >
+                      {initials}
+                    </div>
+                  );
+                })()}
               </div>
               <div className="col-span-1 text-right font-mono text-zinc-400">
                 {issue.estimate ? `${issue.estimate}p` : '—'}

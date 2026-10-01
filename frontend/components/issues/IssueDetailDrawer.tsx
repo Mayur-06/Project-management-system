@@ -17,7 +17,7 @@ import {
   FileText,
   Download,
 } from 'lucide-react';
-import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment } from '@/types';
+import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User } from '@/types';
 import { api } from '@/lib/api';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
@@ -25,6 +25,7 @@ import { StateBadge } from '@/components/ui/StateBadge';
 interface IssueDetailDrawerProps {
   issue: Issue | null;
   states?: WorkflowState[];
+  users?: User[];
   onClose: () => void;
   onUpdateIssue: (updated: Issue) => void;
 }
@@ -32,6 +33,7 @@ interface IssueDetailDrawerProps {
 export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   issue,
   states = [],
+  users = [],
   onClose,
   onUpdateIssue,
 }) => {
@@ -59,6 +61,20 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const assignableUsers: User[] = React.useMemo(() => {
+    const map = new Map<string, User>();
+    (users || []).forEach((u) => {
+      if (u.id) map.set(u.id, u);
+    });
+    teamMembers.forEach((tm) => {
+      const u = tm.user || { id: tm.user_id, name: tm.user_id };
+      if (u.id && !map.has(u.id)) {
+        map.set(u.id, { id: u.id, name: u.name || u.email, email: u.email });
+      }
+    });
+    return Array.from(map.values());
+  }, [users, teamMembers]);
 
   useEffect(() => {
     if (issue) {
@@ -412,9 +428,9 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                     className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
                   >
                     <option value="">👤 Unassigned</option>
-                    {teamMembers.map((m: any) => (
-                      <option key={m.id || m.user_id} value={m.user_id}>
-                        {m.user?.name || m.user?.email || 'Member'}
+                    {assignableUsers.map((m: any) => (
+                      <option key={m.id || m.user_id} value={m.user_id || m.id}>
+                        {m.name || m.user?.name || m.user?.email || 'Member'}
                       </option>
                     ))}
                   </select>
@@ -463,16 +479,40 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                         <span className="text-zinc-200 truncate">{sub.title}</span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {sub.assignee ? (
-                          <img
-                            src={sub.assignee.avatar_url}
-                            alt={sub.assignee.name}
-                            className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
-                            title={sub.assignee.name}
-                          />
-                        ) : (
-                          <span className="text-[10px] text-zinc-500 font-mono">Unassigned</span>
-                        )}
+                        {(() => {
+                          const resolvedSubAssignee = sub.assignee || (sub.assignee_id ? users.find((u) => u.id === sub.assignee_id) : null);
+                          if (!resolvedSubAssignee) {
+                            return <span className="text-[10px] text-zinc-500 font-mono">Unassigned</span>;
+                          }
+                          const name = resolvedSubAssignee.name || resolvedSubAssignee.email || 'Member';
+                          const initials = name
+                            .split(' ')
+                            .filter(Boolean)
+                            .map((n: string) => n[0])
+                            .slice(0, 2)
+                            .join('')
+                            .toUpperCase() || 'M';
+
+                          if (resolvedSubAssignee.avatar_url) {
+                            return (
+                              <img
+                                src={resolvedSubAssignee.avatar_url}
+                                alt={name}
+                                className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
+                                title={name}
+                              />
+                            );
+                          }
+
+                          return (
+                            <div
+                              className="w-4 h-4 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[8px] font-bold"
+                              title={name}
+                            >
+                              {initials}
+                            </div>
+                          );
+                        })()}
                         <StateBadge state={sub.state} />
                       </div>
                     </div>
@@ -769,18 +809,31 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
             {/* Assignee */}
             <div>
               <label className="text-[11px] text-zinc-400 block mb-1">Assignee</label>
-              <div className="flex items-center gap-2 p-2 rounded bg-zinc-900 border border-zinc-800">
-                {issue.assignee?.avatar_url ? (
-                  <img
-                    src={issue.assignee.avatar_url}
-                    alt={issue.assignee.name}
-                    className="w-5 h-5 rounded-full object-cover ring-1 ring-zinc-700"
-                  />
-                ) : (
-                  <UserIcon className="w-4 h-4 text-zinc-500" />
-                )}
-                <span className="text-zinc-200">{issue.assignee?.name || 'Unassigned'}</span>
-              </div>
+              <select
+                value={issue.assignee_id || ''}
+                onChange={async (e) => {
+                  const newAssigneeId = e.target.value || null;
+                  try {
+                    const updated = await api.updateIssue(issue.id, {
+                      expected_version: issue.version,
+                      assignee_id: newAssigneeId as any,
+                    });
+                    if (updated) {
+                      onUpdateIssue(updated);
+                    }
+                  } catch (err) {
+                    console.error('Failed to update assignee', err);
+                  }
+                }}
+                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-200 rounded p-2 focus:border-indigo-500 focus:outline-none cursor-pointer"
+              >
+                <option value="">👤 Unassigned</option>
+                {assignableUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name || u.email}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* Estimate Points */}
