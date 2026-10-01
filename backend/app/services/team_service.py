@@ -53,6 +53,22 @@ class TeamService:
     def create_team(cls, org_slug: str, data: TeamCreate, user_id: str, db: Client) -> TeamResponse:
         org = cls._get_org_by_slug_and_verify_member(org_slug, user_id, db)
         org_id = org["id"]
+
+        # Only organization admins can create teams
+        mem_res = (
+            db.table("workspace_members")
+            .select("role")
+            .eq("organization_id", org_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not mem_res.data or mem_res.data[0].get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization admins can create teams",
+            )
+
         key_upper = data.key.upper()
 
         # Check unique key within organization
