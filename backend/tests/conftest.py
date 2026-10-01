@@ -10,6 +10,7 @@ from app.core.security import AuthenticatedUser
 
 # Set environment to test
 settings.ENVIRONMENT = "test"
+settings.GEMINI_API_KEY = ""
 
 MOCK_USER_ID = "00000000-0000-0000-0000-000000000001"
 MOCK_ORG_ID = "11111111-1111-1111-1111-111111111111"
