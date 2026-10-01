@@ -22,20 +22,39 @@ export default function CyclesPage() {
   const orgSlug = (params?.orgSlug as string) || 'acme';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || 'ENG';
 
+  const [currentTeam, setCurrentTeam] = useState<any>(null);
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [cycleIssues, setCycleIssues] = useState<Issue[]>([]);
   const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
 
   useEffect(() => {
-    api.getCycles(`team_${teamKey.toLowerCase()}`).then((res) => {
-      setCycles(res);
-      if (res.length > 0) {
-        setActiveCycle(res[0]);
+    let isMounted = true;
+    api.getTeams(orgSlug).then((teams) => {
+      if (!isMounted) return;
+      const matched = teams.find((t) => t.key.toUpperCase() === teamKey) || teams[0];
+      if (matched) {
+        setCurrentTeam(matched);
+        api.getCycles(matched.id).then((res) => {
+          if (!isMounted) return;
+          setCycles(res);
+          if (res.length > 0) {
+            setActiveCycle(res[0]);
+            api.getIssues({ teamId: matched.id, cycleId: res[0].id }).then((iss) => {
+              if (isMounted) setCycleIssues(iss);
+            });
+          } else {
+            api.getIssues({ teamId: matched.id }).then((iss) => {
+              if (isMounted) setCycleIssues(iss.slice(0, 10));
+            });
+          }
+        });
       }
     });
 
-    api.getIssues({ teamId: `team_${teamKey.toLowerCase()}`, cycleId: 'cyc_active' }).then(setCycleIssues);
-  }, [teamKey]);
+    return () => {
+      isMounted = false;
+    };
+  }, [orgSlug, teamKey]);
 
   return (
     <div className="flex flex-col flex-1 h-full overflow-hidden">
@@ -82,9 +101,9 @@ export default function CyclesPage() {
                 />
               </div>
               <div className="flex justify-between text-[11px] text-zinc-400 font-mono">
-                <span>Scope: 34 pts</span>
-                <span>Burnup Rate: 2.3 pts/day</span>
-                <span>Remaining: 11 pts</span>
+                <span>Scope: {activeCycle.total_points || cycleIssues.reduce((sum, i) => sum + (i.estimate || 1), 0)} pts</span>
+                <span>Completed: {activeCycle.completed_points || cycleIssues.filter((i) => i.state?.category === 'completed').reduce((sum, i) => sum + (i.estimate || 1), 0)} pts</span>
+                <span>Remaining: {Math.max(0, (activeCycle.total_points || cycleIssues.reduce((sum, i) => sum + (i.estimate || 1), 0)) - (activeCycle.completed_points || 0))} pts</span>
               </div>
             </div>
 

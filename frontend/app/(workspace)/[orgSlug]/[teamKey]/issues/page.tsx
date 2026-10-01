@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Issue, WorkflowState } from '@/types';
+import { Issue, WorkflowState, Team } from '@/types';
 import { api } from '@/lib/api';
+import { useRealtimeBoard } from '@/hooks/useRealtime';
 import { TopNav } from '@/components/navigation/TopNav';
 import { KanbanBoard } from '@/components/issues/KanbanBoard';
 import { IssueListView } from '@/components/issues/IssueListView';
@@ -15,31 +16,86 @@ export default function IssuesPage() {
   const orgSlug = (params?.orgSlug as string) || 'acme';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || 'ENG';
 
+  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [states, setStates] = useState<WorkflowState[]>([]);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
-  const [initialStateId, setInitialStateId] = useState('st_todo');
+  const [initialStateId, setInitialStateId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadData = async () => {
+  // 1. Resolve active team dynamically
+  useEffect(() => {
+    let isMounted = true;
+    api.getTeams(orgSlug).then((teams) => {
+      if (!isMounted) return;
+      const matched = teams.find((t) => t.key.toUpperCase() === teamKey);
+      const team = matched || teams[0] || null;
+      setCurrentTeam(team);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [orgSlug, teamKey]);
+
+  // 2. Load issues and workflow states for resolved team
+  const loadData = async (teamId: string) => {
     setIsLoading(true);
     const [fetchedIssues, fetchedStates] = await Promise.all([
-      api.getIssues({ teamId: `team_${teamKey.toLowerCase()}` }),
-      api.getWorkflowStates(`team_${teamKey.toLowerCase()}`),
+      api.getIssues({ teamId }),
+      api.getWorkflowStates(teamId),
     ]);
     setIssues(fetchedIssues);
     setStates(fetchedStates);
+    if (fetchedStates.length > 0) {
+      const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
+      setInitialStateId(defaultState.id);
+    }
     setIsLoading(false);
   };
 
   useEffect(() => {
-    loadData();
+    if (currentTeam?.id) {
+      loadData(currentTeam.id);
+    }
+  }, [currentTeam?.id]);
 
+  // 3. Supabase Realtime Subscription with Self-Echo Suppression
+  useRealtimeBoard({
+    teamId: currentTeam?.id,
+    onIssueCreated: (newIssue) => {
+      setIssues((prev) => {
+        if (prev.some((i) => i.id === newIssue.id)) return prev;
+        return [newIssue, ...prev];
+      });
+    },
+    onIssueUpdated: (updatedIssue) => {
+      setIssues((prev) => prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i)));
+      setSelectedIssue((prev) => (prev?.id === updatedIssue.id ? { ...prev, ...updatedIssue } : prev));
+    },
+    onIssueMoved: ({ id, state_id, sort_order }) => {
+      setIssues((prev) =>
+        prev.map((i) => (i.id === id ? { ...i, state_id, sort_order } : i))
+      );
+    },
+    onIssueDeleted: (deletedId) => {
+      setIssues((prev) => prev.filter((i) => i.id !== deletedId));
+      setSelectedIssue((prev) => (prev?.id === deletedId ? null : prev));
+    },
+    onReloadRequested: () => {
+      if (currentTeam?.id) loadData(currentTeam.id);
+    },
+  });
+
+  // Local window event listeners for synchronous immediate feedback
+  useEffect(() => {
     const handleCreated = (e: any) => {
-      setIssues((prev) => [e.detail, ...prev]);
+      setIssues((prev) => {
+        if (prev.some((i) => i.id === e.detail.id)) return prev;
+        return [e.detail, ...prev];
+      });
     };
     const handleUpdated = (e: any) => {
       setIssues((prev) => prev.map((i) => (i.id === e.detail.id ? e.detail : i)));
@@ -52,7 +108,7 @@ export default function IssuesPage() {
       window.removeEventListener('issueCreated', handleCreated);
       window.removeEventListener('issueUpdated', handleUpdated);
     };
-  }, [teamKey]);
+  }, []);
 
   const filteredIssues = issues.filter(
     (i) =>
@@ -80,7 +136,8 @@ export default function IssuesPage() {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenNewIssue={() => {
-          setInitialStateId('st_todo');
+          const defaultState = states.find((s) => s.is_default) || states[0];
+          if (defaultState) setInitialStateId(defaultState.id);
           setIsNewIssueOpen(true);
         }}
       />

@@ -24,6 +24,24 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   // Exclude triage from main active board columns
   const activeStates = states.filter((s) => s.category !== 'triage');
 
+  const handleDragStart = (e: React.DragEvent, issueId: string) => {
+    e.dataTransfer.setData('text/plain', issueId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e: React.DragEvent, stateId: string) => {
+    e.preventDefault();
+    const issueId = e.dataTransfer.getData('text/plain');
+    if (issueId) {
+      onMoveIssueState(issueId, stateId);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-x-auto p-6 flex gap-4 select-none min-h-[calc(100vh-3.5rem)] font-sans">
       {activeStates.map((state) => {
@@ -32,6 +50,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         return (
           <div
             key={state.id}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, state.id)}
             className="w-80 shrink-0 flex flex-col bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden"
           >
             {/* Column Header */}
@@ -57,8 +77,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               {stateIssues.map((issue) => (
                 <div
                   key={issue.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, issue.id)}
                   onClick={() => onSelectIssue(issue)}
-                  className="p-3 rounded-lg bg-black hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all duration-150 shadow-xs cursor-pointer group flex flex-col gap-2.5"
+                  className="p-3 rounded-lg bg-black hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all duration-150 shadow-xs cursor-grab active:cursor-grabbing group flex flex-col gap-2.5"
                 >
                   {/* Card Header: Identifier & Priority */}
                   <div className="flex items-center justify-between">

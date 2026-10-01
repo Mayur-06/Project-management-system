@@ -45,6 +45,7 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   
   // AI Spec & Subtask breakdown state
   const [isBreakingDown, setIsBreakingDown] = useState(false);
+  const [breakdownThreadId, setBreakdownThreadId] = useState<string | null>(null);
   const [proposedSubtasks, setProposedSubtasks] = useState<string[]>([]);
   const [breakdownComplete, setBreakdownComplete] = useState(false);
 
@@ -54,6 +55,7 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       api.getActivityLogs(issue.id).then(setActivityLogs);
       api.getAttachments(issue.id).then(setAttachments);
       setProposedSubtasks([]);
+      setBreakdownThreadId(null);
       setBreakdownComplete(false);
       setUploadError(null);
     }
@@ -106,6 +108,9 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
     setActiveTab('ai_breakdown');
 
     const res = await api.startBreakdown(issue.id);
+    if (res?.thread_id) {
+      setBreakdownThreadId(res.thread_id);
+    }
     if (res?.proposed_tasks) {
       setProposedSubtasks(res.proposed_tasks);
     } else {
@@ -120,6 +125,19 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
 
   const handleApproveSubtasks = async () => {
     setBreakdownComplete(true);
+
+    if (breakdownThreadId) {
+      const persisted = await api.resumeBreakdown(breakdownThreadId, proposedSubtasks);
+      if (persisted && persisted.length > 0) {
+        const updated = {
+          ...issue,
+          subtasks: [...(issue.subtasks || []), ...persisted],
+        };
+        onUpdateIssue(updated);
+        return;
+      }
+    }
+
     const updated = {
       ...issue,
       subtasks: [

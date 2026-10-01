@@ -10,6 +10,7 @@ import {
   Organization,
   IssueAttachment,
 } from '@/types';
+import { getClientSessionId } from '@/lib/supabase/client';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -68,23 +69,26 @@ export const api = {
   },
 
   async createIssue(issue: Partial<Issue>): Promise<Issue | null> {
+    const sessionId = getClientSessionId();
     return await fetchWithAuth<Issue>(`/issues`, {
       method: 'POST',
-      body: JSON.stringify(issue),
+      body: JSON.stringify({ ...issue, client_session_id: sessionId }),
     });
   },
 
   async updateIssue(id: string, updates: Partial<Issue> & { expected_version?: number }): Promise<Issue | null> {
+    const sessionId = getClientSessionId();
     return await fetchWithAuth<Issue>(`/issues/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify(updates),
+      body: JSON.stringify({ ...updates, client_session_id: sessionId }),
     });
   },
 
   async reorderIssue(id: string, state_id: string, sort_order: string): Promise<void> {
+    const sessionId = getClientSessionId();
     await fetchWithAuth(`/issues/${id}/reorder`, {
       method: 'PUT',
-      body: JSON.stringify({ state_id, sort_order }),
+      body: JSON.stringify({ state_id, sort_order, client_session_id: sessionId }),
     });
   },
 

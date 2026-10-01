@@ -24,19 +24,42 @@ export default function TriagePage() {
   const orgSlug = (params?.orgSlug as string) || 'acme';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || 'ENG';
 
+  const [currentTeam, setCurrentTeam] = useState<any>(null);
+  const [teamStates, setTeamStates] = useState<any[]>([]);
   const [triageIssues, setTriageIssues] = useState<Issue[]>([]);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [triageAnalysis, setTriageAnalysis] = useState<TriageOutput | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   useEffect(() => {
-    api.getIssues({ teamId: `team_${teamKey.toLowerCase()}`, stateId: 'st_triage' }).then((res) => {
-      setTriageIssues(res);
-      if (res.length > 0) {
-        handleSelectTriage(res[0]);
+    let isMounted = true;
+    api.getTeams(orgSlug).then(async (teams) => {
+      if (!isMounted) return;
+      const matched = teams.find((t) => t.key.toUpperCase() === teamKey) || teams[0];
+      if (matched) {
+        setCurrentTeam(matched);
+        const states = await api.getWorkflowStates(matched.id);
+        if (!isMounted) return;
+        setTeamStates(states);
+
+        const triageState = states.find((s) => s.category === 'triage') || states[0];
+        const res = await api.getIssues({
+          teamId: matched.id,
+          stateId: triageState?.id,
+        });
+
+        if (!isMounted) return;
+        setTriageIssues(res);
+        if (res.length > 0) {
+          handleSelectTriage(res[0]);
+        }
       }
     });
-  }, [teamKey]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [orgSlug, teamKey]);
 
   const handleSelectTriage = async (issue: Issue) => {
     setSelectedIssue(issue);
@@ -49,14 +72,21 @@ export default function TriagePage() {
   };
 
   const handleAccept = async (issueId: string) => {
-    // Accept into Todo
-    await api.updateIssue(issueId, { state_id: 'st_todo' });
+    // Resolve dynamic Todo or Unstarted state
+    const todoState = teamStates.find((s) => s.category === 'unstarted') || teamStates[1] || teamStates[0];
+    if (todoState) {
+      await api.updateIssue(issueId, { state_id: todoState.id });
+    }
     setTriageIssues((prev) => prev.filter((i) => i.id !== issueId));
     setSelectedIssue(null);
   };
 
   const handleDecline = async (issueId: string) => {
-    await api.updateIssue(issueId, { state_id: 'st_canceled' });
+    // Resolve dynamic Canceled state
+    const canceledState = teamStates.find((s) => s.category === 'canceled') || teamStates[teamStates.length - 1];
+    if (canceledState) {
+      await api.updateIssue(issueId, { state_id: canceledState.id });
+    }
     setTriageIssues((prev) => prev.filter((i) => i.id !== issueId));
     setSelectedIssue(null);
   };
