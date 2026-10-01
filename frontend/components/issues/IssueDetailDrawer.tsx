@@ -15,6 +15,7 @@ import {
   Trash2,
   Upload,
   FileText,
+  Download,
 } from 'lucide-react';
 import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment } from '@/types';
 import { api } from '@/lib/api';
@@ -52,6 +53,10 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
 
   // Manual subtask creation state
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [newSubtaskPriority, setNewSubtaskPriority] = useState<IssuePriority>('none');
+  const [newSubtaskEstimate, setNewSubtaskEstimate] = useState<number | undefined>(undefined);
+  const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState<string>('');
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -60,11 +65,15 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       api.getComments(issue.id).then(setComments);
       api.getActivityLogs(issue.id).then(setActivityLogs);
       api.getAttachments(issue.id).then(setAttachments);
+      api.getTeamMembers(issue.team_id).then(setTeamMembers).catch(() => setTeamMembers([]));
       setProposedSubtasks([]);
       setBreakdownThreadId(null);
       setBreakdownComplete(false);
       setUploadError(null);
       setNewSubtaskTitle('');
+      setNewSubtaskPriority('none');
+      setNewSubtaskEstimate(undefined);
+      setNewSubtaskAssigneeId('');
     }
   }, [issue]);
 
@@ -77,7 +86,9 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
     try {
       const created = await api.createSubtask(issue.id, {
         title: newSubtaskTitle.trim(),
-        priority: 'none',
+        priority: newSubtaskPriority,
+        estimate: newSubtaskEstimate ? Number(newSubtaskEstimate) : undefined,
+        assignee_id: newSubtaskAssigneeId || undefined,
       });
       if (created) {
         const updated = {
@@ -87,6 +98,9 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
         onUpdateIssue(updated);
         window.dispatchEvent(new CustomEvent('issueCreated', { detail: created }));
         setNewSubtaskTitle('');
+        setNewSubtaskPriority('none');
+        setNewSubtaskEstimate(undefined);
+        setNewSubtaskAssigneeId('');
       }
     } catch (err) {
       console.error('Failed to create subtask', err);
@@ -370,24 +384,68 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                 </h3>
               </div>
 
-              {/* Inline Add Sub-task form */}
-              <form onSubmit={handleCreateSubtask} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={newSubtaskTitle}
-                  onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                  placeholder="+ Add sub-task title (press Enter to save)..."
-                  className="flex-1 bg-zinc-950 border border-zinc-800 focus:border-zinc-500 rounded px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none"
-                />
-                {newSubtaskTitle.trim() && (
+              {/* Inline Add Sub-task form with properties */}
+              <form onSubmit={handleCreateSubtask} className="space-y-2 p-2.5 bg-zinc-950/80 border border-zinc-800 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={newSubtaskTitle}
+                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                    placeholder="+ Add sub-task title..."
+                    className="flex-1 bg-zinc-900/60 border border-zinc-800 focus:border-indigo-500 rounded px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none"
+                  />
                   <button
                     type="submit"
-                    disabled={isAddingSubtask}
-                    className="px-2.5 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-medium cursor-pointer"
+                    disabled={!newSubtaskTitle.trim() || isAddingSubtask}
+                    className="px-3 py-1.5 rounded bg-white hover:bg-zinc-200 text-black text-xs font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   >
-                    {isAddingSubtask ? 'Adding...' : 'Add'}
+                    {isAddingSubtask ? 'Adding...' : 'Add Subtask'}
                   </button>
-                )}
+                </div>
+
+                {/* Subtask Property Selectors */}
+                <div className="flex items-center gap-2 pt-1 flex-wrap text-xs">
+                  {/* Assignee Selector */}
+                  <select
+                    value={newSubtaskAssigneeId}
+                    onChange={(e) => setNewSubtaskAssigneeId(e.target.value)}
+                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
+                  >
+                    <option value="">👤 Unassigned</option>
+                    {teamMembers.map((m: any) => (
+                      <option key={m.id || m.user_id} value={m.user_id}>
+                        {m.user?.name || m.user?.email || 'Member'}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Priority Selector */}
+                  <select
+                    value={newSubtaskPriority}
+                    onChange={(e) => setNewSubtaskPriority(e.target.value as IssuePriority)}
+                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
+                  >
+                    <option value="none">Priority: None</option>
+                    <option value="low">Priority: Low</option>
+                    <option value="medium">Priority: Medium</option>
+                    <option value="high">Priority: High</option>
+                    <option value="urgent">Priority: Urgent</option>
+                  </select>
+
+                  {/* Points / Estimate Selector */}
+                  <select
+                    value={newSubtaskEstimate !== undefined ? String(newSubtaskEstimate) : ''}
+                    onChange={(e) => setNewSubtaskEstimate(e.target.value ? Number(e.target.value) : undefined)}
+                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
+                  >
+                    <option value="">Estimate: None</option>
+                    <option value="1">1 pt</option>
+                    <option value="2">2 pts</option>
+                    <option value="3">3 pts</option>
+                    <option value="5">5 pts</option>
+                    <option value="8">8 pts</option>
+                  </select>
+                </div>
               </form>
 
               {issue.subtasks && issue.subtasks.length > 0 ? (
@@ -632,13 +690,28 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                               </div>
                             </div>
 
-                            <button
-                              onClick={() => handleDeleteAttachment(att.id)}
-                              title="Delete attachment"
-                              className="p-1.5 text-zinc-500 hover:text-white rounded hover:bg-zinc-900 transition-colors cursor-pointer shrink-0"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <a
+                                href={
+                                  att.file_url ||
+                                  `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'}/storage/v1/object/public/attachments/${att.storage_path}`
+                                }
+                                download={att.file_name}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Download attachment"
+                                className="p-1.5 text-zinc-400 hover:text-white rounded hover:bg-zinc-900 transition-colors cursor-pointer"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </a>
+                              <button
+                                onClick={() => handleDeleteAttachment(att.id)}
+                                title="Delete attachment"
+                                className="p-1.5 text-zinc-500 hover:text-red-400 rounded hover:bg-zinc-900 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>

@@ -7,6 +7,7 @@ from app.core.dependencies import get_current_user, get_admin_db
 from app.schemas.workspace import (
     OrganizationCreate,
     OrganizationUpdate,
+    MemberInviteRequest,
     OrganizationResponse,
     WorkspaceMemberResponse,
     UserWorkspacesResponse,
@@ -83,6 +84,21 @@ async def list_workspace_members(
     db: Client = Depends(get_admin_db),
 ):
     return WorkspaceService.list_workspace_members(org_slug, current_user.id, db)
+
+
+@router.post(
+    "/{org_slug}/members/invite",
+    response_model=WorkspaceMemberResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Invite a new member to the organization workspace by email",
+)
+async def invite_workspace_member(
+    org_slug: str,
+    data: MemberInviteRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return WorkspaceService.invite_workspace_member(org_slug, data, current_user.id, db)
 
 
 @router.get(

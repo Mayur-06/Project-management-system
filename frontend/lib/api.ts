@@ -64,6 +64,17 @@ export const api = {
     return data || [];
   },
 
+  async inviteMember(
+    orgSlug: string,
+    email: string,
+    role: string = 'member'
+  ): Promise<WorkspaceMember | null> {
+    return await fetchWithAuth<WorkspaceMember>(`/workspaces/${orgSlug}/members/invite`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
+    });
+  },
+
   async getTeams(orgSlug: string): Promise<Team[]> {
     const data = await fetchWithAuth<Team[]>(`/workspaces/${orgSlug}/teams`);
     return data || [];
@@ -74,6 +85,25 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
+  },
+
+  async getTeamMembers(teamId: string): Promise<any[]> {
+    const data = await fetchWithAuth<any[]>(`/teams/${teamId}/members`);
+    return data || [];
+  },
+
+  async addTeamMember(teamId: string, userId: string): Promise<any | null> {
+    return await fetchWithAuth<any>(`/teams/${teamId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId }),
+    });
+  },
+
+  async removeTeamMember(teamId: string, userId: string): Promise<boolean> {
+    await fetchWithAuth<any>(`/teams/${teamId}/members/${userId}`, {
+      method: 'DELETE',
+    });
+    return true;
   },
 
   async getWorkflowStates(teamId: string): Promise<WorkflowState[]> {

@@ -29,6 +29,7 @@ export interface WorkspaceMember {
   organization_id: string;
   user_id: string;
   role: MemberRole;
+  status?: 'active' | 'invited' | 'pending';
   user?: User;
   created_at: string;
 }
@@ -180,6 +181,7 @@ export interface IssueAttachment {
   file_size: number;
   mime_type: string;
   storage_path: string;
+  file_url?: string;
   created_at: string;
 }
 

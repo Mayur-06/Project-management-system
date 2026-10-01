@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 from fastapi import HTTPException, status
 from supabase import Client
@@ -5,6 +6,7 @@ from supabase import Client
 from app.schemas.workspace import (
     OrganizationCreate,
     OrganizationUpdate,
+    MemberInviteRequest,
     OrganizationResponse,
     WorkspaceMemberResponse,
     WorkspaceMemberUser,
@@ -234,6 +236,7 @@ class WorkspaceService:
                     user_id=m["user_id"],
                     role=MemberRole(m.get("role", "member")),
                     created_at=m["created_at"],
+                    status="active",
                     user=WorkspaceMemberUser(
                         id=m["user_id"],
                         email="alex@acme.inc" if is_alex else f"user-{m['user_id'][:6]}@acme.inc",
@@ -241,4 +244,101 @@ class WorkspaceService:
                     ),
                 )
             )
+
+        # Also fetch pending invitations from workspace_invitations
+        inv_res = (
+            db.table("workspace_invitations")
+            .select("*")
+            .eq("organization_id", org_id)
+            .eq("status", "pending")
+            .order("created_at")
+            .execute()
+        )
+        for inv in (inv_res.data or []):
+            results.append(
+                WorkspaceMemberResponse(
+                    id=inv["id"],
+                    organization_id=inv["organization_id"],
+                    user_id=inv["id"],
+                    role=MemberRole(inv.get("role", "member")),
+                    created_at=inv["created_at"],
+                    status="invited",
+                    user=WorkspaceMemberUser(
+                        id=inv["id"],
+                        email=inv["email"],
+                        name=inv["email"].split("@")[0],
+                    ),
+                )
+            )
+
         return results
+
+    @staticmethod
+    def invite_workspace_member(
+        slug: str, data: MemberInviteRequest, user_id: str, db: Client
+    ) -> WorkspaceMemberResponse:
+        org_res = db.table("organizations").select("id, name").eq("slug", slug).limit(1).execute()
+        if not org_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        org = org_res.data[0]
+        org_id = org["id"]
+
+        member_check = (
+            db.table("workspace_members")
+            .select("role")
+            .eq("organization_id", org_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not member_check.data or member_check.data[0].get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization admins can invite members",
+            )
+
+        email_clean = data.email.strip().lower()
+
+        # Attempt to trigger real email via Supabase Auth Admin if available
+        try:
+            db.auth.admin.invite_user_by_email(email_clean)
+        except Exception:
+            # Gracefully continue if SMTP is not configured in dev
+            pass
+
+        # Save to workspace_invitations table
+        inv_res = (
+            db.table("workspace_invitations")
+            .upsert(
+                {
+                    "organization_id": org_id,
+                    "email": email_clean,
+                    "role": data.role.value,
+                    "invited_by": user_id,
+                    "status": "pending",
+                },
+                on_conflict="organization_id,email"
+            )
+            .execute()
+        )
+
+        inv_row = inv_res.data[0] if inv_res.data else {
+            "id": f"inv-{int(datetime.now().timestamp())}",
+            "organization_id": org_id,
+            "role": data.role.value,
+            "created_at": datetime.now().isoformat(),
+        }
+
+        return WorkspaceMemberResponse(
+            id=inv_row["id"],
+            organization_id=org_id,
+            user_id=inv_row["id"],
+            role=data.role,
+            created_at=inv_row["created_at"],
+            status="invited",
+            user=WorkspaceMemberUser(
+                id=inv_row["id"],
+                email=email_clean,
+                name=email_clean.split("@")[0],
+            ),
+        )

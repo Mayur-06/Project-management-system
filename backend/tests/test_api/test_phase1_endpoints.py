@@ -200,6 +200,73 @@ def test_list_team_members(client, mock_db):
     data = response.json()
     assert len(data) == 1
     assert data[0]["user_id"] == MOCK_USER_ID
+    assert data[0]["user"]["name"] == "Alex Chen"
+
+
+def test_add_team_member_success(client, mock_db):
+    other_user_id = "00000000-0000-0000-0000-000000000002"
+
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "teams":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": MOCK_TEAM_ID, "organization_id": MOCK_ORG_ID}]
+            )
+        elif table_name == "workspace_members":
+            # Both caller and target user are workspace members
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": "wm-1", "role": "member"}]
+            )
+        elif table_name == "team_members":
+            # Check existing -> empty
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[])
+            # Insert -> new row
+            mock_t.insert().execute.return_value = MagicMock(
+                data=[
+                    {
+                        "id": "tm-2",
+                        "team_id": MOCK_TEAM_ID,
+                        "user_id": other_user_id,
+                        "created_at": "2026-09-30T10:00:00Z",
+                    }
+                ]
+            )
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    response = client.post(
+        f"/api/v1/teams/{MOCK_TEAM_ID}/members",
+        json={"user_id": other_user_id},
+    )
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["user_id"] == other_user_id
+    assert data["team_id"] == MOCK_TEAM_ID
+
+
+def test_remove_team_member_success(client, mock_db):
+    other_user_id = "00000000-0000-0000-0000-000000000002"
+
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "teams":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": MOCK_TEAM_ID, "organization_id": MOCK_ORG_ID}]
+            )
+        elif table_name == "workspace_members":
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": "wm-1", "role": "member"}]
+            )
+        elif table_name == "team_members":
+            mock_t.delete().eq().eq().execute.return_value = MagicMock(data=[])
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    response = client.delete(f"/api/v1/teams/{MOCK_TEAM_ID}/members/{other_user_id}")
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()["success"] is True
 
 
 def test_list_workflow_states(client, mock_db):

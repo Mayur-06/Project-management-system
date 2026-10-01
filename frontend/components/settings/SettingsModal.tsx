@@ -14,6 +14,8 @@ import {
   Sparkles,
   LogOut,
   Keyboard,
+  UserPlus,
+  UserMinus,
 } from 'lucide-react';
 import { Organization, Team, WorkspaceMember } from '@/types';
 import { api } from '@/lib/api';
@@ -43,9 +45,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Workspace & Team state
   const [orgName, setOrgName] = useState(organization?.name || '');
   const [teamName, setTeamName] = useState(currentTeam?.name || '');
+  const [teamKey, setTeamKey] = useState(currentTeam?.key || '');
   const [cycleWeeks, setCycleWeeks] = useState(currentTeam?.cycle_duration_weeks || 2);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [teamError, setTeamError] = useState<string | null>(null);
 
   // Members state
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
@@ -53,6 +57,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'member' | 'admin'>('member');
   const [inviteSuccess, setInviteSuccess] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+
+  // Team members state
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [isLoadingTeamMembers, setIsLoadingTeamMembers] = useState(false);
+  const [selectedUserToAdd, setSelectedUserToAdd] = useState('');
+  const [isAddingTeamMember, setIsAddingTeamMember] = useState(false);
 
   // Synchronize initial values when modal opens
   useEffect(() => {
@@ -61,9 +72,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
     if (currentTeam) {
       setTeamName(currentTeam.name);
+      setTeamKey(currentTeam.key || '');
       setCycleWeeks(currentTeam.cycle_duration_weeks || 2);
     }
-  }, [organization, currentTeam]);
+    setTeamError(null);
+  }, [organization, currentTeam, isOpen]);
 
   // Load members when members tab is active
   useEffect(() => {
@@ -74,8 +87,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         .then((data) => setMembers(data))
         .catch(() => setMembers([]))
         .finally(() => setIsLoadingMembers(false));
+
+      if (currentTeam?.id) {
+        setIsLoadingTeamMembers(true);
+        api
+          .getTeamMembers(currentTeam.id)
+          .then((data) => setTeamMembers(data))
+          .catch(() => setTeamMembers([]))
+          .finally(() => setIsLoadingTeamMembers(false));
+      }
     }
-  }, [isOpen, activeTab, organization?.slug]);
+  }, [isOpen, activeTab, organization?.slug, currentTeam?.id]);
 
   // Escape key handler
   useEffect(() => {
@@ -94,6 +116,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     e.preventDefault();
     setIsSaving(true);
     setSaveSuccess(false);
+    setTeamError(null);
 
     try {
       if (organization?.slug && orgName.trim() !== organization.name) {
@@ -103,9 +126,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         }
       }
 
-      if (currentTeam?.id && (teamName.trim() !== currentTeam.name || cycleWeeks !== currentTeam.cycle_duration_weeks)) {
+      if (
+        currentTeam?.id &&
+        (teamName.trim() !== currentTeam.name ||
+          (teamKey.trim().toUpperCase() && teamKey.trim().toUpperCase() !== currentTeam.key) ||
+          cycleWeeks !== currentTeam.cycle_duration_weeks)
+      ) {
         const updatedTeam = await api.updateTeam(currentTeam.id, {
           name: teamName.trim(),
+          key: teamKey.trim().toUpperCase() || undefined,
           cycle_duration_weeks: cycleWeeks,
         });
         if (updatedTeam && onTeamUpdated) {
@@ -115,49 +144,82 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
-    } catch {
-      // ignore
+    } catch (err: any) {
+      setTeamError(err?.message || 'Failed to update team settings');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleInviteMember = (e: React.FormEvent) => {
+  const handleAddTeamMember = async (userId: string) => {
+    if (!currentTeam?.id || !userId || isAddingTeamMember) return;
+    setIsAddingTeamMember(true);
+    try {
+      const added = await api.addTeamMember(currentTeam.id, userId);
+      if (added) {
+        setTeamMembers((prev) => {
+          const filtered = prev.filter((tm) => tm.user_id !== userId);
+          return [...filtered, added];
+        });
+        setSelectedUserToAdd('');
+      }
+    } catch (err) {
+      console.error('Failed to add team member', err);
+    } finally {
+      setIsAddingTeamMember(false);
+    }
+  };
+
+  const handleRemoveTeamMember = async (userId: string) => {
+    if (!currentTeam?.id || !userId) return;
+    try {
+      await api.removeTeamMember(currentTeam.id, userId);
+      setTeamMembers((prev) => prev.filter((tm) => tm.user_id !== userId));
+    } catch (err) {
+      console.error('Failed to remove team member', err);
+    }
+  };
+
+  const handleInviteMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim() || !organization?.slug || isInviting) return;
+    setIsInviting(true);
 
-    // Optimistically add member
-    const newMember: WorkspaceMember = {
-      id: `mem-${Date.now()}`,
-      organization_id: organization?.id || '',
-      user_id: `user-${Date.now()}`,
-      role: inviteRole,
-      created_at: new Date().toISOString(),
-      user: {
-        id: `user-${Date.now()}`,
-        email: inviteEmail.trim(),
-        name: inviteEmail.split('@')[0],
-      },
-    };
-
-    setMembers((prev) => [...prev, newMember]);
-    setInviteEmail('');
-    setInviteSuccess(true);
-    setTimeout(() => setInviteSuccess(false), 2500);
+    try {
+      const invited = await api.inviteMember(organization.slug, inviteEmail.trim(), inviteRole);
+      if (invited) {
+        setMembers((prev) => {
+          const filtered = prev.filter((m) => m.user?.email !== invited.user?.email);
+          return [...filtered, invited];
+        });
+        setInviteEmail('');
+        setInviteSuccess(true);
+        setTimeout(() => setInviteSuccess(false), 2500);
+      }
+    } catch (err) {
+      console.error('Failed to invite member', err);
+    } finally {
+      setIsInviting(false);
+    }
   };
 
   const handleSignOut = async () => {
-    localStorage.removeItem('supabase_access_token');
-    await supabase.auth.signOut();
-    window.location.href = '/login';
+    try {
+      localStorage.removeItem('supabase_access_token');
+      document.cookie = 'sb-access-token=; path=/; max-age=0; SameSite=Lax';
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore
+    } finally {
+      window.location.href = '/login';
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
+      {/* Backdrop (clicking outside does NOT close modal, only ESC or X) */}
       <div
         className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
       />
 
       {/* Modal Dialog */}
@@ -289,11 +351,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <label className="block text-xs font-medium text-zinc-300 mb-1.5">
                       Issue Identifier Key
                     </label>
-                    <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-400">
-                      <span className="px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-mono font-semibold">
-                        {currentTeam?.key || 'ENG'}
-                      </span>
-                      <span className="text-[11px] text-zinc-500">(Prefix for ENG-1, ENG-2)</span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={teamKey}
+                        onChange={(e) => setTeamKey(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                        maxLength={8}
+                        required
+                        className="w-28 bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono font-semibold text-indigo-400 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors uppercase"
+                      />
+                      <span className="text-[11px] text-zinc-500">(Prefix for {teamKey || 'KEY'}-1, {teamKey || 'KEY'}-2)</span>
                     </div>
                   </div>
                 </div>
@@ -323,6 +390,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Save footer */}
               <div className="pt-2 flex items-center justify-end gap-3">
+                {teamError && (
+                  <span className="text-xs text-red-400">
+                    {teamError}
+                  </span>
+                )}
                 {saveSuccess && (
                   <span className="flex items-center gap-1 text-xs text-emerald-400">
                     <Check className="w-3.5 h-3.5" />
@@ -439,6 +511,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {m.status === 'invited' && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              Pending Invite
+                            </span>
+                          )}
                           <span
                             className={`flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium ${
                               m.role === 'admin'
@@ -455,6 +532,97 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Team Members Section */}
+              {currentTeam && (
+                <div className="space-y-3 pt-4 border-t border-zinc-800/80">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-semibold text-zinc-200">
+                        {currentTeam.name} Team Members ({teamMembers.length})
+                      </h4>
+                      <p className="text-[11px] text-zinc-500">
+                        Collaborators assigned to team {currentTeam.key}
+                      </p>
+                    </div>
+
+                    {/* Quick Add Member to Team */}
+                    {members.filter((m) => !teamMembers.some((tm) => tm.user_id === m.user_id)).length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={selectedUserToAdd}
+                          onChange={(e) => setSelectedUserToAdd(e.target.value)}
+                          className="bg-[#181b22] border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 transition-colors"
+                        >
+                          <option value="">Select workspace member...</option>
+                          {members
+                            .filter((m) => !teamMembers.some((tm) => tm.user_id === m.user_id))
+                            .map((m) => (
+                              <option key={m.user_id} value={m.user_id}>
+                                {m.user?.name || m.user?.email || m.user_id}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!selectedUserToAdd || isAddingTeamMember}
+                          onClick={() => handleAddTeamMember(selectedUserToAdd)}
+                          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          {isAddingTeamMember ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <UserPlus className="w-3 h-3" />
+                          )}
+                          Add to Team
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {isLoadingTeamMembers ? (
+                    <div className="flex items-center justify-center py-6 text-zinc-500 text-xs gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                      Loading team members...
+                    </div>
+                  ) : teamMembers.length === 0 ? (
+                    <p className="text-xs text-zinc-500 italic py-2">No members assigned to this team yet.</p>
+                  ) : (
+                    <div className="divide-y divide-zinc-800/60 border border-zinc-800/80 rounded-lg overflow-hidden bg-[#13161c]/40">
+                      {teamMembers.map((tm) => (
+                        <div
+                          key={tm.id}
+                          className="flex items-center justify-between px-3.5 py-2.5 hover:bg-zinc-800/30 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-[11px] font-semibold text-white shadow-sm">
+                              {tm.user?.name ? tm.user.name.slice(0, 2).toUpperCase() : 'TM'}
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-zinc-200">
+                                {tm.user?.name || `Team Member ${tm.user_id?.slice(0, 4)}`}
+                              </p>
+                              <p className="text-[11px] text-zinc-500">
+                                {tm.user?.email || 'member@acme.inc'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTeamMember(tm.user_id)}
+                            title="Remove from team"
+                            className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-red-400 px-2 py-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                          >
+                            <UserMinus className="w-3 h-3" />
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

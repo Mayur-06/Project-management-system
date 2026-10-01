@@ -53,6 +53,7 @@ class WorkspaceMemberResponse(BaseModel):
     user_id: str
     role: MemberRole
     created_at: datetime
+    status: Optional[str] = "active"
     user: Optional[WorkspaceMemberUser] = None
 
 
