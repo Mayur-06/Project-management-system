@@ -21,8 +21,8 @@ import { PriorityBadge } from '@/components/ui/PriorityBadge';
 
 export default function TriagePage() {
   const params = useParams();
-  const orgSlug = (params?.orgSlug as string) || 'acme';
-  const teamKey = (params?.teamKey as string)?.toUpperCase() || 'ENG';
+  const orgSlug = (params?.orgSlug as string) || '';
+  const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
   const [currentTeam, setCurrentTeam] = useState<any>(null);
   const [teamStates, setTeamStates] = useState<any[]>([]);
@@ -96,7 +96,7 @@ export default function TriagePage() {
       <TopNav
         title="Triage Inbox"
         subtitle={`${triageIssues.length} pending review`}
-        breadcrumbs={['Acme Corp', teamKey, 'Triage']}
+        breadcrumbs={[orgSlug || 'Workspace', currentTeam?.key || teamKey || 'Triage', 'Triage']}
       />
 
       <div className="flex-1 flex overflow-hidden">

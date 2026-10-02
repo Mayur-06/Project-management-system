@@ -35,14 +35,15 @@ export async function updateSession(request: NextRequest) {
     user = null;
   }
 
-  // Check custom/fallback session cookie
+  // Check custom session cookie (ignoring any legacy fake dev token)
   const devAuthCookie = request.cookies.get('sb-access-token')?.value;
-  const isAuthenticated = Boolean(user || devAuthCookie);
+  const isAuthenticated = Boolean(user || (devAuthCookie && !devAuthCookie.includes('dev_sig')));
 
   // Route protection
   const pathname = request.nextUrl.pathname;
   const isAuthRoute = pathname.startsWith('/login') || pathname.startsWith('/signup');
-  const isWorkspaceRoute = !isAuthRoute && pathname !== '/';
+  const isAcceptInviteRoute = pathname.startsWith('/accept-invite');
+  const isWorkspaceRoute = !isAuthRoute && !isAcceptInviteRoute && pathname !== '/';
 
   const isConfigured = !supabaseUrl.includes('placeholder.supabase.co');
 
@@ -53,10 +54,10 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If already authenticated and visiting auth route, redirect to workspace
+  // If already authenticated and visiting auth route (login/signup), redirect to root to resolve user workspace
   if (isConfigured && isAuthenticated && isAuthRoute) {
     const url = request.nextUrl.clone();
-    url.pathname = '/acme/eng/issues';
+    url.pathname = '/';
     return NextResponse.redirect(url);
   }
 

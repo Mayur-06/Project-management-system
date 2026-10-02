@@ -13,8 +13,8 @@ import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 
 export default function IssuesPage() {
   const params = useParams();
-  const orgSlug = (params?.orgSlug as string) || 'acme';
-  const teamKey = (params?.teamKey as string)?.toUpperCase() || 'ENG';
+  const orgSlug = (params?.orgSlug as string) || '';
+  const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
@@ -169,9 +169,9 @@ export default function IssuesPage() {
     <div className="flex flex-col flex-1 h-full overflow-hidden">
       {/* Top Navigation */}
       <TopNav
-        title={`${teamKey} Issues`}
+        title={`${currentTeam?.key || teamKey || 'Team'} Issues`}
         subtitle={`${filteredIssues.length} active`}
-        breadcrumbs={['Acme Corp', teamKey, 'Issues']}
+        breadcrumbs={[orgSlug || 'Workspace', currentTeam?.key || teamKey || 'Issues', 'Issues']}
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
         searchQuery={searchQuery}

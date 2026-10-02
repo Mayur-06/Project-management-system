@@ -185,3 +185,20 @@ export interface IssueAttachment {
   created_at: string;
 }
 
+export interface TeamSummary {
+  id: string;
+  name: string;
+  key: string;
+  organization_id: string;
+}
+
+export interface UserWorkspaceItem {
+  organization: Organization;
+  role: MemberRole;
+  teams: TeamSummary[];
+}
+
+export interface UserWorkspacesResponse {
+  workspaces: UserWorkspaceItem[];
+}
+

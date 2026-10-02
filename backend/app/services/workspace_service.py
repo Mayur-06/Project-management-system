@@ -50,6 +50,18 @@ class WorkspaceService:
                     db.table("workspace_invitations").update(
                         {"status": "accepted"}
                     ).eq("id", inv["id"]).execute()
+
+                    # Automatically grant member access to workspace teams
+                    teams_res = db.table("teams").select("id").eq("organization_id", org_id).execute()
+                    if teams_res.data:
+                        for tm in teams_res.data:
+                            try:
+                                db.table("team_members").upsert(
+                                    {"team_id": tm["id"], "user_id": user_id},
+                                    on_conflict="team_id,user_id"
+                                ).execute()
+                            except Exception:
+                                pass
         except Exception:
             pass
 
@@ -185,13 +197,21 @@ class WorkspaceService:
         org_id = created_org["id"]
 
         # Insert membership as admin
-        db.table("workspace_members").insert(
-            {
-                "organization_id": org_id,
-                "user_id": user_id,
-                "role": MemberRole.ADMIN.value,
-            }
-        ).execute()
+        try:
+            db.table("workspace_members").insert(
+                {
+                    "organization_id": org_id,
+                    "user_id": user_id,
+                    "role": MemberRole.ADMIN.value,
+                }
+            ).execute()
+        except Exception as e:
+            # Clean up the orphaned organization so the slug is not locked
+            db.table("organizations").delete().eq("id", org_id).execute()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to assign workspace membership: {str(e)}",
+            )
 
         return OrganizationResponse(**created_org)
 
@@ -240,8 +260,6 @@ class WorkspaceService:
         Resolves real email and display name for a user_id from Supabase Auth admin
         or workspace invitations, with graceful fallback.
         """
-        if user_id == "00000000-0000-0000-0000-000000000001":
-            return "alex@acme.inc", "Alex Chen"
         try:
             admin_user = db.auth.admin.get_user_by_id(user_id)
             if admin_user and hasattr(admin_user, "user") and admin_user.user:
@@ -269,7 +287,7 @@ class WorkspaceService:
         except Exception:
             pass
 
-        return f"user-{str(user_id)[:6]}@acme.inc", f"Team Member {str(user_id)[:4]}"
+        return f"user-{str(user_id)[:6]}@workspace.internal", f"Member {str(user_id)[:4]}"
 
     @classmethod
     def list_workspace_members(
@@ -383,11 +401,22 @@ class WorkspaceService:
         email_clean = data.email.strip().lower()
 
         # Attempt to trigger real email via Supabase Auth Admin if available
+        invite_link = None
+        redirect_target = "http://localhost:3000/accept-invite"
         try:
-            db.auth.admin.invite_user_by_email(email_clean)
-        except Exception:
-            # Gracefully continue if SMTP is not configured in dev
-            pass
+            db.auth.admin.invite_user_by_email(email_clean, options={"redirect_to": redirect_target})
+        except Exception as e:
+            # If email sending is rate-limited or SMTP not configured, generate link directly without SMTP
+            try:
+                link_res = db.auth.admin.generate_link({
+                    "type": "invite",
+                    "email": email_clean,
+                    "options": {"redirect_to": redirect_target}
+                })
+                if link_res and hasattr(link_res, "properties") and hasattr(link_res.properties, "action_link"):
+                    invite_link = link_res.properties.action_link
+            except Exception:
+                pass
 
         # Save to workspace_invitations table
         inv_res = (

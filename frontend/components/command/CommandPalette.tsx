@@ -22,6 +22,7 @@ interface CommandPaletteProps {
   onOpenNewIssue: () => void;
   onOpenAIAsk: () => void;
   orgSlug?: string;
+  currentTeamKey?: string;
   teams?: Team[];
 }
 
@@ -30,12 +31,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onClose,
   onOpenNewIssue,
   onOpenAIAsk,
-  orgSlug = 'acme',
+  orgSlug = '',
+  currentTeamKey = '',
   teams = [],
 }) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const router = useRouter();
+
+  const activeKey = (currentTeamKey || teams[0]?.key || '').toLowerCase();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -80,7 +84,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       shortcut: 'G I',
       icon: <Layers className="w-4 h-4 text-zinc-400" />,
       run: () => {
-        router.push(`/${orgSlug}/eng/issues`);
+        router.push(activeKey ? `/${orgSlug}/${activeKey}/issues` : `/${orgSlug}/issues`);
         onClose();
       },
     },
@@ -90,7 +94,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       shortcut: 'G T',
       icon: <Inbox className="w-4 h-4 text-pink-400" />,
       run: () => {
-        router.push(`/${orgSlug}/eng/triage`);
+        router.push(activeKey ? `/${orgSlug}/${activeKey}/triage` : `/${orgSlug}/triage`);
         onClose();
       },
     },
@@ -100,7 +104,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       shortcut: 'G C',
       icon: <Repeat className="w-4 h-4 text-amber-400" />,
       run: () => {
-        router.push(`/${orgSlug}/eng/cycles`);
+        router.push(activeKey ? `/${orgSlug}/${activeKey}/cycles` : `/${orgSlug}/cycles`);
         onClose();
       },
     },
@@ -110,7 +114,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       shortcut: 'G P',
       icon: <FolderKanban className="w-4 h-4 text-emerald-400" />,
       run: () => {
-        router.push(`/${orgSlug}/eng/projects`);
+        router.push(activeKey ? `/${orgSlug}/${activeKey}/projects` : `/${orgSlug}/projects`);
         onClose();
       },
     },

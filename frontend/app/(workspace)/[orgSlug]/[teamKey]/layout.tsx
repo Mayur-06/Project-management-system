@@ -14,8 +14,8 @@ import { supabase } from '@/lib/supabase/client';
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
-  const orgSlug = (params?.orgSlug as string) || 'acme';
-  const teamKey = (params?.teamKey as string) || 'eng';
+  const orgSlug = (params?.orgSlug as string) || '';
+  const teamKey = (params?.teamKey as string) || '';
 
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -41,9 +41,13 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       setWorkspaceUsers(active);
     }).catch(() => {});
 
-    // Resolve current user from Supabase auth
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    // Resolve current user and active session from Supabase auth
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const user = session?.user;
       if (user) {
+        if (session.access_token && typeof window !== 'undefined') {
+          localStorage.setItem('supabase_access_token', session.access_token);
+        }
         setCurrentUser({
           id: user.id,
           email: user.email || 'user@example.com',
@@ -51,11 +55,11 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           avatar_url: (user.user_metadata?.avatar_url as string) || undefined,
         });
       } else {
-        // Fallback default user for dev mode
+        // Fallback placeholder if session is loading or in offline mock
         setCurrentUser({
-          id: '00000000-0000-0000-0000-000000000001',
-          email: 'alex@acme.inc',
-          name: 'Alex Rivera',
+          id: 'anonymous-user',
+          email: 'member@workspace.com',
+          name: 'Workspace Member',
         });
       }
     });
@@ -107,6 +111,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         onOpenNewIssue={() => setIsNewIssueOpen(true)}
         onOpenAIAsk={() => setIsAIAskOpen(true)}
         orgSlug={orgSlug}
+        currentTeamKey={teamKey}
         teams={teams}
       />
 
@@ -119,7 +124,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       <CreateIssueModal
         isOpen={isNewIssueOpen}
         onClose={() => setIsNewIssueOpen(false)}
-        teamKey={teamKey.toUpperCase()}
+        teamKey={(teamKey || teams[0]?.key || '').toUpperCase()}
         teamId={teams.find((t) => t.key.toUpperCase() === teamKey.toUpperCase())?.id || teams[0]?.id}
         users={workspaceUsers}
         onCreated={(issue) => {

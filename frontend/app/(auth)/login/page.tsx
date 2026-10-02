@@ -1,45 +1,76 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ArrowRight, Lock, Mail } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase/client';
+import { api } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('alex@acme.inc');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || '';
+      const search = window.location.search || '';
+      if (
+        hash.includes('type=invite') ||
+        search.includes('type=invite') ||
+        hash.includes('type=recovery') ||
+        search.includes('type=recovery')
+      ) {
+        router.replace('/accept-invite' + window.location.search + window.location.hash);
+      }
+    }
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg(null);
 
-    let token =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJlbWFpbCI6ImFsZXhAYWNtZS5pbmMiLCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQifQ.dev_sig';
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
-      if (!error && data?.session?.access_token) {
-        token = data.session.access_token;
+      if (error) {
+        setErrorMsg(error.message);
+        setLoading(false);
+        return;
       }
-    } catch {
-      // In dev fallback to seeded Alex Rivera account
-    } finally {
-      if (typeof window !== 'undefined') {
+
+      const token = data?.session?.access_token;
+      if (token && typeof window !== 'undefined') {
         localStorage.setItem('supabase_access_token', token);
         document.cookie = `sb-access-token=${token}; path=/; max-age=604800; SameSite=Lax`;
       }
+
+      // Query the user's accessible workspaces
+      const myWorkspaces = await api.getMyWorkspaces();
+
+      if (myWorkspaces && myWorkspaces.length > 0) {
+        const firstWs = myWorkspaces[0];
+        let teamKey = firstWs.teams?.[0]?.key ? firstWs.teams[0].key.toLowerCase() : '';
+        if (!teamKey) {
+          const orgTeams = await api.getTeams(firstWs.organization.slug);
+          teamKey = orgTeams?.[0]?.key ? orgTeams[0].key.toLowerCase() : '';
+        }
+        window.location.href = teamKey ? `/${firstWs.organization.slug}/${teamKey}/issues` : `/${firstWs.organization.slug}/issues`;
+      } else {
+        // If user has no workspaces yet, redirect to signup/workspace creation
+        window.location.href = '/signup';
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Login failed');
       setLoading(false);
-      window.location.href = '/acme/eng/issues';
     }
   };
 
@@ -95,11 +126,18 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="text-center text-xs text-zinc-400">
-          <span>Don't have an account? </span>
-          <Link href="/signup" className="text-white hover:underline font-medium">
-            Sign up
-          </Link>
+        <div className="text-center text-xs text-zinc-400 space-y-1.5">
+          <div>
+            <span>Don't have an account? </span>
+            <Link href="/signup" className="text-white hover:underline font-medium">
+              Sign up
+            </Link>
+          </div>
+          <div>
+            <Link href="/accept-invite" className="text-zinc-500 hover:text-zinc-300 transition-colors text-[11px]">
+              Invited to a workspace? Set your password
+            </Link>
+          </div>
         </div>
       </div>
     </div>

@@ -32,7 +32,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   labels = [],
   projects = [],
   cycles = [],
-  teamKey = 'ENG',
+  teamKey = '',
   teamId,
 }) => {
   const [title, setTitle] = useState('');
@@ -139,9 +139,11 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
         {/* Modal Header */}
         <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700 font-mono">
-              {teamKey}
-            </span>
+            {teamKey && (
+              <span className="text-xs font-semibold text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700 font-mono">
+                {teamKey}
+              </span>
+            )}
             <span className="text-xs text-zinc-400 font-medium">New Issue</span>
           </div>
           <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 cursor-pointer">
