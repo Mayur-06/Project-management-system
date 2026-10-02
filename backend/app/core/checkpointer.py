@@ -48,8 +48,12 @@ def get_checkpointer() -> BaseCheckpointSaver:
                 open=True,
                 kwargs={"autocommit": True, "connect_timeout": 10},
             )
-            # Create pooled PostgresSaver
+            # Create pooled PostgresSaver and initialize migrations idempotently
             _checkpointer_instance = PostgresSaver(conn=_checkpoint_pool)
+            try:
+                _checkpointer_instance.setup()
+            except Exception as setup_err:
+                print(f"[Checkpointer] Notice on setup migrations: {setup_err}")
             return _checkpointer_instance
         except Exception as e:
             print(f"[Checkpointer] Warning: Failed to initialize PostgresSaver ({e}), falling back to InMemorySaver")

@@ -164,6 +164,19 @@ def batch_persist_node(state: BreakdownAgentState, config: Optional[RunnableConf
         except Exception:
             existing_titles = set()
 
+        # Determine fallback state_id from parent or team
+        default_state_id = "00000000-0000-0000-0000-000000000000"
+        try:
+            parent_res = db.table("issues").select("state_id").eq("id", parent_id).limit(1).execute()
+            if parent_res.data and parent_res.data[0].get("state_id"):
+                default_state_id = parent_res.data[0]["state_id"]
+            else:
+                st_res = db.table("workflow_states").select("id").eq("team_id", team_id).limit(1).execute()
+                if st_res.data:
+                    default_state_id = st_res.data[0]["id"]
+        except Exception:
+            pass
+
         for item in approved:
             if item["title"].strip().lower() in existing_titles:
                 continue
@@ -179,7 +192,7 @@ def batch_persist_node(state: BreakdownAgentState, config: Optional[RunnableConf
                 "description_text": item.get("description"),
                 "priority": item.get("priority", "none"),
                 "estimate": item.get("estimate"),
-                "state_id": state_id,
+                "state_id": default_state_id,
                 "creator_id": user_id,
                 "parent_id": parent_id,
                 "sort_order": "0|h00000:",

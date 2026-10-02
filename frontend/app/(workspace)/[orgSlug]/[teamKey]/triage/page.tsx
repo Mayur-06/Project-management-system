@@ -66,19 +66,39 @@ export default function TriagePage() {
     setIsAnalyzing(true);
     setTriageAnalysis(null);
 
-    const analysis = await api.autoTriage(issue.title, issue.description_text || '');
+    const teamId = issue.team_id || currentTeam?.id;
+    const orgId = issue.organization_id || currentTeam?.organization_id;
+    const analysis = await api.autoTriage(issue.title, issue.description_text || '', teamId, orgId);
     setTriageAnalysis(analysis);
     setIsAnalyzing(false);
   };
 
-  const handleAccept = async (issueId: string) => {
+  const handleAccept = async (issueId: string, applyAI: boolean = true) => {
     // Resolve dynamic Todo or Unstarted state
     const todoState = teamStates.find((s) => s.category === 'unstarted') || teamStates[1] || teamStates[0];
+    const updatePayload: any = {};
     if (todoState) {
-      await api.updateIssue(issueId, { state_id: todoState.id });
+      updatePayload.state_id = todoState.id;
+    }
+    // Apply AI triage recommendations if available
+    if (applyAI && triageAnalysis) {
+      if (triageAnalysis.suggested_priority) {
+        updatePayload.priority = triageAnalysis.suggested_priority;
+      }
+      if (triageAnalysis.suggested_estimate !== undefined) {
+        updatePayload.estimate = triageAnalysis.suggested_estimate;
+      }
+      if (triageAnalysis.suggested_assignee_id) {
+        updatePayload.assignee_id = triageAnalysis.suggested_assignee_id;
+      }
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
+      await api.updateIssue(issueId, updatePayload);
     }
     setTriageIssues((prev) => prev.filter((i) => i.id !== issueId));
     setSelectedIssue(null);
+    setTriageAnalysis(null);
   };
 
   const handleDecline = async (issueId: string) => {
@@ -89,6 +109,7 @@ export default function TriagePage() {
     }
     setTriageIssues((prev) => prev.filter((i) => i.id !== issueId));
     setSelectedIssue(null);
+    setTriageAnalysis(null);
   };
 
   return (

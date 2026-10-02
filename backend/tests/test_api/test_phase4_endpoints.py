@@ -133,6 +133,40 @@ def test_triage_classification(client, mock_db):
     assert data["suggested_estimate"] == 5
     assert "critical" in data["suggested_labels"]
     assert data["suggested_assignee_id"] == MOCK_USER_ID
+    assert "reasoning" in data
+    assert data["suggested_team_key"] == "ENG"
+
+
+def test_triage_classification_omitted_team_and_org(client, mock_db):
+    """Test triage classification works even when client omits team_id and organization_id."""
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "team_members":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"team_id": MOCK_TEAM_ID}]
+            )
+            mock_t.select().eq().execute.return_value = MagicMock(
+                data=[{"user_id": MOCK_USER_ID}]
+            )
+        elif table_name == "teams":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": MOCK_TEAM_ID, "key": "ENG", "organization_id": MOCK_ORG_ID}]
+            )
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    payload = {
+        "title": "High memory leak on worker processes",
+        "description": "Node process crashes every 30 minutes due to memory",
+    }
+    response = client.post("/api/v1/ai/triage/classify", json=payload)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["suggested_priority"] == "urgent"
+    assert data["suggested_estimate"] == 5
+    assert data["suggested_team_key"] == "ENG"
+    assert "reasoning" in data
 
 
 # ==============================================================================

@@ -312,11 +312,30 @@ export const api = {
   },
 
   // AI Auto-Triage
-  async autoTriage(title: string, description: string): Promise<TriageOutput | null> {
-    return await fetchWithAuth<TriageOutput>(`/ai/triage/classify`, {
+  async autoTriage(
+    title: string,
+    description: string,
+    teamId?: string,
+    organizationId?: string
+  ): Promise<TriageOutput | null> {
+    const data = await fetchWithAuth<any>(`/ai/triage/classify`, {
       method: 'POST',
-      body: JSON.stringify({ title, description }),
+      body: JSON.stringify({
+        title,
+        description,
+        ...(teamId ? { team_id: teamId } : {}),
+        ...(organizationId ? { organization_id: organizationId } : {}),
+      }),
     });
+    if (!data) return null;
+    return {
+      suggested_team_key: data.suggested_team_key || 'ENG',
+      suggested_priority: data.suggested_priority || 'medium',
+      suggested_estimate: data.suggested_estimate ?? 3,
+      suggested_labels: data.suggested_labels || [],
+      suggested_assignee_id: data.suggested_assignee_id,
+      reasoning: data.reasoning || data.rationale || '',
+    };
   },
 
   // AI Sub-task Breakdown
