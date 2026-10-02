@@ -247,6 +247,123 @@ class Phase3Service:
             destination=data.destination,
         )
 
+    @classmethod
+    def auto_rollover_expired_cycles(cls, db: Client) -> List[Dict[str, Any]]:
+        """
+        Background automated rollover worker:
+        Scans for cycles where ends_at < NOW() and completed_at IS NULL.
+        For each expired cycle:
+        1. Finds or creates the next sequential cycle for the team.
+        2. Rolls over incomplete issues (not completed/canceled) into the next cycle.
+        3. Marks the expired cycle completed_at = NOW().
+        """
+        now = datetime.now(timezone.utc)
+        now_iso = now.isoformat()
+
+        # Query all active cycles that have passed their ends_at
+        cycles_res = (
+            db.table("cycles")
+            .select("id, team_id, number, name, starts_at, ends_at")
+            .is_("completed_at", "null")
+            .lt("ends_at", now_iso)
+            .execute()
+        )
+        expired_cycles = cycles_res.data or []
+        if not expired_cycles:
+            return []
+
+        results = []
+        for cycle in expired_cycles:
+            cycle_id = cycle["id"]
+            team_id = cycle["team_id"]
+
+            # Fetch team info to determine organization and cycle cadence
+            team_res = db.table("teams").select("id, organization_id, cycle_duration_weeks").eq("id", team_id).limit(1).execute()
+            if not team_res.data:
+                continue
+            team = team_res.data[0]
+            duration_weeks = team.get("cycle_duration_weeks") or 2
+
+            # Find next upcoming cycle for this team (number = cycle.number + 1)
+            next_num = cycle["number"] + 1
+            next_cycle_res = (
+                db.table("cycles")
+                .select("id")
+                .eq("team_id", team_id)
+                .eq("number", next_num)
+                .limit(1)
+                .execute()
+            )
+
+            next_cycle_id = None
+            if next_cycle_res.data:
+                next_cycle_id = next_cycle_res.data[0]["id"]
+            else:
+                # Automatically create the next cycle if not already present
+                from datetime import timedelta
+                new_starts_at = now
+                new_ends_at = new_starts_at + timedelta(weeks=duration_weeks)
+                new_cycle_payload = {
+                    "team_id": team_id,
+                    "number": next_num,
+                    "name": f"Cycle {next_num}",
+                    "starts_at": new_starts_at.isoformat(),
+                    "ends_at": new_ends_at.isoformat(),
+                }
+                new_c_res = db.table("cycles").insert(new_cycle_payload).execute()
+                if new_c_res.data:
+                    next_cycle_id = new_c_res.data[0]["id"]
+
+            # Find unresolved issues in expired cycle
+            issues_res = (
+                db.table("issues")
+                .select("id, workflow_states(category)")
+                .eq("cycle_id", cycle_id)
+                .is_("deleted_at", "null")
+                .execute()
+            )
+            unresolved_ids = []
+            for iss in (issues_res.data or []):
+                cat = (iss.get("workflow_states") or {}).get("category")
+                if cat not in ("completed", "canceled"):
+                    unresolved_ids.append(iss["id"])
+
+            # Transfer unresolved issues to the next cycle
+            if unresolved_ids:
+                db.table("issues").update({
+                    "cycle_id": next_cycle_id,
+                    "updated_at": now_iso
+                }).in_("id", unresolved_ids).execute()
+
+                # Audit log system-driven rollover
+                for iid in unresolved_ids:
+                    try:
+                        db.table("activity_logs").insert({
+                            "organization_id": team["organization_id"],
+                            "issue_id": iid,
+                            "actor_id": "00000000-0000-0000-0000-000000000000",
+                            "action": "auto_cycle_rollover",
+                            "changes": {
+                                "from_cycle": cycle_id,
+                                "to_cycle": next_cycle_id,
+                                "reason": "cycle_ended",
+                            },
+                        }).execute()
+                    except Exception:
+                        pass
+
+            # Mark cycle completed
+            db.table("cycles").update({"completed_at": now_iso}).eq("id", cycle_id).execute()
+
+            results.append({
+                "cycle_id": cycle_id,
+                "team_id": team_id,
+                "transferred_count": len(unresolved_ids),
+                "next_cycle_id": next_cycle_id,
+            })
+
+        return results
+
     # ==============================================================================
     # 2. Projects & Milestones Implementation
     # ==============================================================================

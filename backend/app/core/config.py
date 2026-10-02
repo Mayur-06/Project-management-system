@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = "placeholder-anon-key"
     SUPABASE_JWT_SECRET: str = "placeholder-jwt-secret-at-least-32-chars-long"
 
+    # PostgreSQL Direct Connection for LangGraph Checkpointer
+    DB_PASSWORD: str = ""
+    DB_HOST: str = "aws-0-ap-southeast-1.pooler.supabase.com"
+    DB_PORT: int = 5432
+    DB_USER: str = "postgres.zteuxlfrleyctdkyuzvb"
+    DB_NAME: str = "postgres"
+
     # AI Configuration (Gemini)
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"

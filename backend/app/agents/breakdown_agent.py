@@ -197,7 +197,8 @@ def batch_persist_node(state: BreakdownAgentState, config: Optional[RunnableConf
 
 
 # Checkpointer for state persistence
-checkpointer = InMemorySaver()
+from app.core.checkpointer import get_checkpointer
+checkpointer = get_checkpointer()
 
 def build_breakdown_graph():
     builder = StateGraph(BreakdownAgentState)

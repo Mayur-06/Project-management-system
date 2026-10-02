@@ -1,7 +1,38 @@
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.v1.router import api_v1_router
+from app.core.checkpointer import get_checkpointer, close_checkpointer_pool
+from app.core.scheduler import start_cycle_rollover_worker, stop_cycle_rollover_worker
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize checkpointer connection pool and background scheduler
+    try:
+        await asyncio.to_thread(get_checkpointer)
+    except Exception as e:
+        print(f"[Startup] Checkpointer init notice: {e}")
+
+    try:
+        start_cycle_rollover_worker(interval_seconds=300)
+    except Exception as e:
+        print(f"[Startup] Cycle worker init notice: {e}")
+
+    yield
+
+    # Shutdown: Cleanly terminate worker tasks and close connection pools
+    try:
+        await stop_cycle_rollover_worker()
+    except Exception:
+        pass
+    try:
+        close_checkpointer_pool()
+    except Exception:
+        pass
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -9,6 +40,7 @@ app = FastAPI(
     description="Production-grade API for Linear-grade Project Management System",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # CORS Configuration
