@@ -43,14 +43,18 @@ export default function TriagePage() {
         setTeamStates(states);
 
         const triageState = states.find((s) => s.category === 'triage') || states[0];
-        const res = await api.getIssues({
-          teamId: matched.id,
-          stateId: triageState?.id,
-        });
+        let res = await api.getTriageIssues(matched.id);
+        if (!res || res.length === 0) {
+          // Fallback to getIssues with stateId if needed
+          res = await api.getIssues({
+            teamId: matched.id,
+            stateId: triageState?.id,
+          });
+        }
 
         if (!isMounted) return;
-        setTriageIssues(res);
-        if (res.length > 0) {
+        setTriageIssues(res || []);
+        if (res && res.length > 0) {
           handleSelectTriage(res[0]);
         }
       }
@@ -61,10 +65,14 @@ export default function TriagePage() {
     };
   }, [orgSlug, teamKey]);
 
+  const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
+  const [snoozeSuccess, setSnoozeSuccess] = useState<string | null>(null);
+
   const handleSelectTriage = async (issue: Issue) => {
     setSelectedIssue(issue);
     setIsAnalyzing(true);
     setTriageAnalysis(null);
+    setIsSnoozeOpen(false);
 
     const teamId = issue.team_id || currentTeam?.id;
     const orgId = issue.organization_id || currentTeam?.organization_id;
@@ -76,40 +84,62 @@ export default function TriagePage() {
   const handleAccept = async (issueId: string, applyAI: boolean = true) => {
     // Resolve dynamic Todo or Unstarted state
     const todoState = teamStates.find((s) => s.category === 'unstarted') || teamStates[1] || teamStates[0];
-    const updatePayload: any = {};
-    if (todoState) {
-      updatePayload.state_id = todoState.id;
-    }
+    const targetStateId = todoState?.id;
+    if (!targetStateId) return;
+
+    let assigneeId: string | undefined;
+    let priority: string | undefined;
+    let estimate: number | undefined;
+
     // Apply AI triage recommendations if available
     if (applyAI && triageAnalysis) {
       if (triageAnalysis.suggested_priority) {
-        updatePayload.priority = triageAnalysis.suggested_priority;
+        priority = triageAnalysis.suggested_priority;
       }
       if (triageAnalysis.suggested_estimate !== undefined) {
-        updatePayload.estimate = triageAnalysis.suggested_estimate;
+        estimate = triageAnalysis.suggested_estimate;
       }
       if (triageAnalysis.suggested_assignee_id) {
-        updatePayload.assignee_id = triageAnalysis.suggested_assignee_id;
+        assigneeId = triageAnalysis.suggested_assignee_id;
       }
     }
 
-    if (Object.keys(updatePayload).length > 0) {
-      await api.updateIssue(issueId, updatePayload);
-    }
+    await api.acceptTriage(issueId, targetStateId, assigneeId, undefined, priority, estimate);
     setTriageIssues((prev) => prev.filter((i) => i.id !== issueId));
     setSelectedIssue(null);
     setTriageAnalysis(null);
+    setIsSnoozeOpen(false);
+  };
+
+  const handleSnooze = async (issueId: string, duration: 'tomorrow' | 'next_week' | 'one_month') => {
+    const now = new Date();
+    let snoozedUntilDate = new Date();
+    if (duration === 'tomorrow') {
+      snoozedUntilDate.setDate(now.getDate() + 1);
+      snoozedUntilDate.setHours(9, 0, 0, 0);
+    } else if (duration === 'next_week') {
+      snoozedUntilDate.setDate(now.getDate() + 7);
+      snoozedUntilDate.setHours(9, 0, 0, 0);
+    } else {
+      snoozedUntilDate.setDate(now.getDate() + 30);
+      snoozedUntilDate.setHours(9, 0, 0, 0);
+    }
+
+    const ok = await api.snoozeTriage(issueId, snoozedUntilDate.toISOString());
+    if (ok) {
+      setTriageIssues((prev) => prev.filter((i) => i.id !== issueId));
+      setSelectedIssue(null);
+      setTriageAnalysis(null);
+      setIsSnoozeOpen(false);
+    }
   };
 
   const handleDecline = async (issueId: string) => {
-    // Resolve dynamic Canceled state
-    const canceledState = teamStates.find((s) => s.category === 'canceled') || teamStates[teamStates.length - 1];
-    if (canceledState) {
-      await api.updateIssue(issueId, { state_id: canceledState.id });
-    }
+    await api.declineTriage(issueId, 'Declined from Triage inbox');
     setTriageIssues((prev) => prev.filter((i) => i.id !== issueId));
     setSelectedIssue(null);
     setTriageAnalysis(null);
+    setIsSnoozeOpen(false);
   };
 
   return (
@@ -146,8 +176,12 @@ export default function TriagePage() {
                     <PriorityBadge priority={issue.priority} />
                   </div>
                   <h4 className="text-xs font-medium text-white line-clamp-2">{issue.title}</h4>
-                  <div className="flex items-center gap-2 text-[11px] text-zinc-500">
-                    <span>Submitted by {issue.creator?.name || 'Customer / Sentry'}</span>
+                  <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                    <span className="text-[10px] bg-zinc-900 text-zinc-300 px-1.5 py-0.5 rounded border border-zinc-800 font-medium">
+                      Cross-team
+                    </span>
+                    <span>•</span>
+                    <span className="truncate">From {issue.creator?.name || 'Workspace Member'}</span>
                   </div>
                 </div>
               );
@@ -172,20 +206,69 @@ export default function TriagePage() {
                   <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 mb-2">
                     <span className="text-white font-bold">{selectedIssue.identifier}</span>
                     <span>•</span>
+                    <span className="text-amber-300 bg-amber-950/40 border border-amber-800/60 px-1.5 py-0.5 rounded text-[10px] font-sans">
+                      Cross-Team Request
+                    </span>
+                    <span>•</span>
                     <span>Received {new Date(selectedIssue.created_at).toLocaleDateString()}</span>
                   </div>
                   <h2 className="text-xl font-semibold text-white">{selectedIssue.title}</h2>
                 </div>
 
                 {/* Triage Decision Actions */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 relative">
+                  {/* Decline Action */}
                   <button
                     onClick={() => handleDecline(selectedIssue.id)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 transition-colors cursor-pointer"
+                    title="Decline and cancel issue"
                   >
                     <X className="w-3.5 h-3.5" />
                     <span>Decline</span>
                   </button>
+
+                  {/* Snooze Action & Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setIsSnoozeOpen((prev) => !prev)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 transition-colors cursor-pointer"
+                      title="Snooze issue from triage inbox"
+                    >
+                      <Clock className="w-3.5 h-3.5 text-zinc-400" />
+                      <span>Snooze</span>
+                    </button>
+
+                    {isSnoozeOpen && (
+                      <div className="absolute right-0 mt-1.5 w-44 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-20 py-1 text-xs animate-fade-in font-sans">
+                        <div className="px-3 py-1.5 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-800">
+                          Snooze until...
+                        </div>
+                        <button
+                          onClick={() => handleSnooze(selectedIssue.id, 'tomorrow')}
+                          className="w-full text-left px-3 py-2 text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors cursor-pointer flex items-center justify-between"
+                        >
+                          <span>Tomorrow morning</span>
+                          <span className="text-[10px] text-zinc-500 font-mono">9 AM</span>
+                        </button>
+                        <button
+                          onClick={() => handleSnooze(selectedIssue.id, 'next_week')}
+                          className="w-full text-left px-3 py-2 text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors cursor-pointer flex items-center justify-between"
+                        >
+                          <span>Next week</span>
+                          <span className="text-[10px] text-zinc-500 font-mono">+7d</span>
+                        </button>
+                        <button
+                          onClick={() => handleSnooze(selectedIssue.id, 'one_month')}
+                          className="w-full text-left px-3 py-2 text-zinc-200 hover:bg-zinc-800 hover:text-white transition-colors cursor-pointer flex items-center justify-between"
+                        >
+                          <span>In 30 days</span>
+                          <span className="text-[10px] text-zinc-500 font-mono">+1mo</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Accept Action */}
                   <button
                     onClick={() => handleAccept(selectedIssue.id)}
                     className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors shadow-xs cursor-pointer"

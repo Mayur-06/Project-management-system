@@ -119,6 +119,8 @@ class TriageAcceptRequest(BaseModel):
     target_state_id: str
     assignee_id: Optional[str] = None
     cycle_id: Optional[str] = None
+    priority: Optional[str] = None
+    estimate: Optional[int] = None
 
 
 class TriageSnoozeRequest(BaseModel):

@@ -40,11 +40,14 @@ export default function IssuesPage() {
     }).catch(() => {});
   }, [orgSlug]);
 
+  const [workspaceTeams, setWorkspaceTeams] = useState<any[]>([]);
+
   // 1. Resolve active team dynamically
   useEffect(() => {
     let isMounted = true;
     api.getTeams(orgSlug).then((teams) => {
       if (!isMounted) return;
+      setWorkspaceTeams(teams);
       const matched = teams.find((t) => t.key.toUpperCase() === teamKey);
       const team = matched || teams[0] || null;
       setCurrentTeam(team);
@@ -237,6 +240,7 @@ export default function IssuesPage() {
         users={workspaceUsers}
         teamKey={teamKey}
         teamId={currentTeam?.id}
+        teams={workspaceTeams}
         onClose={() => setIsNewIssueOpen(false)}
         onCreated={(newIssue) => {
           setIssues((prev) => [newIssue, ...prev]);

@@ -165,8 +165,58 @@ class IssueService:
 
         team = cls._verify_team_member(resolved_team_id, user_id, db)
 
-        # 1. State resolution
+        # 1. State resolution (Strict Cross-Team Triage Invariant)
         target_state_id = data.state_id
+
+        # Determine if creator is a member of the target destination team
+        is_team_member = False
+        try:
+            tm_chk = (
+                db.table("team_members")
+                .select("id")
+                .eq("team_id", resolved_team_id)
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            data_val = getattr(tm_chk, "data", None)
+            if data_val:
+                if isinstance(data_val, list):
+                    is_team_member = len(data_val) > 0
+                else:
+                    is_team_member = bool(data_val)
+        except Exception:
+            is_team_member = False
+
+        if not is_team_member:
+            # Cross-team creation: strictly route to the target team's Triage state
+            triage_state = (
+                db.table("workflow_states")
+                .select("id")
+                .eq("team_id", resolved_team_id)
+                .eq("category", "triage")
+                .limit(1)
+                .execute()
+            )
+            if triage_state.data:
+                target_state_id = triage_state.data[0]["id"]
+        else:
+            # Same-team creation: MUST NEVER enter triage state
+            if target_state_id:
+                try:
+                    chk_state = (
+                        db.table("workflow_states")
+                        .select("category")
+                        .eq("id", target_state_id)
+                        .limit(1)
+                        .execute()
+                    )
+                    if chk_state.data and chk_state.data[0].get("category") == "triage":
+                        target_state_id = None
+                except Exception:
+                    pass
+
+        # If same-team or if target team has no triage state, fall back to default active state
         if not target_state_id:
             default_state = (
                 db.table("workflow_states")
@@ -183,13 +233,25 @@ class IssueService:
                     db.table("workflow_states")
                     .select("id")
                     .eq("team_id", resolved_team_id)
+                    .neq("category", "triage")
                     .order("position")
                     .limit(1)
                     .execute()
                 )
-                if not first_state.data:
-                    raise HTTPException(status_code=500, detail="Team has no workflow states configured")
-                target_state_id = first_state.data[0]["id"]
+                if first_state.data:
+                    target_state_id = first_state.data[0]["id"]
+                else:
+                    fallback_state = (
+                        db.table("workflow_states")
+                        .select("id")
+                        .eq("team_id", resolved_team_id)
+                        .order("position")
+                        .limit(1)
+                        .execute()
+                    )
+                    if not fallback_state.data:
+                        raise HTTPException(status_code=500, detail="Team has no workflow states configured")
+                    target_state_id = fallback_state.data[0]["id"]
 
         # 2. Sequential counter & identifier (atomic allocation)
         counter, identifier = cls._allocate_identifier(resolved_team_id, team, db)

@@ -37,6 +37,9 @@ A foundational architectural rule governs all mutations across the system:
 ### B. Team Configuration & Fixed Workflows
 * **Team Identification:** Teams possess unique human-readable keys (such as ENG, DES, PROD) that prefix all issue identifiers.
 * **Standardized 6-State Workflow:** All teams operate on 6 fixed, system-enforced workflow states (`Triage`, `Backlog`, `Unstarted`, `Started`, `Completed`, `Canceled`). Custom statuses and custom column ordering are strictly disallowed to guarantee platform-wide consistency and predictable metrics.
+* **Strict Cross-Team Triage Routing Invariant:**
+  * **Same-Team Creation:** When a member of Team A creates an issue targeting Team A, the issue bypasses Triage completely and routes directly into the active workflow (`Todo` / `Unstarted` or `Backlog`).
+  * **Cross-Team Creation:** When a member of Team A creates an issue targeting Team B, the issue is strictly routed to Team B's workflow state with `category = 'triage'`. It does not appear on Team B's active sprint board or backlog until Team B's leads review and accept it via the Triage Inbox.
 * **Standardized State Visuals:** Each of the 6 fixed states has a system-defined color and fixed column order across Kanban and List views.
 * **Configurable Sprint Cadence:** Teams configure custom cycle lengths (e.g., 1-week, 2-week, or custom durations) and automated cycle rollover rules.
 
@@ -86,10 +89,11 @@ A foundational architectural rule governs all mutations across the system:
 
 ### I. Triage Inbox & Inbound Work Routing
 * **Dedicated Triage Queue:** Holding area for untriaged issues originating from external integrations, customer requests, or cross-departmental tickets.
+* **Cross-Team Triage Trigger Invariant:** The Triage inbox is activated strictly when an issue is created cross-team (by a member of Team A targeting Team B). Same-team issues bypass triage directly into active backlog/unstarted states, preventing internal tasks from entering triage.
 * **Three-Way Disposition Actions:**
-  * *Accept:* Move issue into an active workflow state, assign a team member, and allocate to a sprint or backlog.
-  * *Snooze:* Hide the issue from the active inbox until a specified future date and time.
-  * *Decline:* Archive or cancel the issue with an explicit cancellation rationale.
+  * *Accept:* Move issue into an active workflow state, assign a team member, and allocate to a sprint or backlog with applied AI priority and estimate recommendations.
+  * *Snooze:* Hide the issue from the active inbox until a specified future date and time (tomorrow, next week, or 30 days).
+  * *Decline:* Archive or cancel the issue into the canceled workflow state with an explicit recorded cancellation rationale.
 
 ### J. Social, Audit & Media Ecosystem
 * **Rich Discussion Threads:** Comment sections supporting TipTap JSON formatting, user mentions, code snippets, and timestamped revisions.

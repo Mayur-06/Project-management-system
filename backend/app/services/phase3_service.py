@@ -599,9 +599,6 @@ class Phase3Service:
             return []
         triage_state_id = triage_state.data[0]["id"]
 
-        now_iso = datetime.now(timezone.utc).isoformat()
-
-        # 2. Query issues in triage state that are not snoozed past now
         query = (
             db.table("issues")
             .select("*")
@@ -612,11 +609,26 @@ class Phase3Service:
         )
         res = query.execute()
 
+        now_dt = datetime.now(timezone.utc)
         active_triage = []
         for iss in (res.data or []):
             snoozed = iss.get("snoozed_until")
-            if not snoozed or snoozed <= now_iso:
-                active_triage.append(IssueResponse(**iss))
+            if snoozed:
+                try:
+                    if isinstance(snoozed, str):
+                        snoozed_dt = datetime.fromisoformat(snoozed.replace("Z", "+00:00"))
+                    elif isinstance(snoozed, datetime):
+                        snoozed_dt = snoozed
+                    else:
+                        snoozed_dt = None
+                    if snoozed_dt:
+                        if snoozed_dt.tzinfo is None:
+                            snoozed_dt = snoozed_dt.replace(tzinfo=timezone.utc)
+                        if snoozed_dt > now_dt:
+                            continue
+                except Exception:
+                    pass
+            active_triage.append(IssueResponse(**iss))
         return active_triage
 
     @classmethod
@@ -641,18 +653,33 @@ class Phase3Service:
             update_dict["assignee_id"] = data.assignee_id
         if data.cycle_id is not None:
             update_dict["cycle_id"] = data.cycle_id
+        if data.priority is not None:
+            update_dict["priority"] = data.priority
+        if data.estimate is not None:
+            update_dict["estimate"] = data.estimate
 
         res = db.table("issues").update(update_dict).eq("id", issue_id).execute()
         if not res.data:
             raise HTTPException(status_code=500, detail="Failed to accept triage issue")
         updated = res.data[0]
 
+        changes_logged = {
+            "target_state_id": data.target_state_id,
+            "assignee_id": data.assignee_id,
+        }
+        if data.cycle_id is not None:
+            changes_logged["cycle_id"] = data.cycle_id
+        if data.priority is not None:
+            changes_logged["priority"] = data.priority
+        if data.estimate is not None:
+            changes_logged["estimate"] = data.estimate
+
         db.table("activity_logs").insert({
             "organization_id": issue["organization_id"],
             "issue_id": issue_id,
             "actor_id": user_id,
             "action": "triage_accepted",
-            "changes": {"target_state_id": data.target_state_id, "assignee_id": data.assignee_id},
+            "changes": changes_logged,
         }).execute()
 
         return IssueResponse(**updated)

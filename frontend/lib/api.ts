@@ -338,6 +338,48 @@ export const api = {
     };
   },
 
+  // Triage Actions
+  async getTriageIssues(teamId: string): Promise<Issue[]> {
+    const data = await fetchWithAuth<Issue[]>(`/teams/${teamId}/triage`);
+    return data || [];
+  },
+
+  async acceptTriage(
+    issueId: string,
+    targetStateId: string,
+    assigneeId?: string,
+    cycleId?: string,
+    priority?: string,
+    estimate?: number
+  ): Promise<Issue | null> {
+    return await fetchWithAuth<Issue>(`/triage/${issueId}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({
+        target_state_id: targetStateId,
+        assignee_id: assigneeId,
+        cycle_id: cycleId,
+        priority: priority,
+        estimate: estimate,
+      }),
+    });
+  },
+
+  async snoozeTriage(issueId: string, snoozedUntil: string): Promise<boolean> {
+    const res = await fetchWithAuth<any>(`/triage/${issueId}/snooze`, {
+      method: 'POST',
+      body: JSON.stringify({ snoozed_until: snoozedUntil }),
+    });
+    return !!res;
+  },
+
+  async declineTriage(issueId: string, reason: string): Promise<boolean> {
+    const res = await fetchWithAuth<any>(`/triage/${issueId}/decline`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+    return !!res;
+  },
+
   // AI Sub-task Breakdown
   async startBreakdown(
     issueId: string,
