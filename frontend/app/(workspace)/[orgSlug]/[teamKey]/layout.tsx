@@ -75,6 +75,9 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandOpen((prev) => !prev);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setIsAIAskOpen((prev) => !prev);
       } else if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         setIsNewIssueOpen(true);
@@ -119,6 +122,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         isOpen={isAIAskOpen}
         onClose={() => setIsAIAskOpen(false)}
         currentUser={currentUser}
+        organizationId={organization?.id}
       />
 
       <CreateIssueModal

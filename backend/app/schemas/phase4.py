@@ -153,3 +153,19 @@ class ChatStreamRequest(BaseModel):
     thread_id: Optional[str] = None
     organization_id: str
     messages: List[ChatMessage]
+
+
+class ChatActionConfirmRequest(BaseModel):
+    action: str
+    issue_id: str
+    target_state_id: Optional[str] = None
+    target_assignee_id: Optional[str] = None
+    client_session_id: Optional[str] = None
+
+
+class ChatActionConfirmResponse(BaseModel):
+    status: str
+    action: str
+    issue_id: str
+    message: str
+    result: Optional[Dict[str, Any]] = None

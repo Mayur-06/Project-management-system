@@ -113,7 +113,9 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   }, [isCrossTeam, targetTriageState, selectedTeamId]);
 
   // Real-time debounced duplicate check
-  const [duplicateMatches, setDuplicateMatches] = useState<{ id: string; title: string; similarity: number }[]>([]);
+  const [duplicateMatches, setDuplicateMatches] = useState<
+    { id: string; title: string; similarity: number; identifier?: string }[]
+  >([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -126,7 +128,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     const timer = setTimeout(async () => {
       setIsCheckingDuplicates(true);
       const res = await api.checkDuplicates(title);
-      setDuplicateMatches(res.duplicates || []);
+      setDuplicateMatches(res?.duplicates || []);
       setIsCheckingDuplicates(false);
     }, 400);
 
@@ -228,16 +230,28 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
 
           {/* Real-time Semantic Duplicate Banner */}
           {duplicateMatches.length > 0 && (
-            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-lg space-y-1.5 animate-fade-in">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-white">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>Potential Similar Issues Found:</span>
+            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-lg space-y-2 animate-fade-in font-sans">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-400">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Potential Similar Issues Found ({duplicateMatches.length}):</span>
               </div>
-              <div className="space-y-1 pl-5">
+              <div className="space-y-1 pl-1">
                 {duplicateMatches.map((m) => (
-                  <div key={m.id} className="text-xs text-zinc-300 flex items-center justify-between">
-                    <span className="truncate max-w-[80%]">• {m.title}</span>
-                    <span className="text-[10px] text-zinc-400 font-mono">{Math.round(m.similarity * 100)}% match</span>
+                  <div
+                    key={m.id}
+                    className="text-xs text-zinc-300 flex items-center justify-between p-1 rounded bg-zinc-950/60 border border-zinc-800/80"
+                  >
+                    <div className="flex items-center gap-2 truncate max-w-[80%]">
+                      {m.identifier && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-700 shrink-0">
+                          {m.identifier}
+                        </span>
+                      )}
+                      <span className="truncate">{m.title}</span>
+                    </div>
+                    <span className="text-[10px] text-amber-400 font-mono font-medium shrink-0">
+                      {Math.round(m.similarity * 100)}% match
+                    </span>
                   </div>
                 ))}
               </div>

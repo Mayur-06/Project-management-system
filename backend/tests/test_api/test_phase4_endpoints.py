@@ -245,3 +245,46 @@ def test_chat_sse_stream(client):
     assert "event: tool_start" in body
     assert "event: token" in body
     assert "event: done" in body
+
+
+def test_confirm_chat_action_update_status(client, mock_db, monkeypatch):
+    scoped_client_mock = MagicMock()
+    scoped_client_mock.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"id": MOCK_ISSUE_ID, "state_id": MOCK_STATE_ID_1}]
+    )
+
+    import app.agents.tools.workspace_tools as wt
+    monkeypatch.setattr(wt, "get_user_scoped_client", lambda jwt: scoped_client_mock)
+
+    payload = {
+        "action": "update_issue_status",
+        "issue_id": MOCK_ISSUE_ID,
+        "target_state_id": MOCK_STATE_ID_1,
+    }
+    response = client.post("/api/v1/ai/chat/action/confirm", json=payload)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["action"] == "update_issue_status"
+    assert data["issue_id"] == MOCK_ISSUE_ID
+
+
+def test_confirm_chat_action_assign(client, mock_db, monkeypatch):
+    scoped_client_mock = MagicMock()
+    scoped_client_mock.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"id": MOCK_ISSUE_ID, "assignee_id": MOCK_USER_ID}]
+    )
+
+    import app.agents.tools.workspace_tools as wt
+    monkeypatch.setattr(wt, "get_user_scoped_client", lambda jwt: scoped_client_mock)
+
+    payload = {
+        "action": "assign_issue",
+        "issue_id": MOCK_ISSUE_ID,
+        "target_assignee_id": MOCK_USER_ID,
+    }
+    response = client.post("/api/v1/ai/chat/action/confirm", json=payload)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["action"] == "assign_issue"
