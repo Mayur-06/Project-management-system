@@ -5,7 +5,7 @@ uvicorn[standard]>=0.30.0
 # Schema Validation & Settings (Pydantic v2)
 pydantic>=2.8.0
 pydantic-settings>=2.4.0
-
+email-validator>=2.0.0
 # Database & Supabase Platform
 supabase>=2.8.0
 postgrest>=0.16.0
