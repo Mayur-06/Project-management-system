@@ -144,6 +144,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
       const resolvedTeamId = selectedTeamId || teamId || states[0]?.team_id;
       const created = await api.createIssue({
         team_id: resolvedTeamId,
+        source_team_id: teamId || undefined,
         title,
         description_text: description,
         priority,

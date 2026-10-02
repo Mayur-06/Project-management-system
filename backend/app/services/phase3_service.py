@@ -650,9 +650,9 @@ class Phase3Service:
             "version": issue["version"] + 1,
         }
         if data.assignee_id is not None:
-            update_dict["assignee_id"] = data.assignee_id
+            update_dict["assignee_id"] = data.assignee_id.strip() if data.assignee_id.strip() else None
         if data.cycle_id is not None:
-            update_dict["cycle_id"] = data.cycle_id
+            update_dict["cycle_id"] = data.cycle_id.strip() if data.cycle_id.strip() else None
         if data.priority is not None:
             update_dict["priority"] = data.priority
         if data.estimate is not None:

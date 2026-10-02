@@ -91,6 +91,81 @@ def test_cross_team_issue_creation_auto_routes_to_triage(client, mock_db):
     assert inserted_payloads[0]["state_id"] == TRIAGE_STATE_ID
 
 
+def test_cross_team_issue_creation_routes_to_triage_even_if_creator_in_both_teams(client, mock_db):
+    """
+    If a user belongs to both Team A and Team B (e.g. Workspace Admin),
+    and creates an issue from Team A targeting Team B (source_team_id=Team A, team_id=Team B),
+    it MUST route to Team B's Triage state, NOT bypass to Todo.
+    """
+    inserted_payloads = []
+
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "teams":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": TEAM_B_ID, "organization_id": MOCK_ORG_ID, "key": "OPS", "issue_counter": 15}]
+            )
+            mock_t.update().eq().execute.return_value = MagicMock(data=[])
+        elif table_name == "workspace_members":
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[{"id": "wm-1", "role": "admin"}])
+        elif table_name == "team_members":
+            # Creator is a member of Team B as well!
+            mock_tm_q = MagicMock()
+            mock_t.select.return_value = mock_tm_q
+            mock_tm_q.eq.return_value = mock_tm_q
+            mock_tm_q.limit.return_value = mock_tm_q
+            mock_tm_q.execute.return_value = MagicMock(data=[{"id": "tm-both"}])
+        elif table_name == "workflow_states":
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": TRIAGE_STATE_ID, "category": "triage"}]
+            )
+        elif table_name == "issues":
+            mock_t.select().eq().eq().is_().order().limit().execute.return_value = MagicMock(data=[])
+
+            def fake_insert(payload):
+                inserted_payloads.append(payload)
+                m_exec = MagicMock()
+                m_exec.execute.return_value = MagicMock(
+                    data=[{
+                        "id": MOCK_ISSUE_ID,
+                        "organization_id": MOCK_ORG_ID,
+                        "team_id": TEAM_B_ID,
+                        "number": 16,
+                        "identifier": "OPS-16",
+                        "title": payload.get("title", ""),
+                        "priority": payload.get("priority", "none"),
+                        "state_id": payload.get("state_id"),
+                        "creator_id": MOCK_USER_ID,
+                        "sort_order": "0|h80000:",
+                        "version": 1,
+                        "created_at": "2026-10-02T10:00:00Z",
+                        "updated_at": "2026-10-02T10:00:00Z",
+                    }]
+                )
+                return m_exec
+
+            mock_t.insert.side_effect = fake_insert
+        elif table_name == "activity_logs":
+            mock_t.insert().execute.return_value = MagicMock(data=[])
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    payload = {
+        "team_id": TEAM_B_ID,
+        "source_team_id": MOCK_TEAM_ID,  # Team A
+        "title": "Cross-team request from Team A to Team B by admin",
+        "priority": "urgent",
+    }
+    response = client.post("/api/v1/issues", json=payload)
+    assert response.status_code == status.HTTP_201_CREATED
+    data = response.json()
+    assert data["identifier"] == "OPS-16"
+    assert data["state_id"] == TRIAGE_STATE_ID
+    assert len(inserted_payloads) == 1
+    assert inserted_payloads[0]["state_id"] == TRIAGE_STATE_ID
+
+
 def test_cross_team_issue_creation_forces_triage_even_if_state_specified(client, mock_db):
     """
     Even if an external user attempts to pass a specific active state_id,

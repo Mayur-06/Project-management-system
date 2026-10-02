@@ -188,7 +188,16 @@ class IssueService:
         except Exception:
             is_team_member = False
 
-        if not is_team_member:
+        # Determine if this is a cross-team request:
+        # 1. Explicit cross-team request when source_team_id differs from destination team_id
+        # 2. Or creator is not a member of the destination team
+        is_cross_team = False
+        if data.source_team_id and data.source_team_id != resolved_team_id:
+            is_cross_team = True
+        elif not is_team_member:
+            is_cross_team = True
+
+        if is_cross_team:
             # Cross-team creation: strictly route to the target team's Triage state
             triage_state = (
                 db.table("workflow_states")
