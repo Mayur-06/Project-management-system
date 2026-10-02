@@ -332,7 +332,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </label>
                     <div className="flex items-center bg-zinc-900/60 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-400">
                       <span>app.linear/</span>
-                      <span className="text-zinc-200 font-medium ml-0.5">{organization?.slug || 'acme'}</span>
+                      <span className="text-zinc-200 font-medium ml-0.5">{organization?.slug || ''}</span>
                     </div>
                   </div>
                 </div>
@@ -516,13 +516,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           {
                             id: 'mem-1',
                             organization_id: organization?.id || '',
-                            user_id: '00000000-0000-0000-0000-000000000001',
+                            user_id: currentUser?.id || 'default-user',
                             role: 'admin' as const,
                             created_at: new Date().toISOString(),
                             user: {
-                              id: '00000000-0000-0000-0000-000000000001',
-                              name: 'Alex Chen',
-                              email: 'alex@acme.inc',
+                              id: currentUser?.id || 'default-user',
+                              name: currentUser?.name || 'Workspace Creator',
+                              email: currentUser?.email || 'admin@workspace.com',
                             },
                           },
                         ]
@@ -539,7 +539,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <p className="text-xs font-medium text-zinc-200">
                               {m.user?.name || 'Workspace Member'}
                             </p>
-                            <p className="text-[11px] text-zinc-500">{m.user?.email || 'member@acme.inc'}</p>
+                            <p className="text-[11px] text-zinc-500">{m.user?.email || 'member@workspace.com'}</p>
                           </div>
                         </div>
 
@@ -636,7 +636,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 {tm.user?.name || `Team Member ${tm.user_id?.slice(0, 4)}`}
                               </p>
                               <p className="text-[11px] text-zinc-500">
-                                {tm.user?.email || 'member@acme.inc'}
+                                {tm.user?.email || 'member@workspace.com'}
                               </p>
                             </div>
                           </div>
@@ -680,7 +680,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {currentUserRole.charAt(0).toUpperCase() + currentUserRole.slice(1)}
                     </span>
                   </div>
-                  <p className="text-xs text-zinc-400">{currentUser?.email || 'user@acme.inc'}</p>
+                  <p className="text-xs text-zinc-400">{currentUser?.email || 'user@workspace.com'}</p>
                   <p className="text-[10px] text-zinc-500 mt-0.5">Signed in with Supabase Authentication</p>
                 </div>
               </div>

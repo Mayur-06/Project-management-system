@@ -19,8 +19,8 @@ import { StateBadge } from '@/components/ui/StateBadge';
 
 export default function CyclesPage() {
   const params = useParams();
-  const orgSlug = (params?.orgSlug as string) || 'acme';
-  const teamKey = (params?.teamKey as string)?.toUpperCase() || 'ENG';
+  const orgSlug = (params?.orgSlug as string) || '';
+  const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
   const [currentTeam, setCurrentTeam] = useState<any>(null);
   const [cycles, setCycles] = useState<Cycle[]>([]);
@@ -59,9 +59,9 @@ export default function CyclesPage() {
   return (
     <div className="flex flex-col flex-1 h-full overflow-hidden">
       <TopNav
-        title="Cycles & Velocity"
+        title={`${currentTeam?.key || teamKey || 'Team'} Cycles & Velocity`}
         subtitle="Sprint Management"
-        breadcrumbs={['Acme Corp', teamKey, 'Cycles']}
+        breadcrumbs={[orgSlug || 'Workspace', currentTeam?.key || teamKey || 'Cycles', 'Cycles']}
       />
 
       <div className="flex-1 p-8 overflow-y-auto space-y-8 max-w-6xl mx-auto w-full font-sans">

@@ -546,10 +546,7 @@ class IssueService:
         for log in logs:
             actor_data = users_map.get(log["actor_id"])
             if not actor_data:
-                if log["actor_id"] == "00000000-0000-0000-0000-000000000001":
-                    actor_data = {"id": log["actor_id"], "name": "Alex Rivera", "email": "alex@acme.inc"}
-                else:
-                    actor_data = {"id": log["actor_id"], "name": "Workspace Member"}
+                actor_data = {"id": log["actor_id"], "name": "Workspace Member"}
             results.append(ActivityLogResponse(**log, actor=actor_data))
         return results
 

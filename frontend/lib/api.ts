@@ -10,20 +10,21 @@ import {
   Organization,
   WorkspaceMember,
   IssueAttachment,
+  UserWorkspaceItem,
+  UserWorkspacesResponse,
 } from '@/types';
 import { getClientSessionId } from '@/lib/supabase/client';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-const DEV_TOKEN =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJlbWFpbCI6ImFsZXhAYWNtZS5pbmMiLCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQifQ.dev_sig';
-
 async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
   let token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
-  if (!token) {
-    token = DEV_TOKEN;
+  // If token is the old placeholder dev token, clear it
+  if (token && token.includes('dev_sig')) {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('supabase_access_token', DEV_TOKEN);
+      localStorage.removeItem('supabase_access_token');
+      document.cookie = 'sb-access-token=; path=/; max-age=0';
     }
+    token = null;
   }
 
   const headers = {
@@ -38,16 +39,76 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
       headers,
     });
     if (!response.ok) {
+      if (response.status === 404 && (!options.method || options.method === 'GET')) {
+        return null;
+      }
+      const errJson = await response.json().catch(() => null);
+      const detail = errJson?.detail || errJson?.message;
+      if (detail) {
+        throw new Error(detail);
+      }
       return null;
     }
     return (await response.json()) as T;
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message) {
+      throw err;
+    }
     return null;
   }
 }
 
 export const api = {
+  // Auth
+  async register(name: string, email: string, password: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async setPassword(email: string, password: string, name: string = ''): Promise<boolean> {
+    try {
+      const response = await fetch(`${API_BASE}/auth/set-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name }),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  },
+
   // Workspaces & Teams
+  async getMyWorkspaces(): Promise<UserWorkspaceItem[]> {
+    const data = await fetchWithAuth<UserWorkspacesResponse>('/workspaces/me');
+    return data?.workspaces || [];
+  },
+
+  async createWorkspace(name: string, slug: string): Promise<Organization | null> {
+    return await fetchWithAuth<Organization>('/workspaces', {
+      method: 'POST',
+      body: JSON.stringify({ name, slug }),
+    });
+  },
+
+  async createTeam(
+    orgSlug: string,
+    teamData: { name: string; key: string; cycle_duration_weeks?: number }
+  ): Promise<Team | null> {
+    return await fetchWithAuth<Team>(`/workspaces/${orgSlug}/teams`, {
+      method: 'POST',
+      body: JSON.stringify(teamData),
+    });
+  },
+
   async getWorkspace(orgSlug: string): Promise<Organization | null> {
     return await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`);
   },

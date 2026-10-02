@@ -18,8 +18,8 @@ import { TopNav } from '@/components/navigation/TopNav';
 
 export default function ProjectsPage() {
   const params = useParams();
-  const orgSlug = (params?.orgSlug as string) || 'acme';
-  const teamKey = (params?.teamKey as string)?.toUpperCase() || 'ENG';
+  const orgSlug = (params?.orgSlug as string) || '';
+  const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
   const [projects, setProjects] = useState<Project[]>([]);
 
@@ -58,7 +58,7 @@ export default function ProjectsPage() {
       <TopNav
         title="Projects Roadmap"
         subtitle={`${projects.length} initiatives`}
-        breadcrumbs={['Acme Corp', teamKey, 'Projects']}
+        breadcrumbs={[orgSlug || 'Workspace', teamKey, 'Projects']}
       />
 
       <div className="flex-1 p-8 overflow-y-auto space-y-6 max-w-6xl mx-auto w-full">
