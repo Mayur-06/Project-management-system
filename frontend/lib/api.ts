@@ -67,8 +67,19 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password }),
       });
-      return response.ok;
-    } catch {
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => null);
+        const detail = errJson?.detail || errJson?.message;
+        if (detail) {
+          throw new Error(detail);
+        }
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      if (err instanceof Error && err.message) {
+        throw err;
+      }
       return false;
     }
   },

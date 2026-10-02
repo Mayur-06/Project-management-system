@@ -144,7 +144,7 @@ export default function AcceptInvitePage() {
           </div>
         )}
 
-        <form onSubmit={handleAcceptInvite} className="space-y-4">
+        <form onSubmit={handleAcceptInvite} className="space-y-4" noValidate>
           <div>
             <label className="text-xs text-zinc-300 font-medium block mb-1.5">Email Address</label>
             <div className="relative flex items-center">
@@ -210,7 +210,7 @@ export default function AcceptInvitePage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-2.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+            className="w-full mt-2 py-2.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <span>{loading ? 'Joining workspace...' : 'Set Password & Enter'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
