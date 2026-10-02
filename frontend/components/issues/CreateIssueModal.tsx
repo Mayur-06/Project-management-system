@@ -20,6 +20,7 @@ interface CreateIssueModalProps {
   cycles?: Cycle[];
   teamKey?: string;
   teamId?: string;
+  teams?: { id: string; name: string; key: string }[];
 }
 
 export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
@@ -34,7 +35,10 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   cycles = [],
   teamKey = '',
   teamId,
+  teams = [],
 }) => {
+  const [selectedTeamId, setSelectedTeamId] = useState<string>(teamId || '');
+  const [teamWorkflowStates, setTeamWorkflowStates] = useState<WorkflowState[]>(states);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<IssuePriority>('none');
@@ -46,42 +50,74 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [modalUsers, setModalUsers] = useState<User[]>(users);
 
+  // Sync initial team
   useEffect(() => {
-    if (users && users.length > 0) {
+    if (teamId) {
+      setSelectedTeamId(teamId);
+    }
+  }, [teamId, isOpen]);
+
+  // When selectedTeamId changes, dynamically fetch that team's workflow states & members
+  useEffect(() => {
+    if (!isOpen || !selectedTeamId) return;
+
+    if (selectedTeamId === teamId && states.length > 0) {
+      setTeamWorkflowStates(states);
+      return;
+    }
+
+    let isMounted = true;
+    api.getWorkflowStates(selectedTeamId).then((res) => {
+      if (isMounted && res && res.length > 0) {
+        setTeamWorkflowStates(res);
+      }
+    }).catch(() => {});
+
+    api.getTeamMembers(selectedTeamId).then((tms) => {
+      if (isMounted && tms && tms.length > 0) {
+        setModalUsers(
+          tms.map((tm: any) => ({
+            id: tm.user_id || tm.id,
+            name: tm.user?.name || tm.user?.email || 'Member',
+            email: tm.user?.email || '',
+          }))
+        );
+      }
+    }).catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedTeamId, teamId, isOpen, states]);
+
+  const isCrossTeam = Boolean(teamId && selectedTeamId && teamId !== selectedTeamId);
+  const targetTriageState = teamWorkflowStates.find((s) => s.category === 'triage');
+  const activeStates = isCrossTeam && targetTriageState
+    ? [targetTriageState]
+    : teamWorkflowStates.filter((s) => s.category !== 'triage');
+
+  useEffect(() => {
+    if (users && users.length > 0 && selectedTeamId === teamId) {
       setModalUsers(users);
     }
-  }, [users]);
+  }, [users, selectedTeamId, teamId]);
 
+  // Auto-route to triage state if cross-team; otherwise to default active state
   useEffect(() => {
-    if (isOpen && teamId && (!users || users.length === 0)) {
-      api.getTeamMembers(teamId).then((tms) => {
-        if (tms && tms.length > 0) {
-          setModalUsers(
-            tms.map((tm: any) => ({
-              id: tm.user_id || tm.id,
-              name: tm.user?.name || tm.user?.email || 'Member',
-              email: tm.user?.email || '',
-            }))
-          );
-        }
-      }).catch(() => {});
+    if (isCrossTeam && targetTriageState) {
+      setStateId(targetTriageState.id);
+    } else if (activeStates.length > 0) {
+      const defaultState = activeStates.find((s) => s.is_default) || activeStates[0];
+      setStateId(defaultState.id);
     }
-  }, [isOpen, teamId, users]);
-  
+  }, [isCrossTeam, targetTriageState, selectedTeamId]);
+
   // Real-time debounced duplicate check
-  const [duplicateMatches, setDuplicateMatches] = useState<{ id: string; title: string; similarity: number }[]>([]);
+  const [duplicateMatches, setDuplicateMatches] = useState<
+    { id: string; title: string; similarity: number; identifier?: string }[]
+  >([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const activeStates = states.filter((s) => s.category !== 'triage');
-
-  useEffect(() => {
-    if (initialStateId) {
-      setStateId(initialStateId);
-    } else if (activeStates.length > 0 && !stateId) {
-      setStateId(activeStates[0].id);
-    }
-  }, [initialStateId, isOpen, states]);
 
   useEffect(() => {
     if (title.trim().length < 10) {
@@ -92,7 +128,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     const timer = setTimeout(async () => {
       setIsCheckingDuplicates(true);
       const res = await api.checkDuplicates(title);
-      setDuplicateMatches(res.duplicates || []);
+      setDuplicateMatches(res?.duplicates || []);
       setIsCheckingDuplicates(false);
     }, 400);
 
@@ -107,17 +143,18 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const resolvedTeamId = teamId || states[0]?.team_id;
+      const resolvedTeamId = selectedTeamId || teamId || states[0]?.team_id;
       const created = await api.createIssue({
         team_id: resolvedTeamId,
+        source_team_id: teamId || undefined,
         title,
         description_text: description,
         priority,
-        state_id: stateId || states[0]?.id,
-        assignee_id: assigneeId || undefined,
+        state_id: isCrossTeam && targetTriageState ? targetTriageState.id : (stateId || activeStates[0]?.id),
+        assignee_id: isCrossTeam ? undefined : (assigneeId || undefined),
         estimate,
         project_id: projectId || undefined,
-        cycle_id: cycleId || undefined,
+        cycle_id: isCrossTeam ? undefined : (cycleId || undefined),
         labels: labels.filter((l) => selectedLabels.includes(l.id)),
       });
       if (created) {
@@ -133,18 +170,45 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     }
   };
 
+  const selectedTeamMeta = teams.find((t) => t.id === selectedTeamId);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fade-in font-sans">
       <div className="w-full max-w-2xl bg-black border border-zinc-800 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
         {/* Modal Header */}
         <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
           <div className="flex items-center gap-2">
-            {teamKey && (
-              <span className="text-xs font-semibold text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700 font-mono">
-                {teamKey}
+            {/* Destination Team Selector */}
+            {teams.length > 1 ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-zinc-400 font-medium">To Team:</span>
+                <select
+                  value={selectedTeamId}
+                  onChange={(e) => setSelectedTeamId(e.target.value)}
+                  className="text-xs font-semibold text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700 font-mono focus:outline-none focus:border-zinc-500 cursor-pointer"
+                >
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.key} • {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              (selectedTeamMeta?.key || teamKey) && (
+                <span className="text-xs font-semibold text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700 font-mono">
+                  {selectedTeamMeta?.key || teamKey}
+                </span>
+              )
+            )}
+            <span className="text-zinc-600">•</span>
+            <span className="text-xs text-zinc-400 font-medium">New Issue</span>
+
+            {isCrossTeam && (
+              <span className="text-[10px] bg-amber-950/60 text-amber-300 border border-amber-800/80 px-2 py-0.5 rounded font-medium ml-1">
+                Cross-team → Triage
               </span>
             )}
-            <span className="text-xs text-zinc-400 font-medium">New Issue</span>
           </div>
           <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 cursor-pointer">
             <X className="w-4 h-4" />
@@ -166,16 +230,28 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
 
           {/* Real-time Semantic Duplicate Banner */}
           {duplicateMatches.length > 0 && (
-            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-lg space-y-1.5 animate-fade-in">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-white">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>Potential Similar Issues Found:</span>
+            <div className="p-3 bg-zinc-900 border border-zinc-700 rounded-lg space-y-2 animate-fade-in font-sans">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-400">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Potential Similar Issues Found ({duplicateMatches.length}):</span>
               </div>
-              <div className="space-y-1 pl-5">
+              <div className="space-y-1 pl-1">
                 {duplicateMatches.map((m) => (
-                  <div key={m.id} className="text-xs text-zinc-300 flex items-center justify-between">
-                    <span className="truncate max-w-[80%]">• {m.title}</span>
-                    <span className="text-[10px] text-zinc-400 font-mono">{Math.round(m.similarity * 100)}% match</span>
+                  <div
+                    key={m.id}
+                    className="text-xs text-zinc-300 flex items-center justify-between p-1 rounded bg-zinc-950/60 border border-zinc-800/80"
+                  >
+                    <div className="flex items-center gap-2 truncate max-w-[80%]">
+                      {m.identifier && (
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-700 shrink-0">
+                          {m.identifier}
+                        </span>
+                      )}
+                      <span className="truncate">{m.title}</span>
+                    </div>
+                    <span className="text-[10px] text-amber-400 font-mono font-medium shrink-0">
+                      {Math.round(m.similarity * 100)}% match
+                    </span>
                   </div>
                 ))}
               </div>

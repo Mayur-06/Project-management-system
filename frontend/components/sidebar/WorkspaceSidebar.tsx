@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { Organization, Team, User, UserWorkspaceItem } from '@/types';
 import { SettingsModal } from '@/components/settings/SettingsModal';
+import { CreateTeamModal } from '@/components/teams/CreateTeamModal';
 import { Check, Building2, ExternalLink } from 'lucide-react';
 
 interface WorkspaceSidebarProps {
@@ -51,6 +52,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
   const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
+  const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
   const [userWorkspaces, setUserWorkspaces] = useState<UserWorkspaceItem[]>([]);
   
   // New workspace modal form state
@@ -304,7 +306,14 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           <div className="px-2 py-3 space-y-0.5 border-t border-zinc-800">
             <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center justify-between">
               <span>Teams</span>
-              <Plus className="w-3 h-3 text-zinc-400 hover:text-white cursor-pointer" />
+              <button
+                type="button"
+                onClick={() => setIsCreateTeamOpen(true)}
+                className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                title="Create New Team"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
             </div>
 
             {teams.map((team) => {
@@ -384,6 +393,13 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         currentUser={currentUser}
         onWorkspaceUpdated={(updated) => setOrgState(updated)}
         onTeamUpdated={() => router.refresh()}
+      />
+
+      <CreateTeamModal
+        isOpen={isCreateTeamOpen}
+        onClose={() => setIsCreateTeamOpen(false)}
+        orgSlug={currentOrgSlug}
+        onTeamCreated={() => router.refresh()}
       />
 
       {/* Create Workspace Modal */}

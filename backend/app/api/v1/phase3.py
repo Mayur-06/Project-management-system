@@ -86,6 +86,18 @@ async def complete_cycle(
     return Phase3Service.complete_cycle(cycle_id, payload, current_user.id, db)
 
 
+@router.post(
+    "/cycles/trigger-rollover",
+    response_model=List[Dict[str, Any]],
+    summary="Trigger immediate evaluation and rollover of expired cycles across all teams",
+)
+async def trigger_cycle_rollover(
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return Phase3Service.auto_rollover_expired_cycles(db)
+
+
 # ==============================================================================
 # 2. Projects & Milestones Endpoints
 # ==============================================================================

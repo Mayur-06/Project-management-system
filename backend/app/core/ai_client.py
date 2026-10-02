@@ -68,10 +68,10 @@ def get_embedding(text: str) -> List[float]:
 def generate_llm_completion(prompt: str, system_instruction: Optional[str] = None) -> Optional[str]:
     """
     Generates text completion using the modern Google GenAI SDK if configured.
-    Returns None if not configured, allowing caller heuristics to handle gracefully.
+    Returns None if not configured or in test environment, allowing caller heuristics to handle deterministically.
     """
     global _genai_client
-    if not _genai_client:
+    if not _genai_client or settings.ENVIRONMENT == "test":
         return None
     try:
         from google.genai import types
@@ -88,3 +88,30 @@ def generate_llm_completion(prompt: str, system_instruction: Optional[str] = Non
     except Exception as err:
         logger.warning(f"Gemini LLM generation failed: {err}")
         return None
+
+
+def stream_llm_completion(prompt: str, system_instruction: Optional[str] = None):
+    """
+    Streams text chunks from modern Google GenAI SDK if configured.
+    Yields string fragments in real-time as they arrive.
+    """
+    global _genai_client
+    if not _genai_client or settings.ENVIRONMENT == "test":
+        return
+    try:
+        from google.genai import types
+        config = types.GenerateContentConfig(
+            system_instruction=system_instruction
+        ) if system_instruction else None
+
+        response = _genai_client.models.generate_content_stream(
+            model=settings.GEMINI_MODEL or "gemini-2.5-flash",
+            contents=prompt,
+            config=config,
+        )
+        for chunk in response:
+            if chunk.text:
+                yield chunk.text
+    except Exception as err:
+        logger.warning(f"Gemini LLM streaming failed: {err}")
+

@@ -20,6 +20,8 @@ from app.schemas.phase4 import (
     BreakdownResumeRequest,
     BreakdownResumeResponse,
     ChatStreamRequest,
+    ChatActionConfirmRequest,
+    ChatActionConfirmResponse,
 )
 from app.services.phase4_service import Phase4Service
 
@@ -168,6 +170,24 @@ async def chat_stream(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@router.post(
+    "/ai/chat/action/confirm",
+    response_model=ChatActionConfirmResponse,
+    summary="Executes confirmed Human-in-the-Loop mutating action from Linear Ask ReAct agent",
+)
+async def confirm_chat_action(
+    payload: ChatActionConfirmRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return Phase4Service.confirm_chat_action(
+        data=payload,
+        user_id=current_user.id,
+        user_jwt=current_user.raw_token,
+        db=db,
     )
 
 

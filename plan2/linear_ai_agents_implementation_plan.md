@@ -24,11 +24,12 @@ The AI architecture comprises four specialized agents and pipelines:
 * **Contextual Similarity Card:** Renders preview cards of matching issues in the user interface, showing current status, assignee, and direct navigation links.
 
 ### B. Intelligent Auto-Triage & Workload Balancing
-* **Automated Ticket Classification:** Analyzes issue title and description to categorize the request into functional teams (such as Engineering, Design, or Product).
+* **Cross-Team Triage Trigger Invariant:** The Triage workflow is activated strictly for cross-team requests (when a member of Team A submits an issue targeting Team B). Same-team issues bypass triage directly into active backlog/unstarted states.
+* **Automated Ticket Classification:** Analyzes issue title and description to categorize the incoming request into functional technical domains.
 * **Objective Priority Scoring:** Evaluates reported symptoms, impact, and user descriptions to recommend appropriate priority tiers (Urgent, High, Medium, Low).
 * **Fibonacci Story Point Estimation:** Analyzes technical complexity to suggest realistic point estimates using standard Fibonacci sequences (1, 2, 3, 5, 8).
 * **Taxonomy Label Recommendation:** Automatically assigns relevant tags (e.g., `bug`, `performance`, `security`, `frontend`, `auth`) based on semantic topic extraction.
-* **Workload-Aware Assignee Recommendation:** Inspects active sprint commitments, open issue counts, and historical domain ownership of team members to suggest assignees with available bandwidth rather than overloading individual contributors.
+* **Workload-Aware Assignee Recommendation:** Inspects active sprint commitments, open issue counts, and historical domain ownership of recipient team members to suggest assignees with available bandwidth rather than overloading individual contributors.
 
 ### C. Interactive Spec Writer & Subtask Breakdown
 * **Automated Requirements Expansion:** Expands brief issue summaries into comprehensive technical specifications, outlining prerequisites, architectural considerations, and acceptance criteria.

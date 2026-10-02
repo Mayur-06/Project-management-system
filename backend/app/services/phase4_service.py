@@ -18,6 +18,8 @@ from app.schemas.phase4 import (
     BreakdownResumeRequest,
     BreakdownResumeResponse,
     ProposedSubtask,
+    ChatActionConfirmRequest,
+    ChatActionConfirmResponse,
 )
 from app.core.lexorank import calculate_midpoint_rank
 from app.core.config import settings
@@ -264,8 +266,18 @@ class Phase4Service:
     ) -> TriageClassifyResponse:
         from app.agents.triage_agent import triage_graph
 
+        resolved_team_id = data.team_id
+        if not resolved_team_id:
+            # Fallback to user's first team
+            tm = db.table("team_members").select("team_id").eq("user_id", user_id).limit(1).execute()
+            if tm.data:
+                resolved_team_id = tm.data[0]["team_id"]
+            else:
+                first_team = db.table("teams").select("id").limit(1).execute()
+                resolved_team_id = first_team.data[0]["id"] if first_team.data else "00000000-0000-0000-0000-000000000000"
+
         # Verify team access
-        team_res = db.table("teams").select("id, organization_id").eq("id", data.team_id).limit(1).execute()
+        team_res = db.table("teams").select("id, key, organization_id").eq("id", resolved_team_id).limit(1).execute()
         if not team_res.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
         team = team_res.data[0]
@@ -278,19 +290,22 @@ class Phase4Service:
         state_result = triage_graph.invoke(
             {
                 "organization_id": team["organization_id"],
-                "team_id": data.team_id,
+                "team_id": resolved_team_id,
                 "title": data.title,
                 "description": data.description,
             },
             config={"configurable": {"db": db}},
         )
 
+        rationale_text = state_result.get("rationale", "")
         return TriageClassifyResponse(
+            suggested_team_key=team.get("key", "ENG"),
             suggested_priority=state_result.get("predicted_priority", "medium"),
             suggested_estimate=state_result.get("predicted_estimate", 3),
             suggested_labels=state_result.get("predicted_labels", []),
             suggested_assignee_id=state_result.get("predicted_assignee_id"),
-            rationale=state_result.get("rationale", ""),
+            rationale=rationale_text,
+            reasoning=rationale_text,
         )
 
 
@@ -480,4 +495,69 @@ class Phase4Service:
             created_subtasks_count=len(created_ids),
             created_subtask_ids=created_ids,
         )
+
+    # ==============================================================================
+    # 5. Linear Ask: ReAct Human-in-the-Loop Action Confirmation
+    # ==============================================================================
+
+    @classmethod
+    def confirm_chat_action(
+        cls, data: ChatActionConfirmRequest, user_id: str, user_jwt: str, db: Client
+    ) -> ChatActionConfirmResponse:
+        from app.agents.tools.workspace_tools import update_issue_status_tool, assign_issue_tool
+
+        if data.action == "update_issue_status":
+            if not data.target_state_id:
+                # Lookup completed or started state for the issue
+                iss_res = db.table("issues").select("team_id, organization_id").eq("id", data.issue_id).limit(1).execute()
+                if not iss_res.data:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+                team_id = iss_res.data[0]["team_id"]
+                st_res = db.table("workflow_states").select("id").eq("team_id", team_id).eq("category", "completed").limit(1).execute()
+                if st_res.data:
+                    state_id = st_res.data[0]["id"]
+                else:
+                    first_st = db.table("workflow_states").select("id").eq("team_id", team_id).limit(1).execute()
+                    state_id = first_st.data[0]["id"] if first_st.data else "00000000-0000-0000-0000-000000000000"
+            else:
+                state_id = data.target_state_id
+
+            res = update_issue_status_tool.invoke({
+                "issue_id": data.issue_id,
+                "state_id": state_id,
+                "user_jwt": user_jwt,
+            })
+            if isinstance(res, dict) and res.get("error"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=res["error"])
+
+            return ChatActionConfirmResponse(
+                status="success",
+                action=data.action,
+                issue_id=data.issue_id,
+                message="Workflow state successfully updated by AI agent.",
+                result=res,
+            )
+
+        elif data.action == "assign_issue":
+            assignee_id = data.target_assignee_id or user_id
+            res = assign_issue_tool.invoke({
+                "issue_id": data.issue_id,
+                "assignee_id": assignee_id,
+                "user_jwt": user_jwt,
+            })
+            if isinstance(res, dict) and res.get("error"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=res["error"])
+
+            return ChatActionConfirmResponse(
+                status="success",
+                action=data.action,
+                issue_id=data.issue_id,
+                message="Assignee successfully updated by AI agent.",
+                result=res,
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported action: {data.action}",
+            )
 

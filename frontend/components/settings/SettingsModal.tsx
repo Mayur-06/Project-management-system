@@ -16,11 +16,13 @@ import {
   Keyboard,
   UserPlus,
   UserMinus,
+  Plus,
 } from 'lucide-react';
 import { Organization, Team, WorkspaceMember } from '@/types';
 import type { User } from '@/types';
 import { api } from '@/lib/api';
 import { supabase } from '@/lib/supabase/client';
+import { CreateTeamModal } from '@/components/teams/CreateTeamModal';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -53,6 +55,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [teamError, setTeamError] = useState<string | null>(null);
+  const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
 
   // Members state
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
@@ -346,7 +349,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
                     Team & Sprint Cadence
                   </h3>
-                  {!isAdmin && (
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateTeamOpen(true)}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-md transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Create New Team</span>
+                    </button>
+                  ) : (
                     <span className="text-[11px] text-zinc-500">Settings managed by workspace admins</span>
                   )}
                 </div>
@@ -738,6 +750,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
         </div>
       </div>
+
+      {organization?.slug && (
+        <CreateTeamModal
+          isOpen={isCreateTeamOpen}
+          onClose={() => setIsCreateTeamOpen(false)}
+          orgSlug={organization.slug}
+          onTeamCreated={(newTeam) => {
+            if (onTeamUpdated) onTeamUpdated(newTeam);
+            onClose();
+          }}
+        />
+      )}
     </div>
   );
 };

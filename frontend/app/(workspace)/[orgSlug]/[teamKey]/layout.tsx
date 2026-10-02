@@ -75,6 +75,9 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setIsCommandOpen((prev) => !prev);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setIsAIAskOpen((prev) => !prev);
       } else if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         setIsNewIssueOpen(true);
@@ -119,6 +122,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         isOpen={isAIAskOpen}
         onClose={() => setIsAIAskOpen(false)}
         currentUser={currentUser}
+        organizationId={organization?.id}
       />
 
       <CreateIssueModal
@@ -126,6 +130,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         onClose={() => setIsNewIssueOpen(false)}
         teamKey={(teamKey || teams[0]?.key || '').toUpperCase()}
         teamId={teams.find((t) => t.key.toUpperCase() === teamKey.toUpperCase())?.id || teams[0]?.id}
+        teams={teams}
         users={workspaceUsers}
         onCreated={(issue) => {
           window.dispatchEvent(new CustomEvent('issueCreated', { detail: issue }));
