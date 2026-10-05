@@ -164,48 +164,54 @@ def batch_persist_node(state: BreakdownAgentState, config: Optional[RunnableConf
         except Exception:
             existing_titles = set()
 
-        # Determine fallback state_id from parent or team
-        default_state_id = "00000000-0000-0000-0000-000000000000"
-        try:
-            parent_res = db.table("issues").select("state_id").eq("id", parent_id).limit(1).execute()
-            if parent_res.data and parent_res.data[0].get("state_id"):
-                default_state_id = parent_res.data[0]["state_id"]
-            else:
-                st_res = db.table("workflow_states").select("id").eq("team_id", team_id).limit(1).execute()
-                if st_res.data:
-                    default_state_id = st_res.data[0]["id"]
-        except Exception:
-            pass
+        # Fetch default workflow state if parent does not have one
+        default_state_id = None
+        parent_res = db.table("issues").select("state_id").eq("id", parent_id).limit(1).execute()
+        if parent_res.data and parent_res.data[0].get("state_id"):
+            default_state_id = parent_res.data[0]["state_id"]
+        else:
+            st_res = db.table("workflow_states").select("id").eq("team_id", team_id).limit(1).execute()
+            if st_res.data:
+                default_state_id = st_res.data[0]["id"]
 
-        for item in approved:
-            if item["title"].strip().lower() in existing_titles:
+        for idx, item in enumerate(approved):
+            clean_title = item.get("title", "").strip()
+            if not clean_title or clean_title.lower() in existing_titles:
                 continue
-            existing_titles.add(item["title"].strip().lower())
-            counter += 1
-            identifier = f"{team['key']}-{counter}"
+            existing_titles.add(clean_title.lower())
+
+            # Atomic counter & identifier allocation via RPC
+            try:
+                rpc_res = db.rpc("allocate_issue_identifier", {"p_team_id": team_id}).execute()
+                sub_num = rpc_res.data[0]["issue_number"]
+                sub_ident = rpc_res.data[0]["issue_identifier"]
+            except Exception:
+                team_res = db.table("teams").select("key, issue_counter").eq("id", team_id).limit(1).execute()
+                team = team_res.data[0]
+                sub_num = team["issue_counter"] + 1
+                sub_ident = f"{team['key']}-{sub_num}"
+                db.table("teams").update({"issue_counter": sub_num}).eq("id", team_id).execute()
+
             payload = {
                 "organization_id": org_id,
                 "team_id": team_id,
-                "number": counter,
-                "identifier": identifier,
-                "title": item["title"],
+                "number": sub_num,
+                "identifier": sub_ident,
+                "title": clean_title,
                 "description_text": item.get("description"),
                 "priority": item.get("priority", "none"),
                 "estimate": item.get("estimate"),
                 "state_id": default_state_id,
                 "creator_id": user_id,
                 "parent_id": parent_id,
-                "sort_order": "0|h00000:",
+                "sort_order": f"0|h{idx:05d}:",
                 "version": 1,
             }
             res = db.table("issues").insert(payload).execute()
             if res.data:
                 created_ids.append(res.data[0]["id"])
 
-        # Update team issue counter atomically
-        db.table("teams").update({"issue_counter": counter}).eq("id", team_id).execute()
-
-    return {"created_subtask_ids": created_ids}
+        return {"created_subtask_ids": created_ids}
 
 
 

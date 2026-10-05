@@ -2,6 +2,11 @@
 CREATE OR REPLACE FUNCTION public.handle_user_invitation_acceptance()
 RETURNS TRIGGER AS $$
 BEGIN
+    -- Security (C-4): Only grant workspace membership if the user's email has been confirmed
+    IF NEW.email_confirmed_at IS NULL THEN
+        RETURN NEW;
+    END IF;
+
     -- Check if there are pending invitations for this new user's email
     INSERT INTO public.workspace_members (organization_id, user_id, role)
     SELECT organization_id, NEW.id, role

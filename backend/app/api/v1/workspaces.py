@@ -8,6 +8,7 @@ from app.schemas.workspace import (
     OrganizationCreate,
     OrganizationUpdate,
     MemberInviteRequest,
+    MemberRoleUpdate,
     OrganizationResponse,
     WorkspaceMemberResponse,
     UserWorkspacesResponse,
@@ -99,6 +100,47 @@ async def invite_workspace_member(
     db: Client = Depends(get_admin_db),
 ):
     return WorkspaceService.invite_workspace_member(org_slug, data, current_user.id, db)
+
+
+@router.patch(
+    "/{org_slug}/members/{user_id}",
+    response_model=WorkspaceMemberResponse,
+    summary="Update a workspace member's role (admin, member, guest)",
+)
+async def update_workspace_member_role(
+    org_slug: str,
+    user_id: str,
+    data: MemberRoleUpdate,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return WorkspaceService.update_member_role(org_slug, user_id, data, current_user.id, db)
+
+
+@router.delete(
+    "/{org_slug}/members/{user_id}",
+    summary="Remove a member from the workspace and associated teams",
+)
+async def remove_workspace_member(
+    org_slug: str,
+    user_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return WorkspaceService.remove_workspace_member(org_slug, user_id, current_user.id, db)
+
+
+@router.delete(
+    "/{org_slug}/invitations/{invitation_id}",
+    summary="Revoke a pending workspace invitation",
+)
+async def revoke_workspace_invitation(
+    org_slug: str,
+    invitation_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return WorkspaceService.revoke_invitation(org_slug, invitation_id, current_user.id, db)
 
 
 @router.get(

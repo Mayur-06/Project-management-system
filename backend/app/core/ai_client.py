@@ -4,14 +4,25 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Initialize Google GenAI client if GEMINI_API_KEY is configured and not in test environment
+# Initialize Google GenAI client lazily if GEMINI_API_KEY is configured and not in test environment
 _genai_client = None
-if settings.GEMINI_API_KEY and settings.ENVIRONMENT != "test":
-    try:
-        from google import genai
-        _genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    except Exception as e:
-        logger.warning(f"Failed to initialize google-genai client: {e}")
+last_init_err = None
+
+def get_genai_client():
+    global _genai_client, last_init_err
+    if _genai_client is not None:
+        return _genai_client
+    if settings.GEMINI_API_KEY and settings.ENVIRONMENT != "test":
+        try:
+            from google import genai
+            _genai_client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            return _genai_client
+        except Exception as e:
+            last_init_err = f"{type(e).__name__}: {str(e)}"
+            logger.warning(f"Failed to initialize google-genai client: {e}")
+    else:
+        last_init_err = f"API_KEY={bool(settings.GEMINI_API_KEY)}, ENV={settings.ENVIRONMENT}"
+    return None
 
 
 
@@ -20,14 +31,14 @@ def get_embedding(text: str) -> List[float]:
     Generates a 768-dimensional embedding vector using Google Gemini text-embedding-004.
     Falls back gracefully to deterministic normalized vector if API key is not configured or fails.
     """
-    global _genai_client
-    if _genai_client:
+    client = get_genai_client()
+    if client:
         try:
             model = settings.GEMINI_EMBEDDING_MODEL or "text-embedding-004"
             if model.startswith("models/"):
                 model = model.replace("models/", "")
 
-            response = _genai_client.models.embed_content(
+            response = client.models.embed_content(
                 model=model,
                 contents=text,
             )
@@ -48,21 +59,10 @@ def get_embedding(text: str) -> List[float]:
                 else:
                     return emb_list + [0.0] * (768 - len(emb_list))
         except Exception as err:
-            logger.warning(f"Gemini embedding API call failed: {err}. Falling back to deterministic vector.")
+            logger.warning(f"Gemini embedding API call failed: {err}.")
+            return None
 
-    # High-speed fallback vector (768 dimensions)
-    # Generates a pseudo-semantic deterministic projection based on character hashing
-    vector = [0.0] * 768
-    for i, char in enumerate(text.lower()[:768]):
-        idx = (ord(char) * 17 + i * 31) % 768
-        vector[idx] += 1.0 / (1.0 + (i % 5))
-    # Normalize
-    norm = sum(v * v for v in vector) ** 0.5
-    if norm > 0:
-        vector = [v / norm for v in vector]
-    else:
-        vector[0] = 1.0
-    return vector
+    return None
 
 
 def generate_llm_completion(prompt: str, system_instruction: Optional[str] = None) -> Optional[str]:
@@ -70,8 +70,8 @@ def generate_llm_completion(prompt: str, system_instruction: Optional[str] = Non
     Generates text completion using the modern Google GenAI SDK if configured.
     Returns None if not configured or in test environment, allowing caller heuristics to handle deterministically.
     """
-    global _genai_client
-    if not _genai_client or settings.ENVIRONMENT == "test":
+    client = get_genai_client()
+    if not client or settings.ENVIRONMENT == "test":
         return None
     try:
         from google.genai import types
@@ -79,7 +79,7 @@ def generate_llm_completion(prompt: str, system_instruction: Optional[str] = Non
             system_instruction=system_instruction
         ) if system_instruction else None
 
-        response = _genai_client.models.generate_content(
+        response = client.models.generate_content(
             model=settings.GEMINI_MODEL or "gemini-2.5-flash",
             contents=prompt,
             config=config,
@@ -95,8 +95,8 @@ def stream_llm_completion(prompt: str, system_instruction: Optional[str] = None)
     Streams text chunks from modern Google GenAI SDK if configured.
     Yields string fragments in real-time as they arrive.
     """
-    global _genai_client
-    if not _genai_client or settings.ENVIRONMENT == "test":
+    client = get_genai_client()
+    if not client or settings.ENVIRONMENT == "test":
         return
     try:
         from google.genai import types
@@ -104,7 +104,7 @@ def stream_llm_completion(prompt: str, system_instruction: Optional[str] = None)
             system_instruction=system_instruction
         ) if system_instruction else None
 
-        response = _genai_client.models.generate_content_stream(
+        response = client.models.generate_content_stream(
             model=settings.GEMINI_MODEL or "gemini-2.5-flash",
             contents=prompt,
             config=config,
@@ -114,4 +114,5 @@ def stream_llm_completion(prompt: str, system_instruction: Optional[str] = None)
                 yield chunk.text
     except Exception as err:
         logger.warning(f"Gemini LLM streaming failed: {err}")
+
 

@@ -28,6 +28,7 @@ export default function LoginPage() {
         search.includes('type=recovery')
       ) {
         router.replace('/accept-invite' + window.location.search + window.location.hash);
+        return;
       }
     }
   }, [router]);
@@ -52,6 +53,8 @@ export default function LoginPage() {
     return Object.keys(errors).length === 0;
   };
 
+  const [statusText, setStatusText] = useState('Authenticating...');
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -61,14 +64,31 @@ export default function LoginPage() {
     }
 
     setLoading(true);
+    setStatusText('Authenticating credentials...');
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      console.log('[Login] Attempting sign-in for:', email.trim());
+
+      const authPromise = supabase.auth.signInWithPassword({
         email: email.trim().toLowerCase(),
         password,
       });
+      const authTimeout = new Promise<{ data: any; error: any }>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new Error(
+                'Connection timed out contacting authentication service. Please check your internet connection.'
+              )
+            ),
+          12000
+        )
+      );
+
+      const { data, error } = await Promise.race([authPromise, authTimeout]);
 
       if (error) {
+        console.warn('[Login] Authentication error:', error);
         let msg = error.message;
         if (msg.toLowerCase().includes('invalid login credentials')) {
           msg = 'Invalid email or password. Please verify your credentials and try again.';
@@ -80,6 +100,9 @@ export default function LoginPage() {
         return;
       }
 
+      console.log('[Login] Sign-in successful. User ID:', data?.user?.id);
+      setStatusText('Connecting to workspace...');
+
       const token = data?.session?.access_token;
       if (token && typeof window !== 'undefined') {
         localStorage.setItem('supabase_access_token', token);
@@ -89,26 +112,52 @@ export default function LoginPage() {
       // Query the user's accessible workspaces
       let myWorkspaces: any[] = [];
       try {
-        myWorkspaces = await api.getMyWorkspaces();
+        const wsPromise = api.getMyWorkspaces(token);
+        const wsTimeout = new Promise<any[]>((resolve) =>
+          setTimeout(() => resolve([]), 6000)
+        );
+        myWorkspaces = (await Promise.race([wsPromise, wsTimeout])) || [];
       } catch (wsErr: any) {
-        console.warn('Error fetching workspaces after login:', wsErr);
+        console.warn('[Login] Error fetching workspaces after login:', wsErr);
+        if (wsErr instanceof Error && wsErr.message === 'Unauthorized') {
+          setErrorMsg('Session expired. Please try logging in again.');
+          setLoading(false);
+          return;
+        }
       }
+
+      console.log('[Login] Accessible workspaces retrieved:', myWorkspaces?.length || 0);
 
       if (myWorkspaces && myWorkspaces.length > 0) {
         const firstWs = myWorkspaces[0];
         let teamKey = firstWs.teams?.[0]?.key ? firstWs.teams[0].key.toLowerCase() : '';
         if (!teamKey && firstWs.organization?.slug) {
           try {
-            const orgTeams = await api.getTeams(firstWs.organization.slug);
+            const orgTeams = await api.getTeams(firstWs.organization.slug, token);
             teamKey = orgTeams?.[0]?.key ? orgTeams[0].key.toLowerCase() : '';
           } catch {}
         }
-        window.location.href = teamKey ? `/${firstWs.organization.slug}/${teamKey}/issues` : `/${firstWs.organization.slug}/issues`;
+        const safeTeamKey = teamKey || 'eng';
+        const targetUrl = `/${firstWs.organization.slug}/${safeTeamKey}/issues`;
+
+        setStatusText('Entering workspace...');
+        console.log('[Login] Redirecting to:', targetUrl);
+
+        // Navigate directly to workspace page
+        window.location.href = targetUrl;
       } else {
-        // If user has no workspaces yet, redirect to signup/workspace creation
-        window.location.href = '/signup';
+        // No workspaces yet — go to workspace creation
+        setStatusText('Setting up workspace...');
+        console.log('[Login] No workspaces found, redirecting to signup...');
+        router.replace('/signup');
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/signup';
+          }
+        }, 800);
       }
     } catch (err: any) {
+      console.error('[Login] Caught error during sign-in flow:', err);
       setErrorMsg(err?.message || 'Login failed. Please check your network and try again.');
       setLoading(false);
     }
@@ -203,7 +252,7 @@ export default function LoginPage() {
             {loading ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Authenticating...</span>
+                <span>{statusText}</span>
               </>
             ) : (
               <>

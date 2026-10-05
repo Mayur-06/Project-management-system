@@ -57,6 +57,10 @@ class Phase4Service:
         safe_filename = "".join(c for c in data.file_name if c.isalnum() or c in "._- ")
         storage_path = f"org_{issue['organization_id']}/issues/{data.issue_id}/{attachment_id}_{safe_filename}"
 
+        # Enforce reasonable file size limit (e.g., 25MB)
+        if data.file_size > 25 * 1024 * 1024:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File exceeds maximum size limit of 25MB")
+
         # Insert placeholder record into issue_attachments
         db.table("issue_attachments").insert({
             "id": attachment_id,
@@ -80,9 +84,23 @@ class Phase4Service:
         except Exception:
             pass
 
-        # Generate upload URL using configured Supabase URL
+        # Generate signed upload URL using Supabase storage client
         base_url = settings.SUPABASE_URL.rstrip("/")
-        upload_url = f"{base_url}/storage/v1/object/upload/sign/attachments/{storage_path}?token=signed_upload_token"
+        upload_url = None
+        try:
+            sign_res = db.storage.from_("attachments").create_signed_upload_url(storage_path)
+            if isinstance(sign_res, dict):
+                upload_url = sign_res.get("signed_url") or sign_res.get("signedUrl") or sign_res.get("url")
+            elif hasattr(sign_res, "signed_url"):
+                upload_url = sign_res.signed_url
+            elif hasattr(sign_res, "url"):
+                upload_url = sign_res.url
+        except Exception:
+            upload_url = None
+
+        if not upload_url:
+            # Fallback to direct authenticated Supabase storage object path
+            upload_url = f"{base_url}/storage/v1/object/attachments/{storage_path}"
 
         return AttachmentUploadResponse(
             attachment_id=attachment_id,
@@ -100,21 +118,32 @@ class Phase4Service:
         att = att_res.data[0]
 
         iss_res = db.table("issues").select("organization_id").eq("id", att["issue_id"]).limit(1).execute()
-        org_id = iss_res.data[0]["organization_id"] if iss_res.data else "00000000-0000-0000-0000-000000000001"
+        if not iss_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Associated issue not found")
+        org_id = iss_res.data[0]["organization_id"]
+
+        # Membership check
+        mem = (
+            db.table("workspace_members")
+            .select("role")
+            .eq("organization_id", org_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not mem.data:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
         # Author or admin check
-        if att["user_id"] != user_id:
-            if iss_res.data:
-                mem = (
-                    db.table("workspace_members")
-                    .select("role")
-                    .eq("organization_id", org_id)
-                    .eq("user_id", user_id)
-                    .limit(1)
-                    .execute()
-                )
-                if not mem.data or mem.data[0]["role"] != "admin":
-                    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only attachment uploader or admin can delete")
+        if att["user_id"] != user_id and mem.data[0]["role"] != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only attachment uploader or admin can delete")
+
+        # Delete from Supabase Storage bucket
+        try:
+            if att.get("storage_path"):
+                db.storage.from_("attachments").remove([att["storage_path"]])
+        except Exception:
+            pass
 
         db.table("issue_attachments").delete().eq("id", attachment_id).execute()
 
@@ -195,21 +224,23 @@ class Phase4Service:
 
         # Generate 768-dimensional embedding for the title
         query_embedding = get_embedding(data.title)
+        matches_data = []
 
-        # Call PostgreSQL match_similar_issues RPC with relaxed HNSW iterative scan
-        try:
-            rpc_res = db.rpc(
-                "match_similar_issues",
-                {
-                    "query_embedding": query_embedding,
-                    "match_threshold": data.threshold,
-                    "match_count": data.limit,
-                    "p_organization_id": org_id,
-                },
-            ).execute()
-            matches_data = rpc_res.data or []
-        except Exception:
-            matches_data = []
+        if query_embedding:
+            # Call PostgreSQL match_similar_issues RPC with relaxed HNSW iterative scan
+            try:
+                rpc_res = db.rpc(
+                    "match_similar_issues",
+                    {
+                        "query_embedding": query_embedding,
+                        "match_threshold": data.threshold,
+                        "match_count": data.limit,
+                        "p_organization_id": org_id,
+                    },
+                ).execute()
+                matches_data = rpc_res.data or []
+            except Exception:
+                matches_data = []
 
         # If vector returns results, fetch issue details
         results = []
@@ -227,24 +258,6 @@ class Phase4Service:
                             identifier=iss["identifier"],
                             title=iss["title"],
                             similarity=round(m["similarity"], 4),
-                            state_id=iss.get("state_id"),
-                        )
-                    )
-
-        # Fallback text similarity if embedding table is fresh
-        if not results:
-            words = [w for w in data.title.split() if len(w) > 3]
-            if words:
-                query = db.table("issues").select("id, identifier, title, state_id").eq("organization_id", org_id).is_("deleted_at", "null")
-                query = query.ilike("title", f"%{words[0]}%").limit(data.limit)
-                text_res = query.execute()
-                for iss in (text_res.data or []):
-                    results.append(
-                        DuplicateIssueItem(
-                            issue_id=iss["id"],
-                            identifier=iss["identifier"],
-                            title=iss["title"],
-                            similarity=0.85,
                             state_id=iss.get("state_id"),
                         )
                     )
@@ -281,6 +294,18 @@ class Phase4Service:
         if not team_res.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
         team = team_res.data[0]
+
+        # Verify caller has access to the team's organization
+        org_check = (
+            db.table("workspace_members")
+            .select("id")
+            .eq("organization_id", team["organization_id"])
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not org_check.data:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to team")
 
         # Execute 4-phase LangGraph StateGraph:
         # Phase 1: Fetch Team Capacity & Active Workloads
@@ -327,6 +352,18 @@ class Phase4Service:
         if not iss_res.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parent issue not found")
         parent = iss_res.data[0]
+
+        # Verify caller has access to parent issue's organization
+        org_check = (
+            db.table("workspace_members")
+            .select("id")
+            .eq("organization_id", parent["organization_id"])
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not org_check.data:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to parent issue")
 
         # Enforce Problem Set 8 composite thread namespacing: org_id:user_id:conversation_uuid
         thread_id = f"{parent['organization_id']}:{user_id}:{uuid.uuid4()}"

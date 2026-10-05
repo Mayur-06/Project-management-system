@@ -1,8 +1,23 @@
 from typing import Optional, Dict, Any
 import jwt
+from jwt import PyJWKClient
 from pydantic import BaseModel
 from fastapi import HTTPException, status
 from app.core.config import settings
+
+_jwks_client: Optional[PyJWKClient] = None
+
+def get_jwks_client() -> Optional[PyJWKClient]:
+    global _jwks_client
+    if _jwks_client is None:
+        try:
+            base_url = settings.SUPABASE_URL.rstrip("/")
+            if base_url and not base_url.startswith("https://placeholder"):
+                jwks_url = f"{base_url}/auth/v1/.well-known/jwks.json"
+                _jwks_client = PyJWKClient(jwks_url, cache_jwk_set=True, lifespan=3600)
+        except Exception:
+            _jwks_client = None
+    return _jwks_client
 
 
 class AuthenticatedUser(BaseModel):
@@ -16,35 +31,45 @@ class AuthenticatedUser(BaseModel):
 def verify_supabase_token(token: str) -> AuthenticatedUser:
     """
     Decodes and validates a Supabase JWT access token.
-    Extracts the user id (sub), email, and claims.
+    Supports both modern Supabase ECC/RSA keys (ES256/RS256 via JWKS)
+    and HMAC shared secrets (HS256 via SUPABASE_JWT_SECRET).
     """
     try:
-        # In local/testing development where JWT secret might be placeholder,
-        # support standard Supabase decode or unverified options for local mock
         secret = settings.SUPABASE_JWT_SECRET
         
-        if settings.ENVIRONMENT == "test" or secret.startswith("placeholder-"):
-            # Test or dummy mode: decode without cryptographic signature verification
+        if settings.ENVIRONMENT == "test" and secret.startswith("placeholder-"):
             payload = jwt.decode(
                 token,
                 options={"verify_signature": False, "verify_aud": False}
             )
         else:
-            try:
+            # Check algorithm from header
+            unverified_header = jwt.get_unverified_header(token)
+            alg = unverified_header.get("alg", "HS256")
+
+            if alg in ("ES256", "RS256"):
+                jwks = get_jwks_client()
+                if not jwks:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="Supabase JWKS client unavailable for asymmetric token verification"
+                    )
+                signing_key = jwks.get_signing_key_from_jwt(token)
+                payload = jwt.decode(
+                    token,
+                    signing_key.key,
+                    algorithms=[alg],
+                    audience="authenticated",
+                    leeway=60,
+                )
+            else:
                 payload = jwt.decode(
                     token,
                     secret,
                     algorithms=["HS256"],
                     audience="authenticated",
+                    leeway=60,
                 )
-            except Exception as decode_err:
-                if settings.ENVIRONMENT == "development":
-                    payload = jwt.decode(
-                        token,
-                        options={"verify_signature": False, "verify_aud": False}
-                    )
-                else:
-                    raise decode_err
 
         user_id = payload.get("sub")
         if not user_id:

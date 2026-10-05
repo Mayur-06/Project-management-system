@@ -7,6 +7,7 @@ from app.schemas.workspace import (
     OrganizationCreate,
     OrganizationUpdate,
     MemberInviteRequest,
+    MemberRoleUpdate,
     OrganizationResponse,
     WorkspaceMemberResponse,
     WorkspaceMemberUser,
@@ -28,15 +29,18 @@ class WorkspaceService:
             return
         try:
             email_clean = email.strip().lower()
+            # Fast check: skip immediately if there are no pending invitations for this email
             inv_res = (
                 db.table("workspace_invitations")
-                .select("*")
+                .select("id, organization_id, role")
                 .eq("email", email_clean)
                 .eq("status", "pending")
                 .execute()
             )
-            if inv_res.data:
-                for inv in inv_res.data:
+            if not inv_res.data:
+                return
+
+            for inv in inv_res.data:
                     org_id = inv["organization_id"]
                     role = inv.get("role", "member")
                     db.table("workspace_members").upsert(
@@ -454,3 +458,203 @@ class WorkspaceService:
                 name=email_clean.split("@")[0],
             ),
         )
+
+    @classmethod
+    def update_member_role(
+        cls, slug: str, target_user_id: str, data: MemberRoleUpdate, current_user_id: str, db: Client
+    ) -> WorkspaceMemberResponse:
+        """
+        Updates the role of a workspace member (admin, member, guest).
+        Requires org admin role and prevents demoting the last admin.
+        """
+        org_res = db.table("organizations").select("id").eq("slug", slug).limit(1).execute()
+        if not org_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        org_id = org_res.data[0]["id"]
+
+        # Ensure current user is admin
+        actor_check = (
+            db.table("workspace_members")
+            .select("role")
+            .eq("organization_id", org_id)
+            .eq("user_id", current_user_id)
+            .limit(1)
+            .execute()
+        )
+        if not actor_check.data or actor_check.data[0].get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization admins can update member roles",
+            )
+
+        # Check target member exists
+        target_res = (
+            db.table("workspace_members")
+            .select("*")
+            .eq("organization_id", org_id)
+            .eq("user_id", target_user_id)
+            .limit(1)
+            .execute()
+        )
+        if not target_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workspace member not found",
+            )
+        target_member = target_res.data[0]
+
+        # Prevent demoting the last admin
+        if target_member.get("role") == "admin" and data.role != MemberRole.ADMIN:
+            admin_count_res = (
+                db.table("workspace_members")
+                .select("id")
+                .eq("organization_id", org_id)
+                .eq("role", "admin")
+                .execute()
+            )
+            if admin_count_res.data and len(admin_count_res.data) <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot demote the last organization administrator",
+                )
+
+        updated_res = (
+            db.table("workspace_members")
+            .update({"role": data.role.value})
+            .eq("id", target_member["id"])
+            .execute()
+        )
+        updated = updated_res.data[0] if updated_res.data else {**target_member, "role": data.role.value}
+
+        email, name = cls.resolve_user_info(target_user_id, db)
+        return WorkspaceMemberResponse(
+            id=updated["id"],
+            organization_id=org_id,
+            user_id=target_user_id,
+            role=data.role,
+            created_at=updated["created_at"],
+            status="active",
+            user=WorkspaceMemberUser(
+                id=target_user_id,
+                email=email,
+                name=name,
+            ),
+        )
+
+    @classmethod
+    def remove_workspace_member(
+        cls, slug: str, target_user_id: str, current_user_id: str, db: Client
+    ) -> dict:
+        """
+        Removes a member from the workspace and cascades removal from team memberships.
+        Requires org admin role and prevents removing the last admin.
+        """
+        org_res = db.table("organizations").select("id").eq("slug", slug).limit(1).execute()
+        if not org_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        org_id = org_res.data[0]["id"]
+
+        # Ensure current user is admin
+        actor_check = (
+            db.table("workspace_members")
+            .select("role")
+            .eq("organization_id", org_id)
+            .eq("user_id", current_user_id)
+            .limit(1)
+            .execute()
+        )
+        if not actor_check.data or actor_check.data[0].get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization admins can remove workspace members",
+            )
+
+        # Check target member exists
+        target_res = (
+            db.table("workspace_members")
+            .select("*")
+            .eq("organization_id", org_id)
+            .eq("user_id", target_user_id)
+            .limit(1)
+            .execute()
+        )
+        if not target_res.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workspace member not found",
+            )
+        target_member = target_res.data[0]
+
+        # Prevent removing the last admin
+        if target_member.get("role") == "admin":
+            admin_count_res = (
+                db.table("workspace_members")
+                .select("id")
+                .eq("organization_id", org_id)
+                .eq("role", "admin")
+                .execute()
+            )
+            if admin_count_res.data and len(admin_count_res.data) <= 1:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot remove the last organization administrator",
+                )
+
+        # 1. Clean up team memberships belonging to teams in this organization
+        teams_res = db.table("teams").select("id").eq("organization_id", org_id).execute()
+        team_ids = [t["id"] for t in (teams_res.data or [])]
+        if team_ids:
+            for t_id in team_ids:
+                try:
+                    db.table("team_members").delete().eq("team_id", t_id).eq("user_id", target_user_id).execute()
+                except Exception:
+                    pass
+
+        # 2. Delete workspace membership
+        db.table("workspace_members").delete().eq("id", target_member["id"]).execute()
+
+        return {"message": "Member removed from workspace successfully", "user_id": target_user_id}
+
+    @staticmethod
+    def revoke_invitation(
+        slug: str, invitation_id: str, current_user_id: str, db: Client
+    ) -> dict:
+        """
+        Revokes (cancels/deletes) a pending workspace invitation.
+        Requires org admin role.
+        """
+        org_res = db.table("organizations").select("id").eq("slug", slug).limit(1).execute()
+        if not org_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        org_id = org_res.data[0]["id"]
+
+        actor_check = (
+            db.table("workspace_members")
+            .select("role")
+            .eq("organization_id", org_id)
+            .eq("user_id", current_user_id)
+            .limit(1)
+            .execute()
+        )
+        if not actor_check.data or actor_check.data[0].get("role") != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only organization admins can revoke invitations",
+            )
+
+        inv_check = (
+            db.table("workspace_invitations")
+            .select("id")
+            .eq("organization_id", org_id)
+            .eq("id", invitation_id)
+            .limit(1)
+            .execute()
+        )
+        if not inv_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Workspace invitation not found",
+            )
+
+        db.table("workspace_invitations").delete().eq("id", invitation_id).execute()
+        return {"message": "Invitation revoked successfully", "invitation_id": invitation_id}

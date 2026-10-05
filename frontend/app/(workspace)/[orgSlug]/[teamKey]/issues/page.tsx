@@ -146,20 +146,31 @@ export default function IssuesPage() {
     prevRank?: string,
     nextRank?: string
   ) => {
-    let newRank = '0|h00000:';
+    // Clean rank computation without malformed double ':' terminators (H-1B)
+    let optimisticRank = '0|h00000:';
     if (prevRank && nextRank) {
-      newRank = `${prevRank.slice(0, 4)}${Date.now() % 1000}:`;
+      const pClean = prevRank.replace(/^0\|/, '').replace(/:$/, '');
+      optimisticRank = `0|${pClean}h:`;
     } else if (prevRank) {
-      newRank = `${prevRank}1:`;
+      const pClean = prevRank.replace(/^0\|/, '').replace(/:$/, '');
+      optimisticRank = `0|${pClean}h:`;
     } else if (nextRank) {
-      newRank = `0|0${Date.now() % 100}:`;
+      const nClean = nextRank.replace(/^0\|/, '').replace(/:$/, '');
+      optimisticRank = `0|0${nClean}:`;
     }
 
     // Optimistic UI update
     setIssues((prev) =>
-      prev.map((i) => (i.id === issueId ? { ...i, state_id: newStateId, sort_order: newRank } : i))
+      prev.map((i) => (i.id === issueId ? { ...i, state_id: newStateId, sort_order: optimisticRank } : i))
     );
-    await api.reorderIssue(issueId, newStateId, newRank);
+
+    // Call server to persist and calculate accurate midpoint rank
+    const updated = await api.reorderIssue(issueId, newStateId, prevRank, nextRank);
+    if (updated) {
+      setIssues((prev) =>
+        prev.map((i) => (i.id === issueId ? { ...i, sort_order: updated.sort_order } : i))
+      );
+    }
   };
 
   const handleDeleteIssue = async (issueId: string) => {

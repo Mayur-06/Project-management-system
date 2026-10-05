@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
+from app.schemas.issue import IssuePriority
 
 
 # ==============================================================================
@@ -90,6 +91,26 @@ class ProposedSubtask(BaseModel):
     description: Optional[str] = None
     estimate: Optional[int] = None
     priority: str = "none"
+
+    @field_validator("priority", mode="before")
+    @classmethod
+    def validate_priority(cls, v: Any) -> str:
+        if isinstance(v, str):
+            v_low = v.strip().lower()
+            valid = {p.value for p in IssuePriority}
+            if v_low in valid:
+                return v_low
+            # Normalize common synonyms or critical markers
+            if "crit" in v_low or "urgent" in v_low or "p0" in v_low or "p1" in v_low:
+                return IssuePriority.URGENT.value
+            if "high" in v_low or "p2" in v_low:
+                return IssuePriority.HIGH.value
+            if "med" in v_low or "p3" in v_low:
+                return IssuePriority.MEDIUM.value
+            if "low" in v_low or "p4" in v_low:
+                return IssuePriority.LOW.value
+            raise ValueError(f"Invalid priority '{v}'. Must be one of {valid}")
+        return IssuePriority.NONE.value
 
 
 class BreakdownStartRequest(BaseModel):

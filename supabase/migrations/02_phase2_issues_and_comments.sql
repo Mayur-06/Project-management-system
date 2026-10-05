@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS projects (
     health project_health DEFAULT 'on_track',
     sort_order VARCHAR(255) COLLATE "C" NOT NULL DEFAULT '0|h00000:',
     created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(organization_id, slug)
 );
 
@@ -63,7 +64,7 @@ CREATE TABLE IF NOT EXISTS issues (
     description_json JSONB,
     description_text TEXT,
     priority issue_priority DEFAULT 'none' NOT NULL,
-    estimate INT,
+    estimate INT CHECK (estimate IS NULL OR estimate >= 0),
     state_id UUID NOT NULL REFERENCES workflow_states(id),
     assignee_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
     creator_id UUID NOT NULL REFERENCES auth.users(id),
@@ -80,7 +81,8 @@ CREATE TABLE IF NOT EXISTS issues (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
-    UNIQUE(team_id, number)
+    UNIQUE(team_id, number),
+    UNIQUE(team_id, identifier)
 );
 
 -- 5. Issue Labels Join Table

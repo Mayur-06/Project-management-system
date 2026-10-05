@@ -27,7 +27,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   isOpen,
   onClose,
   onCreated,
-  initialStateId = 'st_todo',
+  initialStateId = '',
   states = [],
   users = [],
   labels = [],
@@ -43,6 +43,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<IssuePriority>('none');
   const [stateId, setStateId] = useState(initialStateId);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [estimate, setEstimate] = useState<number>(2);
   const [projectId, setProjectId] = useState<string>('');
@@ -142,15 +143,20 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     if (!title.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       const resolvedTeamId = selectedTeamId || teamId || states[0]?.team_id;
+      const targetState = isCrossTeam && targetTriageState ? targetTriageState.id : (stateId || activeStates[0]?.id);
+      if (!targetState) {
+        throw new Error('No workflow state available for selected team.');
+      }
       const created = await api.createIssue({
         team_id: resolvedTeamId,
         source_team_id: teamId || undefined,
         title,
         description_text: description,
         priority,
-        state_id: isCrossTeam && targetTriageState ? targetTriageState.id : (stateId || activeStates[0]?.id),
+        state_id: targetState,
         assignee_id: isCrossTeam ? undefined : (assigneeId || undefined),
         estimate,
         project_id: projectId || undefined,
@@ -163,8 +169,9 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
       onClose();
       setTitle('');
       setDescription('');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create issue', err);
+      setSubmitError(err?.message || 'Failed to create issue. Please check fields.');
     } finally {
       setIsSubmitting(false);
     }
@@ -217,6 +224,11 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          {submitError && (
+            <div className="p-2.5 rounded bg-red-950/60 border border-red-800 text-xs text-red-200">
+              {submitError}
+            </div>
+          )}
           <div>
             <input
               autoFocus
