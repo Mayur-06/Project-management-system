@@ -69,11 +69,20 @@ class LinearAskAgent:
         elif any(q_lower.startswith(p) for p in ("move ", "close ", "assign ", "complete ")):
             is_mutation = True
 
-        is_cycle_query = (
-            any(w in q_lower for w in ("velocity", "burndown", "sprint progress", "cycle progress", "cycle velocity", "sprint status"))
-            or ("cycle" in q_lower and any(w in q_lower for w in ("what", "how", "show", "current", "stats", "metrics", "rate", "points", "velocity")))
-            or ("sprint" in q_lower and any(w in q_lower for w in ("what", "how", "show", "current", "stats", "metrics", "rate", "points", "velocity")))
+        # Detect if user is asking a conceptual/definition question (e.g. "what is velocity", "explain burndown")
+        is_definition_question = (
+            any(q_lower.startswith(p) for p in ("what is ", "what does ", "define ", "explain ", "meaning of ", "how is "))
+            and not any(w in q_lower for w in ("our", "current", "this", "my", "team", "workspace", "active", "cycle"))
         )
+
+        is_cycle_query = False
+        if not is_mutation and not is_definition_question:
+            is_cycle_query = (
+                any(w in q_lower for w in ("burndown", "sprint progress", "cycle progress", "cycle velocity", "sprint status", "team velocity"))
+                or ("velocity" in q_lower and any(w in q_lower for w in ("our", "current", "show", "check", "team", "sprint", "cycle", "report", "stats")))
+                or ("cycle" in q_lower and any(w in q_lower for w in ("what", "how", "show", "current", "stats", "metrics", "rate", "points", "velocity")))
+                or ("sprint" in q_lower and any(w in q_lower for w in ("what", "how", "show", "current", "stats", "metrics", "rate", "points", "velocity")))
+            )
 
         is_issue_search = False
         if not is_mutation and not is_cycle_query:
@@ -127,21 +136,27 @@ class LinearAskAgent:
                     f"({cycle_data.get('completion_rate', '0%')} completion rate across {cycle_data.get('total_issues', 0)} issues)."
                 )
             else:
-                summary = "Active sprint metrics inspected: 0 blockers, all assigned sprint commitments are tracking on schedule."
+                summary = "No active sprint cycle is currently configured for this team. You can create a new cycle in the Cycles tab to track velocity."
 
             # Dynamic LLM summary if configured
             llm_summary = generate_llm_completion(
-                prompt=f"User asked: '{query}'\nCycle metrics data: {json.dumps(cycle_data or {})}\nProvide a friendly 1-2 sentence engineering sprint velocity summary.",
+                prompt=(
+                    f"User asked: '{query}'\n"
+                    f"Cycle metrics data from database: {json.dumps(cycle_data or {})}\n"
+                    f"If cycle metrics data is empty or null, inform the user concisely that no active cycle is configured for this team. "
+                    f"Otherwise provide a friendly 1-2 sentence engineering sprint velocity summary."
+                ),
                 system_instruction="You are Linear Ask, an ultra-fast engineering project assistant."
             )
             if llm_summary:
                 summary = llm_summary.strip()
 
-            for word in summary.split(" "):
+            sub_tokens = re.findall(r'\S+|\n+|\s+', summary)
+            for tok in sub_tokens:
                 if request and await request.is_disconnected():
                     return
-                yield f"event: token\ndata: {json.dumps({'text': word + ' '})}\n\n"
-                await asyncio.sleep(0.01)
+                yield f"event: token\ndata: {json.dumps({'text': tok})}\n\n"
+                await asyncio.sleep(0.015)
 
         # Scenario B: Mutating status update request (Problem Set 7 - interrupt confirmation)
         elif is_mutation:
@@ -248,11 +263,12 @@ class LinearAskAgent:
             if llm_summary:
                 summary = llm_summary.strip()
 
-            for word in summary.split(" "):
+            sub_tokens = re.findall(r'\S+|\n+|\s+', summary)
+            for tok in sub_tokens:
                 if request and await request.is_disconnected():
                     return
-                yield f"event: token\ndata: {json.dumps({'text': word + ' '})}\n\n"
-                await asyncio.sleep(0.01)
+                yield f"event: token\ndata: {json.dumps({'text': tok})}\n\n"
+                await asyncio.sleep(0.015)
 
         # Scenario D: Elite Out-of-the-Box Engineering Copilot (General Chat, Architecture, Strategy, Code, Brainstorming)
         else:
@@ -270,26 +286,36 @@ class LinearAskAgent:
                 full_prompt = f"{history_prompt}User: {query}\nAssistant:" if history_prompt else query
 
                 for chunk in stream_llm_completion(prompt=full_prompt, system_instruction=COPILOT_SYSTEM_PROMPT):
-                    if request and await request.is_disconnected():
-                        return
+                    if not chunk:
+                        continue
                     streamed_any = True
-                    yield f"event: token\ndata: {json.dumps({'text': chunk})}\n\n"
-                    await asyncio.sleep(0.005)
+                    # Smooth sub-token streaming: pacing words smoothly to client
+                    sub_tokens = re.findall(r'\S+|\n+|\s+', chunk)
+                    for tok in sub_tokens:
+                        if request and await request.is_disconnected():
+                            return
+                        yield f"event: token\ndata: {json.dumps({'text': tok})}\n\n"
+                        await asyncio.sleep(0.015)
             except Exception:
                 streamed_any = False
 
             # If Gemini streaming was not active or produced no chunks (e.g. offline/test env)
             if not streamed_any:
-                fallback = (
-                    f"I'm your engineering and product copilot. Regarding '{query.strip()}': "
-                    f"we should prioritize rapid velocity, clean architectural boundaries, and measurable outcomes. "
-                    f"Let's dive into the specifics or discuss the implementation approach."
-                )
-                for word in fallback.split(" "):
+                if any(w in q_lower for w in ("hello", "hi", "hey", "greetings")):
+                    fallback = "Hey there! I'm your workspace engineering copilot. I can help with system architecture, API design, sprint planning, and code problem-solving. What are you working on?"
+                elif any(w in q_lower for w in ("task", "perform", "can you do", "capabilities", "help")):
+                    fallback = "I'm equipped to assist with technical design & architecture, reviewing code patterns, outlining API specs, sprint strategy & task breakdown, and workspace tracking. Let me know what you'd like to work on!"
+                else:
+                    fallback = (
+                        f"Understood. For '{query.strip()}', let's focus on high leverage, clean interfaces, and rapid execution. "
+                        f"Tell me more about your specific requirements or trade-offs you want to explore."
+                    )
+                fallback_tokens = re.findall(r'\S+|\n+|\s+', fallback)
+                for tok in fallback_tokens:
                     if request and await request.is_disconnected():
                         return
-                    yield f"event: token\ndata: {json.dumps({'text': word + ' '})}\n\n"
-                    await asyncio.sleep(0.01)
+                    yield f"event: token\ndata: {json.dumps({'text': tok})}\n\n"
+                    await asyncio.sleep(0.015)
 
         # 3. Terminal completion event
         yield f"event: done\ndata: {json.dumps({'status': 'finished'})}\n\n"
