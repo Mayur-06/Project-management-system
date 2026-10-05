@@ -142,12 +142,12 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   };
 
   const handleDeleteIssue = async () => {
-    if (!window.confirm(`Are you sure you want to permanently delete ${issue.identifier}: "${issue.title}"? This cannot be undone.`)) {
+    if (!window.confirm(`Are you sure you want to delete ${issue.identifier}: "${issue.title}"?`)) {
       return;
     }
     setIsDeleting(true);
     try {
-      const ok = await api.deleteIssue(issue.id, true);
+      const ok = await api.deleteIssue(issue.id, false);
       if (ok) {
         window.dispatchEvent(new CustomEvent('issueDeleted', { detail: issue.id }));
         onClose();

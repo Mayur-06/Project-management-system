@@ -563,12 +563,14 @@ class Phase3Service:
         cls._verify_project_access(milestone["project_id"], user_id, db)
 
         update_dict = {}
-        if data.name is not None:
-            update_dict["name"] = data.name
-        if data.target_date is not None:
-            update_dict["target_date"] = data.target_date.isoformat()
-        if data.completed_at is not None:
-            update_dict["completed_at"] = data.completed_at.isoformat()
+        dumped = data.model_dump(exclude_unset=True)
+        for field, val in dumped.items():
+            if val is None:
+                update_dict[field] = None
+            elif isinstance(val, (datetime, date)):
+                update_dict[field] = val.isoformat()
+            else:
+                update_dict[field] = val
 
         if not update_dict:
             return MilestoneResponse(**milestone)
@@ -640,6 +642,21 @@ class Phase3Service:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
         issue = i_res.data[0]
         cls._verify_team_access(issue["team_id"], user_id, db)
+
+        # Validate that target_state_id belongs to this issue's team
+        st_check = (
+            db.table("workflow_states")
+            .select("id")
+            .eq("id", data.target_state_id)
+            .eq("team_id", issue["team_id"])
+            .limit(1)
+            .execute()
+        )
+        if not st_check.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Target workflow state does not belong to this team",
+            )
 
         # Update to target state, assign metadata, clear snooze
         now_iso = datetime.now(timezone.utc).isoformat()

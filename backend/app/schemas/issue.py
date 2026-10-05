@@ -16,11 +16,11 @@ class IssueCreate(BaseModel):
     team_id: Optional[str] = None
     team_key: Optional[str] = None
     source_team_id: Optional[str] = None
-    title: str = Field(..., max_length=500)
+    title: str = Field(..., min_length=1, max_length=500)
     description_json: Optional[Dict[str, Any]] = None
     description_text: Optional[str] = None
     priority: IssuePriority = IssuePriority.NONE
-    estimate: Optional[int] = None
+    estimate: Optional[int] = Field(None, ge=0)
     state_id: Optional[str] = None
     assignee_id: Optional[str] = None
     project_id: Optional[str] = None
@@ -31,15 +31,16 @@ class IssueCreate(BaseModel):
 
 
 class IssueUpdate(BaseModel):
-    title: Optional[str] = Field(None, max_length=500)
+    title: Optional[str] = Field(None, min_length=1, max_length=500)
     description_json: Optional[Dict[str, Any]] = None
     description_text: Optional[str] = None
     priority: Optional[IssuePriority] = None
-    estimate: Optional[int] = None
+    estimate: Optional[int] = Field(None, ge=0)
     state_id: Optional[str] = None
     assignee_id: Optional[str] = None
     project_id: Optional[str] = None
     cycle_id: Optional[str] = None
+    parent_id: Optional[str] = None
     due_date: Optional[date] = None
     snoozed_until: Optional[datetime] = None
     completed_at: Optional[datetime] = None

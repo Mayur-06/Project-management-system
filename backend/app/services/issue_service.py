@@ -1,6 +1,6 @@
 import json
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 from fastapi import HTTPException, status
 from supabase import Client
 
@@ -69,7 +69,18 @@ class IssueService:
     def _verify_issue_access(issue_id_or_identifier: str, user_id: str, db: Client) -> dict:
         query = db.table("issues").select("*")
         if "-" in issue_id_or_identifier and not len(issue_id_or_identifier) == 36:
-            query = query.eq("identifier", issue_id_or_identifier)
+            # Scope identifier lookup to user's member organizations to eliminate cross-tenant collision (H-7)
+            mem_orgs = (
+                db.table("workspace_members")
+                .select("organization_id")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            org_ids = [m["organization_id"] for m in (mem_orgs.data or []) if m.get("organization_id")]
+            if org_ids:
+                query = query.eq("identifier", issue_id_or_identifier).in_("organization_id", org_ids)
+            else:
+                query = query.eq("identifier", issue_id_or_identifier)
         else:
             query = query.eq("id", issue_id_or_identifier)
         
@@ -375,11 +386,16 @@ class IssueService:
 
         update_dict = {}
         changes = {}
-        for field, val in data.model_dump(exclude_unset=True).items():
+        dumped = data.model_dump(exclude_unset=True)
+        for field, val in dumped.items():
             if field in ("expected_version", "client_session_id"):
                 continue
-            if val is not None:
-                if isinstance(val, (datetime, datetime)):
+            if val is None:
+                update_dict[field] = None
+                if current_issue.get(field) is not None:
+                    changes[field] = {"old": current_issue.get(field), "new": None}
+            else:
+                if isinstance(val, (datetime, date)):
                     val_str = val.isoformat()
                 elif hasattr(val, "value"):
                     val_str = val.value
@@ -394,9 +410,20 @@ class IssueService:
         if data.client_session_id:
             update_dict["last_modified_by_session"] = data.client_session_id
 
-        res = db.table("issues").update(update_dict).eq("id", issue_id).execute()
+        # Atomic OCC update: predicate on both id and expected version
+        res = db.table("issues").update(update_dict).eq("id", issue_id).eq("version", data.expected_version).execute()
         if not res.data:
-            raise HTTPException(status_code=500, detail="Failed to update issue")
+            # Re-read to provide fresh state on concurrent conflict
+            fresh = db.table("issues").select("*").eq("id", issue_id).limit(1).execute()
+            fresh_issue = fresh.data[0] if fresh.data else current_issue
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": "Concurrent edit conflict detected. The issue has been modified by another collaborator.",
+                    "current_version": fresh_issue.get("version"),
+                    "current_state": fresh_issue,
+                }
+            )
         updated = res.data[0]
 
         if changes:
@@ -430,6 +457,21 @@ class IssueService:
         now_iso = datetime.now(timezone.utc).isoformat()
 
         if hard:
+            # Only organization admin can permanently hard-delete an issue
+            mem = (
+                db.table("workspace_members")
+                .select("role")
+                .eq("organization_id", current_issue["organization_id"])
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            if not mem.data or mem.data[0].get("role") != "admin":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only organization admins can permanently hard-delete an issue",
+                )
+
             try:
                 sub_res = db.table("issues").select("id").eq("parent_id", issue_id).execute()
                 sub_ids = [s["id"] for s in (sub_res.data or [])]
@@ -441,7 +483,8 @@ class IssueService:
             try:
                 db.table("issue_comments").delete().eq("issue_id", issue_id).execute()
                 db.table("issue_attachments").delete().eq("issue_id", issue_id).execute()
-                db.table("activity_logs").delete().eq("issue_id", issue_id).execute()
+                # Retain audit log records by detaching issue_id rather than wiping historical evidence
+                db.table("activity_logs").update({"issue_id": None}).eq("issue_id", issue_id).execute()
             except Exception:
                 pass
 
@@ -488,9 +531,11 @@ class IssueService:
         count = 0
         now_iso = datetime.now(timezone.utc).isoformat()
         for item in data.items:
+            current_issue = cls._verify_issue_access(item.issue_id, user_id, db)
             payload = {
                 "state_id": item.state_id,
                 "sort_order": item.position,
+                "version": current_issue.get("version", 1) + 1,
                 "updated_at": now_iso,
             }
             if data.client_session_id:
@@ -504,6 +549,7 @@ class IssueService:
         updated_ids = []
         now_iso = datetime.now(timezone.utc).isoformat()
         for item in data.updates:
+            current_issue = cls._verify_issue_access(item.issue_id, user_id, db)
             updates_dict = {}
             if item.state_id is not None:
                 updates_dict["state_id"] = item.state_id
@@ -515,10 +561,24 @@ class IssueService:
                 updates_dict["cycle_id"] = item.cycle_id
             
             if updates_dict:
+                updates_dict["version"] = current_issue.get("version", 1) + 1
                 updates_dict["updated_at"] = now_iso
                 if data.client_session_id:
                     updates_dict["last_modified_by_session"] = data.client_session_id
                 db.table("issues").update(updates_dict).eq("id", item.issue_id).execute()
+                
+                # Activity log
+                try:
+                    db.table("activity_logs").insert({
+                        "organization_id": current_issue["organization_id"],
+                        "issue_id": item.issue_id,
+                        "actor_id": user_id,
+                        "action": "issue_updated",
+                        "changes": updates_dict,
+                    }).execute()
+                except Exception:
+                    pass
+
                 updated_ids.append(item.issue_id)
         return updated_ids
 
@@ -606,12 +666,12 @@ class IssueService:
         actor_ids = list({log["actor_id"] for log in logs if log.get("actor_id")})
         users_map = {}
         if actor_ids:
-            try:
-                users_res = db.table("users").select("id, name, email, avatar_url").in_("id", actor_ids).execute()
-                for u in (users_res.data or []):
-                    users_map[u["id"]] = u
-            except Exception:
-                pass
+            for a_id in actor_ids:
+                try:
+                    email, name = WorkspaceService.resolve_user_info(a_id, db)
+                    users_map[a_id] = {"id": a_id, "name": name, "email": email}
+                except Exception:
+                    users_map[a_id] = {"id": a_id, "name": "Workspace Member"}
 
         results = []
         for log in logs:

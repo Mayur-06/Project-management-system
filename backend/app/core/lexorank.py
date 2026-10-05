@@ -55,8 +55,8 @@ def _rank_before(next_rank: str) -> str:
         new_val = first_val // 2
         return _format_rank(_val_to_char(new_val) + inner[1:])
     else:
-        # Prepend '0'
-        return _format_rank("0" + inner)
+        # Bisect between base "0|000000:" and next_rank to keep length compact (M-14)
+        return _rank_between("0|000000:", next_rank)
 
 
 def _rank_after(prev_rank: str) -> str:
@@ -76,6 +76,10 @@ def _rank_after(prev_rank: str) -> str:
 def _rank_between(prev_rank: str, next_rank: str) -> str:
     prev_inner = _clean_rank(prev_rank)
     next_inner = _clean_rank(next_rank)
+
+    # Inverted arguments guard (M-14)
+    if prev_inner > next_inner:
+        prev_inner, next_inner = next_inner, prev_inner
 
     max_len = max(len(prev_inner), len(next_inner)) + 2
     p_padded = prev_inner.ljust(max_len, "0")

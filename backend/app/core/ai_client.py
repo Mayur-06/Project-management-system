@@ -59,21 +59,10 @@ def get_embedding(text: str) -> List[float]:
                 else:
                     return emb_list + [0.0] * (768 - len(emb_list))
         except Exception as err:
-            logger.warning(f"Gemini embedding API call failed: {err}. Falling back to deterministic vector.")
+            logger.warning(f"Gemini embedding API call failed: {err}.")
+            return None
 
-    # High-speed fallback vector (768 dimensions)
-    # Generates a pseudo-semantic deterministic projection based on character hashing
-    vector = [0.0] * 768
-    for i, char in enumerate(text.lower()[:768]):
-        idx = (ord(char) * 17 + i * 31) % 768
-        vector[idx] += 1.0 / (1.0 + (i % 5))
-    # Normalize
-    norm = sum(v * v for v in vector) ** 0.5
-    if norm > 0:
-        vector = [v / norm for v in vector]
-    else:
-        vector[0] = 1.0
-    return vector
+    return None
 
 
 def generate_llm_completion(prompt: str, system_instruction: Optional[str] = None) -> Optional[str]:

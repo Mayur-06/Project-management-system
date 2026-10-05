@@ -153,9 +153,15 @@ export default function TriagePage() {
     // Run AI analysis
     const teamId = issue.team_id || currentTeam?.id;
     const orgId = issue.organization_id || currentTeam?.organization_id;
-    const analysis = await api.autoTriage(issue.title, issue.description_text || '', teamId, orgId);
-    setTriageAnalysis(analysis);
-    setIsAnalyzing(false);
+    try {
+      const analysis = await api.autoTriage(issue.title, issue.description_text || '', teamId, orgId);
+      setTriageAnalysis(analysis);
+    } catch (err) {
+      console.warn('Auto triage analysis error:', err);
+      setTriageAnalysis(null);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleSelectSent = (sentIssue: SentTriageIssue) => {

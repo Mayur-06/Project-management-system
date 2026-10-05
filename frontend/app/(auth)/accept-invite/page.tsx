@@ -57,23 +57,13 @@ export default function AcceptInvitePage() {
       const cleanEmail = email.trim();
       const cleanName = name.trim();
 
-      // Step A: Update user password via active Supabase session
-      let updatedViaSupabase = false;
-      try {
-        const { error: updateError } = await supabase.auth.updateUser({
-          password,
-          data: { full_name: cleanName },
-        });
-        if (!updateError) {
-          updatedViaSupabase = true;
-        }
-      } catch {
-        // Fall back to backend admin set-password
-      }
-
-      // Step B: Ensure password and email confirmation are updated via backend Admin API
-      if (!updatedViaSupabase && cleanEmail) {
-        await api.setPassword(cleanEmail, password, cleanName);
+      // Step A: Update user password via active Supabase session (established via invite link token)
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
+        data: { full_name: cleanName },
+      });
+      if (updateError) {
+        throw new Error(updateError.message || 'Failed to set password. Invitation link may be expired.');
       }
 
       // Step C: Sign in with the newly established password to ensure valid fresh JWT

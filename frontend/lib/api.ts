@@ -13,11 +13,55 @@ import {
   UserWorkspaceItem,
   UserWorkspacesResponse,
 } from '@/types';
-import { getClientSessionId } from '@/lib/supabase/client';
+import { getClientSessionId, supabase } from '@/lib/supabase/client';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+function getApiBase(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'localhost' && envUrl.includes('127.0.0.1')) {
+      return envUrl.replace('127.0.0.1', 'localhost');
+    }
+    if (window.location.hostname === '127.0.0.1' && envUrl.includes('localhost')) {
+      return envUrl.replace('localhost', '127.0.0.1');
+    }
+  }
+  return envUrl;
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
+
 async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
   let token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
+  // If token is missing from localStorage, check cookie
+  if (!token && typeof document !== 'undefined') {
+    const match = document.cookie.match(/(?:^|;\s*)sb-access-token=([^;]+)/);
+    if (match) token = match[1];
+  }
+
+  // Check if token was provided in custom headers
+  if (!token && options.headers) {
+    let authHeader = '';
+    if (options.headers instanceof Headers) {
+      authHeader = options.headers.get('Authorization') || '';
+    } else if (typeof options.headers === 'object') {
+      authHeader = (options.headers as any)['Authorization'] || '';
+    }
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.replace('Bearer ', '').trim();
+    }
+  }
+
+  // Fall back to active Supabase session if still missing
+  if (!token && typeof window !== 'undefined') {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) {
+        token = data.session.access_token;
+        localStorage.setItem('supabase_access_token', token);
+      }
+    } catch {}
+  }
+
   // If token is the old placeholder dev token, clear it
   if (token && token.includes('dev_sig')) {
     if (typeof window !== 'undefined') {
@@ -27,18 +71,30 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
     token = null;
   }
 
+  // If no auth token is present, skip sending unauthenticated requests to protected endpoints
+  if (!token) {
+    return null;
+  }
+
   const headers = {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    Authorization: `Bearer ${token}`,
     ...(options.headers || {}),
   };
 
   try {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    const response = await fetch(`${getApiBase()}${endpoint}`, {
       ...options,
       headers,
     });
     if (!response.ok) {
+      if (response.status === 401) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('supabase_access_token');
+          document.cookie = 'sb-access-token=; path=/; max-age=0';
+        }
+        throw new Error('Unauthorized');
+      }
       if (response.status === 404 && (!options.method || options.method === 'GET')) {
         return null;
       }
@@ -62,7 +118,7 @@ export const api = {
   // Auth
   async register(name: string, email: string, password: string): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/auth/signup`, {
+      const response = await fetch(`${getApiBase()}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, email, password }),
@@ -86,7 +142,7 @@ export const api = {
 
   async setPassword(email: string, password: string, name: string = ''): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/auth/set-password`, {
+      const response = await fetch(`${getApiBase()}/auth/set-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, name }),
@@ -98,8 +154,11 @@ export const api = {
   },
 
   // Workspaces & Teams
-  async getMyWorkspaces(): Promise<UserWorkspaceItem[]> {
-    const data = await fetchWithAuth<UserWorkspacesResponse>('/workspaces/me');
+  async getMyWorkspaces(authToken?: string): Promise<UserWorkspaceItem[]> {
+    const options: RequestInit = authToken
+      ? { headers: { Authorization: `Bearer ${authToken}` } }
+      : {};
+    const data = await fetchWithAuth<UserWorkspacesResponse>('/workspaces/me', options);
     return data?.workspaces || [];
   },
 
@@ -147,8 +206,11 @@ export const api = {
     });
   },
 
-  async getTeams(orgSlug: string): Promise<Team[]> {
-    const data = await fetchWithAuth<Team[]>(`/workspaces/${orgSlug}/teams`);
+  async getTeams(orgSlug: string, authToken?: string): Promise<Team[]> {
+    const options: RequestInit = authToken
+      ? { headers: { Authorization: `Bearer ${authToken}` } }
+      : {};
+    const data = await fetchWithAuth<Team[]>(`/workspaces/${orgSlug}/teams`, options);
     return data || [];
   },
 
@@ -215,11 +277,21 @@ export const api = {
     });
   },
 
-  async reorderIssue(id: string, state_id: string, sort_order: string): Promise<void> {
+  async reorderIssue(
+    id: string,
+    state_id?: string,
+    prev_position?: string,
+    next_position?: string
+  ): Promise<Issue | null> {
     const sessionId = getClientSessionId();
-    await fetchWithAuth(`/issues/${id}/reorder`, {
+    return await fetchWithAuth<Issue>(`/issues/${id}/reorder`, {
       method: 'PUT',
-      body: JSON.stringify({ state_id, sort_order, client_session_id: sessionId }),
+      body: JSON.stringify({
+        state_id,
+        prev_position,
+        next_position,
+        client_session_id: sessionId,
+      }),
     });
   },
 

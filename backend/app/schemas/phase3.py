@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.issue import IssueResponse
 
@@ -14,6 +14,12 @@ class CycleCreate(BaseModel):
     name: Optional[str] = None
     starts_at: datetime
     ends_at: datetime
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "CycleCreate":
+        if self.ends_at <= self.starts_at:
+            raise ValueError("ends_at must be strictly after starts_at")
+        return self
 
 
 class CycleResponse(BaseModel):
