@@ -290,7 +290,7 @@ export const api = {
   async checkDuplicates(
     title: string,
     organizationId?: string
-  ): Promise<{ duplicates: { id: string; title: string; similarity: number }[] }> {
+  ): Promise<{ duplicates: { id: string; title: string; similarity: number; identifier?: string }[] }> {
     const data = await fetchWithAuth<any>(
       `/ai/duplicates/check`,
       {
@@ -305,6 +305,7 @@ export const api = {
     return {
       duplicates: rawMatches.map((m: any) => ({
         id: m.issue_id || m.id,
+        identifier: m.identifier,
         title: m.title,
         similarity: m.similarity,
       })),
@@ -312,18 +313,79 @@ export const api = {
   },
 
   // AI Auto-Triage
-  async autoTriage(title: string, description: string): Promise<TriageOutput | null> {
-    return await fetchWithAuth<TriageOutput>(`/ai/triage/classify`, {
+  async autoTriage(
+    title: string,
+    description: string,
+    teamId?: string,
+    organizationId?: string
+  ): Promise<TriageOutput | null> {
+    const data = await fetchWithAuth<any>(`/ai/triage/classify`, {
       method: 'POST',
-      body: JSON.stringify({ title, description }),
+      body: JSON.stringify({
+        title,
+        description,
+        ...(teamId ? { team_id: teamId } : {}),
+        ...(organizationId ? { organization_id: organizationId } : {}),
+      }),
     });
+    if (!data) return null;
+    return {
+      suggested_team_key: data.suggested_team_key || 'ENG',
+      suggested_priority: data.suggested_priority || 'medium',
+      suggested_estimate: data.suggested_estimate ?? 3,
+      suggested_labels: data.suggested_labels || [],
+      suggested_assignee_id: data.suggested_assignee_id,
+      reasoning: data.reasoning || data.rationale || '',
+    };
+  },
+
+  // Triage Actions
+  async getTriageIssues(teamId: string): Promise<Issue[]> {
+    const data = await fetchWithAuth<Issue[]>(`/teams/${teamId}/triage`);
+    return data || [];
+  },
+
+  async acceptTriage(
+    issueId: string,
+    targetStateId: string,
+    assigneeId?: string,
+    cycleId?: string,
+    priority?: string,
+    estimate?: number
+  ): Promise<Issue | null> {
+    return await fetchWithAuth<Issue>(`/triage/${issueId}/accept`, {
+      method: 'POST',
+      body: JSON.stringify({
+        target_state_id: targetStateId,
+        assignee_id: assigneeId,
+        cycle_id: cycleId,
+        priority: priority,
+        estimate: estimate,
+      }),
+    });
+  },
+
+  async snoozeTriage(issueId: string, snoozedUntil: string): Promise<boolean> {
+    const res = await fetchWithAuth<any>(`/triage/${issueId}/snooze`, {
+      method: 'POST',
+      body: JSON.stringify({ snoozed_until: snoozedUntil }),
+    });
+    return !!res;
+  },
+
+  async declineTriage(issueId: string, reason: string): Promise<boolean> {
+    const res = await fetchWithAuth<any>(`/triage/${issueId}/decline`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+    return !!res;
   },
 
   // AI Sub-task Breakdown
   async startBreakdown(
     issueId: string,
     threadId?: string
-  ): Promise<{ thread_id: string; proposed_subtasks?: any[]; proposed_tasks?: string[] } | null> {
+  ): Promise<{ thread_id: string; prdspec?: string; proposed_subtasks?: any[]; proposed_tasks?: string[] } | null> {
     const res = await fetchWithAuth<any>(`/ai/breakdown/start`, {
       method: 'POST',
       body: JSON.stringify({ issue_id: issueId, thread_id: threadId }),
@@ -332,6 +394,7 @@ export const api = {
     const proposed = res.proposed_subtasks || res.proposed_tasks || [];
     return {
       thread_id: res.thread_id,
+      prdspec: res.prdspec,
       proposed_subtasks: proposed,
       proposed_tasks: proposed.map((p: any) => (typeof p === 'string' ? p : p.title)),
     };
@@ -391,6 +454,69 @@ export const api = {
       return response.ok;
     } catch {
       return false;
+    }
+  },
+
+  // AI Chat & ReAct Agent
+  async confirmChatAction(payload: {
+    action: string;
+    issue_id: string;
+    target_state_id?: string;
+    target_assignee_id?: string;
+  }): Promise<{ status: string; action: string; issue_id: string; message: string; result?: any } | null> {
+    return await fetchWithAuth(`/ai/chat/action/confirm`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async streamChat(
+    payload: { organization_id: string; messages: { role: string; content: string }[] },
+    onEvent: (event: { type: string; data: any }) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
+    const response = await fetch(`${API_BASE}/ai/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal,
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Failed to stream chat: ${response.statusText}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      let currentEvent = 'message';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('event:')) {
+          currentEvent = trimmed.replace('event:', '').trim();
+        } else if (trimmed.startsWith('data:')) {
+          const jsonStr = trimmed.replace('data:', '').trim();
+          try {
+            const parsed = JSON.parse(jsonStr);
+            onEvent({ type: currentEvent, data: parsed });
+          } catch {
+            onEvent({ type: currentEvent, data: jsonStr });
+          }
+        }
+      }
     }
   },
 };

@@ -133,6 +133,40 @@ def test_triage_classification(client, mock_db):
     assert data["suggested_estimate"] == 5
     assert "critical" in data["suggested_labels"]
     assert data["suggested_assignee_id"] == MOCK_USER_ID
+    assert "reasoning" in data
+    assert data["suggested_team_key"] == "ENG"
+
+
+def test_triage_classification_omitted_team_and_org(client, mock_db):
+    """Test triage classification works even when client omits team_id and organization_id."""
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "team_members":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"team_id": MOCK_TEAM_ID}]
+            )
+            mock_t.select().eq().execute.return_value = MagicMock(
+                data=[{"user_id": MOCK_USER_ID}]
+            )
+        elif table_name == "teams":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": MOCK_TEAM_ID, "key": "ENG", "organization_id": MOCK_ORG_ID}]
+            )
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    payload = {
+        "title": "High memory leak on worker processes",
+        "description": "Node process crashes every 30 minutes due to memory",
+    }
+    response = client.post("/api/v1/ai/triage/classify", json=payload)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["suggested_priority"] == "urgent"
+    assert data["suggested_estimate"] == 5
+    assert data["suggested_team_key"] == "ENG"
+    assert "reasoning" in data
 
 
 # ==============================================================================
@@ -211,3 +245,46 @@ def test_chat_sse_stream(client):
     assert "event: tool_start" in body
     assert "event: token" in body
     assert "event: done" in body
+
+
+def test_confirm_chat_action_update_status(client, mock_db, monkeypatch):
+    scoped_client_mock = MagicMock()
+    scoped_client_mock.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"id": MOCK_ISSUE_ID, "state_id": MOCK_STATE_ID_1}]
+    )
+
+    import app.agents.tools.workspace_tools as wt
+    monkeypatch.setattr(wt, "get_user_scoped_client", lambda jwt: scoped_client_mock)
+
+    payload = {
+        "action": "update_issue_status",
+        "issue_id": MOCK_ISSUE_ID,
+        "target_state_id": MOCK_STATE_ID_1,
+    }
+    response = client.post("/api/v1/ai/chat/action/confirm", json=payload)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["action"] == "update_issue_status"
+    assert data["issue_id"] == MOCK_ISSUE_ID
+
+
+def test_confirm_chat_action_assign(client, mock_db, monkeypatch):
+    scoped_client_mock = MagicMock()
+    scoped_client_mock.table.return_value.update.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"id": MOCK_ISSUE_ID, "assignee_id": MOCK_USER_ID}]
+    )
+
+    import app.agents.tools.workspace_tools as wt
+    monkeypatch.setattr(wt, "get_user_scoped_client", lambda jwt: scoped_client_mock)
+
+    payload = {
+        "action": "assign_issue",
+        "issue_id": MOCK_ISSUE_ID,
+        "target_assignee_id": MOCK_USER_ID,
+    }
+    response = client.post("/api/v1/ai/chat/action/confirm", json=payload)
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["action"] == "assign_issue"

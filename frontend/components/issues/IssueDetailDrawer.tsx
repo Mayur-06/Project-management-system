@@ -16,11 +16,21 @@ import {
   Upload,
   FileText,
   Download,
+  Plus,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User } from '@/types';
 import { api } from '@/lib/api';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
+
+interface ProposedSubtaskItem {
+  title: string;
+  description?: string;
+  estimate?: number;
+  priority?: IssuePriority;
+}
 
 interface IssueDetailDrawerProps {
   issue: Issue | null;
@@ -50,8 +60,11 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   // AI Spec & Subtask breakdown state
   const [isBreakingDown, setIsBreakingDown] = useState(false);
   const [breakdownThreadId, setBreakdownThreadId] = useState<string | null>(null);
-  const [proposedSubtasks, setProposedSubtasks] = useState<string[]>([]);
+  const [breakdownPrdSpec, setBreakdownPrdSpec] = useState<string | null>(null);
+  const [showPrdSpec, setShowPrdSpec] = useState(false);
+  const [proposedSubtasks, setProposedSubtasks] = useState<ProposedSubtaskItem[]>([]);
   const [breakdownComplete, setBreakdownComplete] = useState(false);
+  const [customDraftTitle, setCustomDraftTitle] = useState('');
 
   // Manual subtask creation state
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
@@ -84,7 +97,10 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       api.getTeamMembers(issue.team_id).then(setTeamMembers).catch(() => setTeamMembers([]));
       setProposedSubtasks([]);
       setBreakdownThreadId(null);
+      setBreakdownPrdSpec(null);
+      setShowPrdSpec(false);
       setBreakdownComplete(false);
+      setCustomDraftTitle('');
       setUploadError(null);
       setNewSubtaskTitle('');
       setNewSubtaskPriority('none');
@@ -186,40 +202,127 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   const handleStartAIBreakdown = async () => {
     setIsBreakingDown(true);
     setActiveTab('ai_breakdown');
+    setBreakdownComplete(false);
 
-    const res = await api.startBreakdown(issue.id);
-    if (res?.thread_id) {
-      setBreakdownThreadId(res.thread_id);
-    }
-    if (res?.proposed_tasks && res.proposed_tasks.length > 0) {
-      setProposedSubtasks(res.proposed_tasks);
-    } else if (res?.proposed_subtasks && res.proposed_subtasks.length > 0) {
-      setProposedSubtasks(res.proposed_subtasks.map((p: any) => typeof p === 'string' ? p : p.title));
-    } else {
+    try {
+      const res = await api.startBreakdown(issue.id);
+      if (res?.thread_id) {
+        setBreakdownThreadId(res.thread_id);
+      }
+      if (res?.prdspec) {
+        setBreakdownPrdSpec(res.prdspec);
+      }
+      if (res?.proposed_subtasks && res.proposed_subtasks.length > 0) {
+        setProposedSubtasks(
+          res.proposed_subtasks.map((p: any) => ({
+            title: typeof p === 'string' ? p : p.title || 'Task',
+            description: p.description || '',
+            estimate: p.estimate ?? 3,
+            priority: (p.priority || 'medium') as IssuePriority,
+          }))
+        );
+      } else if (res?.proposed_tasks && res.proposed_tasks.length > 0) {
+        setProposedSubtasks(
+          res.proposed_tasks.map((p: any) => ({
+            title: typeof p === 'string' ? p : p.title || 'Task',
+            description: p.description || '',
+            estimate: p.estimate ?? 3,
+            priority: (p.priority || 'medium') as IssuePriority,
+          }))
+        );
+      } else {
+        setProposedSubtasks([
+          {
+            title: `Configure backend endpoints for ${issue.identifier}`,
+            description: 'Set up routes, validation schemas, and database queries.',
+            estimate: 3,
+            priority: 'high',
+          },
+          {
+            title: `Implement automated integration tests`,
+            description: 'Write test cases verifying positive and error conditions.',
+            estimate: 2,
+            priority: 'medium',
+          },
+          {
+            title: `Add client UI updates and error boundaries`,
+            description: 'Wire frontend forms, optimistic mutations, and alert toasts.',
+            estimate: 3,
+            priority: 'medium',
+          },
+        ]);
+      }
+    } catch {
       setProposedSubtasks([
-        `Configure backend endpoints for ${issue.identifier}`,
-        `Implement automated integration tests`,
-        `Add client UI updates and error boundaries`,
+        {
+          title: `Technical implementation for ${issue.identifier}`,
+          estimate: 3,
+          priority: 'medium',
+        },
       ]);
+    } finally {
+      setIsBreakingDown(false);
     }
-    setIsBreakingDown(false);
+  };
+
+  const updateSubtaskTitle = (index: number, title: string) => {
+    setProposedSubtasks((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, title } : t))
+    );
+  };
+
+  const updateSubtaskEstimate = (index: number, estimate: number) => {
+    setProposedSubtasks((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, estimate } : t))
+    );
+  };
+
+  const updateSubtaskPriority = (index: number, priority: IssuePriority) => {
+    setProposedSubtasks((prev) =>
+      prev.map((t, i) => (i === index ? { ...t, priority } : t))
+    );
+  };
+
+  const removeProposedSubtask = (index: number) => {
+    setProposedSubtasks((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addCustomProposedSubtask = () => {
+    if (!customDraftTitle.trim()) return;
+    setProposedSubtasks((prev) => [
+      ...prev,
+      {
+        title: customDraftTitle.trim(),
+        estimate: 3,
+        priority: 'medium',
+      },
+    ]);
+    setCustomDraftTitle('');
   };
 
   const handleApproveSubtasks = async () => {
+    if (proposedSubtasks.length === 0) return;
     setBreakdownComplete(true);
 
     const existingTitles = new Set((issue.subtasks || []).map((s) => s.title.toLowerCase().trim()));
     const createdSubtasks: Issue[] = [];
 
+    const formattedPayload = proposedSubtasks.map((p) => ({
+      title: p.title,
+      description: p.description || '',
+      estimate: p.estimate || 3,
+      priority: p.priority || 'medium',
+    }));
+
     if (breakdownThreadId) {
-      const persisted: any = await api.resumeBreakdown(breakdownThreadId, proposedSubtasks);
+      const persisted: any = await api.resumeBreakdown(breakdownThreadId, formattedPayload);
       const createdIds: string[] = persisted?.created_subtask_ids || [];
 
-      proposedSubtasks.forEach((taskTitle, idx) => {
-        if (existingTitles.has(taskTitle.toLowerCase().trim())) {
+      proposedSubtasks.forEach((task, idx) => {
+        if (existingTitles.has(task.title.toLowerCase().trim())) {
           return;
         }
-        existingTitles.add(taskTitle.toLowerCase().trim());
+        existingTitles.add(task.title.toLowerCase().trim());
         const subIndex = (issue.subtasks?.length || 0) + createdSubtasks.length + 1;
         const subIssue: Issue = {
           id: createdIds[idx] || `iss_sub_${Date.now()}_${idx}`,
@@ -227,8 +330,9 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
           team_id: issue.team_id,
           number: (issue.number || 100) + subIndex,
           identifier: `${issue.identifier}-sub${subIndex}`,
-          title: taskTitle,
-          priority: 'medium' as IssuePriority,
+          title: task.title,
+          priority: task.priority || 'medium',
+          estimate: task.estimate,
           state_id: activeStates[0]?.id || issue.state_id,
           state: activeStates[0] || issue.state,
           creator_id: issue.creator_id,
@@ -242,11 +346,11 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
         window.dispatchEvent(new CustomEvent('issueCreated', { detail: subIssue }));
       });
     } else {
-      proposedSubtasks.forEach((taskTitle, idx) => {
-        if (existingTitles.has(taskTitle.toLowerCase().trim())) {
+      proposedSubtasks.forEach((task, idx) => {
+        if (existingTitles.has(task.title.toLowerCase().trim())) {
           return;
         }
-        existingTitles.add(taskTitle.toLowerCase().trim());
+        existingTitles.add(task.title.toLowerCase().trim());
         const subIndex = (issue.subtasks?.length || 0) + createdSubtasks.length + 1;
         const subIssue: Issue = {
           id: `iss_sub_${Date.now()}_${idx}`,
@@ -254,8 +358,9 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
           team_id: issue.team_id,
           number: (issue.number || 100) + subIndex,
           identifier: `${issue.identifier}-sub${subIndex}`,
-          title: taskTitle,
-          priority: 'medium' as IssuePriority,
+          title: task.title,
+          priority: task.priority || 'medium',
+          estimate: task.estimate,
           state_id: activeStates[0]?.id || issue.state_id,
           state: activeStates[0] || issue.state,
           creator_id: issue.creator_id,
@@ -270,11 +375,13 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       });
     }
 
-    const updated = {
-      ...issue,
-      subtasks: [...(issue.subtasks || []), ...createdSubtasks],
-    };
-    onUpdateIssue(updated);
+    if (createdSubtasks.length > 0) {
+      const updated = {
+        ...issue,
+        subtasks: [...(issue.subtasks || []), ...createdSubtasks],
+      };
+      onUpdateIssue(updated);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -630,44 +737,167 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               )}
 
               {activeTab === 'ai_breakdown' && (
-                <div className="p-4 rounded bg-zinc-950 border border-zinc-800 space-y-4">
-                  <div className="flex items-center justify-between">
+                <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-4 font-sans">
+                  {/* Review Gate Header */}
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                     <div className="flex items-center gap-2 text-xs font-semibold text-white">
-                      <Sparkles className="w-4 h-4 text-zinc-300" />
-                      <span>Review Gate</span>
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>Human-in-the-Loop Review Gate</span>
+                      <span className="text-[10px] bg-zinc-900 text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-800 font-mono">
+                        {proposedSubtasks.length} {proposedSubtasks.length === 1 ? 'task' : 'tasks'}
+                      </span>
                     </div>
-                    {isBreakingDown && <Loader2 className="w-4 h-4 text-white animate-spin" />}
+                    {isBreakingDown ? (
+                      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                        <Loader2 className="w-3.5 h-3.5 text-white animate-spin" />
+                        <span>Decomposing...</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={handleStartAIBreakdown}
+                        className="text-[11px] text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        Re-generate
+                      </button>
+                    )}
                   </div>
 
+                  {/* PRD Spec Collapsible */}
+                  {breakdownPrdSpec && (
+                    <div className="rounded-lg border border-zinc-800/80 bg-black/60 overflow-hidden">
+                      <button
+                        onClick={() => setShowPrdSpec(!showPrdSpec)}
+                        className="w-full px-3.5 py-2 flex items-center justify-between text-xs text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-3.5 h-3.5 text-amber-400/80" />
+                          <span className="font-medium">Technical Specification (PRD)</span>
+                        </div>
+                        {showPrdSpec ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      </button>
+                      {showPrdSpec && (
+                        <div className="px-3.5 py-3 border-t border-zinc-800/60 bg-zinc-950 text-xs text-zinc-300 font-mono whitespace-pre-wrap max-h-56 overflow-y-auto leading-relaxed">
+                          {breakdownPrdSpec}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Interactive Subtask Review Gate */}
                   {proposedSubtasks.length > 0 && !breakdownComplete && (
-                    <div className="space-y-2.5 animate-fade-in">
-                      <p className="text-xs text-zinc-300">
-                        Proposed sub-tasks generated by AI. Review before persisting:
-                      </p>
-                      <div className="space-y-1.5 pl-2">
+                    <div className="space-y-3 animate-fade-in">
+                      <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                        <span>Review and customize proposed subtasks before batch persisting:</span>
+                      </div>
+
+                      <div className="space-y-2">
                         {proposedSubtasks.map((task, idx) => (
-                          <div key={idx} className="flex items-center gap-2 text-xs text-white">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                            <span>{task}</span>
+                          <div
+                            key={idx}
+                            className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 transition-colors flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+                          >
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <span className="text-[10px] text-zinc-500 font-mono w-4 shrink-0 text-center">
+                                {idx + 1}.
+                              </span>
+                              <input
+                                type="text"
+                                value={task.title}
+                                onChange={(e) => updateSubtaskTitle(idx, e.target.value)}
+                                placeholder="Subtask title"
+                                className="flex-1 bg-transparent text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-b focus:border-white px-1 py-0.5"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto pl-6 sm:pl-0">
+                              {/* Estimate selector */}
+                              <select
+                                value={task.estimate ?? 3}
+                                onChange={(e) => updateSubtaskEstimate(idx, Number(e.target.value))}
+                                className="bg-zinc-800 text-[11px] text-zinc-300 rounded px-2 py-1 border border-zinc-700 focus:outline-none cursor-pointer"
+                              >
+                                <option value={1}>1 pt</option>
+                                <option value={2}>2 pts</option>
+                                <option value={3}>3 pts</option>
+                                <option value={5}>5 pts</option>
+                                <option value={8}>8 pts</option>
+                              </select>
+
+                              {/* Priority selector */}
+                              <select
+                                value={task.priority ?? 'medium'}
+                                onChange={(e) => updateSubtaskPriority(idx, e.target.value as IssuePriority)}
+                                className="bg-zinc-800 text-[11px] text-zinc-300 rounded px-2 py-1 border border-zinc-700 focus:outline-none cursor-pointer capitalize"
+                              >
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                              </select>
+
+                              {/* Remove task */}
+                              <button
+                                onClick={() => removeProposedSubtask(idx)}
+                                title="Remove subtask"
+                                className="p-1 rounded text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
 
-                      <div className="pt-2 flex justify-end">
+                      {/* Add Custom Subtask Inline */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={customDraftTitle}
+                          onChange={(e) => setCustomDraftTitle(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && addCustomProposedSubtask()}
+                          placeholder="+ Add custom subtask to breakdown..."
+                          className="flex-1 bg-zinc-900/40 text-xs text-white placeholder-zinc-500 px-3 py-1.5 rounded-lg border border-dashed border-zinc-800 focus:border-white focus:outline-none"
+                        />
+                        <button
+                          onClick={addCustomProposedSubtask}
+                          disabled={!customDraftTitle.trim()}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 transition-colors cursor-pointer shrink-0"
+                        >
+                          Add
+                        </button>
+                      </div>
+
+                      {/* Approval CTA */}
+                      <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between">
+                        <span className="text-[11px] text-zinc-500">
+                          Resumes LangGraph execution to batch create issues
+                        </span>
                         <button
                           onClick={handleApproveSubtasks}
-                          className="px-4 py-1.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors shadow-xs cursor-pointer"
+                          className="px-4 py-2 rounded-lg text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors shadow-xs cursor-pointer flex items-center gap-1.5"
                         >
-                          Approve & Insert Sub-tasks
+                          <CheckCircle2 className="w-3.5 h-3.5 text-black" />
+                          <span>Approve & Batch Persist ({proposedSubtasks.length})</span>
                         </button>
                       </div>
                     </div>
                   )}
 
                   {breakdownComplete && (
-                    <div className="p-3 bg-zinc-900 border border-zinc-700 rounded text-xs text-white flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-white" />
-                      <span>Sub-tasks successfully created.</span>
+                    <div className="p-4 bg-zinc-900/60 border border-emerald-900/50 rounded-xl text-xs text-white space-y-2 animate-fade-in">
+                      <div className="flex items-center gap-2 text-emerald-400 font-semibold">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Subtasks Approved & Persisted</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        Child subtasks have been created and linked to {issue.identifier}. You can view them in the subtasks checklist above.
+                      </p>
+                      <button
+                        onClick={handleStartAIBreakdown}
+                        className="mt-1 text-xs text-zinc-300 hover:text-white underline cursor-pointer"
+                      >
+                        Start another breakdown
+                      </button>
                     </div>
                   )}
                 </div>

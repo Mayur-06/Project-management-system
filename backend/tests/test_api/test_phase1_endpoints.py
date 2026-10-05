@@ -194,6 +194,10 @@ def test_list_team_members(client, mock_db):
         return mock_t
 
     mock_db.table.side_effect = mock_table
+    mock_admin_user = MagicMock()
+    mock_admin_user.user.email = "alex@acme.com"
+    mock_admin_user.user.user_metadata = {"full_name": "Alex Chen"}
+    mock_db.auth.admin.get_user_by_id.return_value = mock_admin_user
 
     response = client.get(f"/api/v1/teams/{MOCK_TEAM_ID}/members")
     assert response.status_code == status.HTTP_200_OK

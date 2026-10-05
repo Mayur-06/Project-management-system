@@ -65,18 +65,20 @@ class DuplicateCheckResponse(BaseModel):
 # ==============================================================================
 
 class TriageClassifyRequest(BaseModel):
-    organization_id: str
-    team_id: str
+    organization_id: Optional[str] = None
+    team_id: Optional[str] = None
     title: str = Field(..., min_length=5, max_length=500)
     description: Optional[str] = None
 
 
 class TriageClassifyResponse(BaseModel):
+    suggested_team_key: Optional[str] = None
     suggested_priority: str
     suggested_estimate: Optional[int] = None
     suggested_labels: List[str] = []
     suggested_assignee_id: Optional[str] = None
     rationale: str
+    reasoning: Optional[str] = None
 
 
 # ==============================================================================
@@ -151,3 +153,19 @@ class ChatStreamRequest(BaseModel):
     thread_id: Optional[str] = None
     organization_id: str
     messages: List[ChatMessage]
+
+
+class ChatActionConfirmRequest(BaseModel):
+    action: str
+    issue_id: str
+    target_state_id: Optional[str] = None
+    target_assignee_id: Optional[str] = None
+    client_session_id: Optional[str] = None
+
+
+class ChatActionConfirmResponse(BaseModel):
+    status: str
+    action: str
+    issue_id: str
+    message: str
+    result: Optional[Dict[str, Any]] = None

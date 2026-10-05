@@ -15,6 +15,7 @@ class IssuePriority(str, Enum):
 class IssueCreate(BaseModel):
     team_id: Optional[str] = None
     team_key: Optional[str] = None
+    source_team_id: Optional[str] = None
     title: str = Field(..., max_length=500)
     description_json: Optional[Dict[str, Any]] = None
     description_text: Optional[str] = None

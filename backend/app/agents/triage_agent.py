@@ -103,27 +103,35 @@ def llm_classify_node(state: TriageAgentState, config: Optional[RunnableConfig] 
     title_lower = state["title"].lower()
     desc_lower = (state.get("description") or "").lower()
     combined = f"{title_lower} {desc_lower}"
+    import re
+    def has_kw(keywords):
+        return any(re.search(rf"\b{re.escape(k)}\b", combined) for k in keywords)
 
-    if any(k in combined for k in ("crash", "blocker", "critical", "outage", "down")):
+    if has_kw(["crash", "crashes", "crashing", "blocker", "blockers", "critical", "outage", "outages", "down"]):
         priority = "urgent"
         estimate = 5
         labels = ["bug", "critical"]
         rationale = "Issue indicates severe service blockage or crash impact requiring immediate attention."
-    elif any(k in combined for k in ("slow", "performance", "lag", "latency", "memory")):
+    elif has_kw(["slow", "performance", "lag", "latency", "memory", "leak", "leaks"]):
         priority = "high"
         estimate = 3
         labels = ["performance"]
         rationale = "Performance degradation detected from reported symptoms."
-    elif any(k in combined for k in ("auth", "security", "permission", "leak")):
+    elif has_kw(["vulnerability", "breach", "exploit", "security", "unauthorized"]):
         priority = "high"
         estimate = 5
-        labels = ["security", "auth"]
-        rationale = "Security or access control consideration requiring senior triage."
-    elif any(k in combined for k in ("feature", "add", "implement", "create")):
+        labels = ["security"]
+        rationale = "Security consideration requiring senior triage."
+    elif has_kw(["feature", "add", "implement", "create", "support"]):
         priority = "medium"
         estimate = 5
         labels = ["feature"]
         rationale = "Standard product enhancement request categorized with median complexity."
+    elif has_kw(["auth", "oauth", "login", "permission", "permissions"]):
+        priority = "high"
+        estimate = 3
+        labels = ["auth"]
+        rationale = "Authentication or permission configuration task."
     else:
         priority = "low"
         estimate = 2
