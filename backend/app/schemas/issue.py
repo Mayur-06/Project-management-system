@@ -42,7 +42,6 @@ class IssueUpdate(BaseModel):
     cycle_id: Optional[str] = None
     parent_id: Optional[str] = None
     due_date: Optional[date] = None
-    snoozed_until: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None
     # Concurrency control & echo suppression
@@ -117,7 +116,6 @@ class IssueResponse(BaseModel):
     sort_order: str
     version: int
     due_date: Optional[date] = None
-    snoozed_until: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None
     last_modified_by_session: Optional[str] = None

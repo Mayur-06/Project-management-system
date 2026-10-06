@@ -131,7 +131,14 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 CREATE INDEX IF NOT EXISTS idx_issues_board_sort ON issues (team_id, state_id, sort_order) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_issues_org_id ON issues (organization_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_issues_assignee_id ON issues (assignee_id) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_issues_cycle_id ON issues (cycle_id) WHERE deleted_at IS NULL;
+DO $$ BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'issues' AND column_name = 'cycle_id'
+    ) THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_issues_cycle_id ON issues (cycle_id) WHERE deleted_at IS NULL';
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_issues_project_id ON issues (project_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_issues_parent_id ON issues (parent_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_issues_identifier ON issues (identifier);

@@ -65,8 +65,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     api.getWorkflowStates(selectedTeamId).then((res) => {
       if (isMounted && res && res.length > 0) {
         setTeamWorkflowStates(res);
-        const nonTriage = res.filter((s) => s.category !== 'triage');
-        const defaultSt = nonTriage.find((s) => s.is_default) || nonTriage[0] || res[0];
+        const defaultSt = res.find((s) => s.is_default) || res[0];
         if (defaultSt) {
           setStateId((prev) => prev || defaultSt.id);
         }
@@ -91,10 +90,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   }, [selectedTeamId, teamId, isOpen, states]);
 
   const isCrossTeam = Boolean(teamId && selectedTeamId && teamId !== selectedTeamId);
-  const targetTriageState = teamWorkflowStates.find((s) => s.category === 'triage');
-  const activeStates = isCrossTeam && targetTriageState
-    ? [targetTriageState]
-    : teamWorkflowStates.filter((s) => s.category !== 'triage');
+  const activeStates = teamWorkflowStates;
 
   useEffect(() => {
     if (users && users.length > 0 && selectedTeamId === teamId) {
@@ -102,11 +98,9 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     }
   }, [users, selectedTeamId, teamId]);
 
-  // Auto-route to triage state if cross-team; otherwise to default active state
+  // All issues route to default active state (no triage routing)
   useEffect(() => {
-    if (isCrossTeam && targetTriageState) {
-      setStateId(targetTriageState.id);
-    } else if (activeStates.length > 0) {
+    if (activeStates.length > 0) {
       const isCurrentValid = activeStates.some((s) => s.id === stateId);
       if (!isCurrentValid || !stateId) {
         const defaultState = activeStates.find((s) => s.is_default) || activeStates[0];
@@ -115,7 +109,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
         }
       }
     }
-  }, [isCrossTeam, targetTriageState, selectedTeamId, activeStates, stateId]);
+  }, [selectedTeamId, activeStates, stateId]);
 
   // Real-time debounced duplicate check
   const [duplicateMatches, setDuplicateMatches] = useState<
@@ -150,7 +144,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     setSubmitError(null);
     try {
       const resolvedTeamId = selectedTeamId || teamId || states[0]?.team_id;
-      const targetState = isCrossTeam && targetTriageState ? targetTriageState.id : (stateId || activeStates[0]?.id);
+      const targetState = stateId || activeStates[0]?.id;
       if (!targetState) {
         throw new Error('No workflow state available for selected team.');
       }
@@ -161,7 +155,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
         description_text: description,
         priority,
         state_id: targetState,
-        assignee_id: isCrossTeam ? undefined : (assigneeId || undefined),
+        assignee_id: assigneeId || undefined,
         estimate,
         labels: labels.filter((l) => selectedLabels.includes(l.id)),
       });
@@ -212,12 +206,6 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
             )}
             <span className="text-zinc-600">•</span>
             <span className="text-xs text-zinc-400 font-medium">New Issue</span>
-
-            {isCrossTeam && (
-              <span className="text-[10px] bg-amber-950/60 text-amber-300 border border-amber-800/80 px-2 py-0.5 rounded font-medium ml-1">
-                Cross-team → Triage
-              </span>
-            )}
           </div>
           <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 cursor-pointer">
             <X className="w-4 h-4" />

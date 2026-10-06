@@ -6,12 +6,11 @@
 The AI subsystem operates as an asynchronous, stateful multi-agent system built on **LangGraph** and **LangChain** integrated with **FastAPI**, **Supabase (pgvector + PostgreSQL 16)**, and **Next.js 15**. It moves beyond naive single-prompt pipelines by using cyclical state graphs, persistent session checkpointing, deterministic vector gating, and Human-in-the-Loop (HITL) approval boundaries.
 
 ### Multi-Agent System Topology
-The AI architecture comprises four specialized agents and pipelines:
+The AI architecture comprises three specialized agents and pipelines:
 
 1. **Lightweight Duplicate Detection Pipeline:** A deterministic vector-similarity pipeline that operates without Large Language Model (LLM) inference. It calculates embeddings during drafting and queries the vector database in sub-200ms to alert users of existing duplicates before ticket creation.
-2. **Workload-Aware Triage & Classification Agent:** An asynchronous LangGraph workflow executed upon issue submission. It evaluates the ticket's technical scope, inspects team capacity and active workloads, predicts Fibonacci complexity points, assigns appropriate priority, tags relevant taxonomy labels, and recommends optimal team assignment.
-3. **Specification Writer & Technical Breakdown Agent:** An interactive decomposition agent. When triggered on an epic or complex issue, it formulates a structured Product Requirement Document (PRD), decomposes the problem into atomic child subtasks, pauses execution at an interactive review gate via Human-in-the-Loop interruption, and commits approved child issues transactionally to the database upon user confirmation.
-4. **Linear Ask: ReAct Workspace Assistant:** A conversational assistant accessible via universal hotkeys (Cmd+J). Built as a ReAct (Reasoning + Acting) agent, it executes read and write operations across the workspace using authenticated tools, streams responses in real time over Server-Sent Events (SSE), and pauses for confirmation before executing state-mutating actions.
+2. **Specification Writer & Technical Breakdown Agent:** An interactive decomposition agent. When triggered on an epic or complex issue, it formulates a structured Product Requirement Document (PRD), decomposes the problem into atomic child subtasks, pauses execution at an interactive review gate via Human-in-the-Loop interruption, and commits approved child issues transactionally to the database upon user confirmation.
+3. **Linear Ask: ReAct Workspace Assistant:** A conversational assistant accessible via universal hotkeys (Cmd+J). Built as a ReAct (Reasoning + Acting) agent, it executes read and write operations across the workspace using authenticated tools, streams responses in real time over Server-Sent Events (SSE), and pauses for confirmation before executing state-mutating actions.
 
 ---
 
@@ -23,27 +22,19 @@ The AI architecture comprises four specialized agents and pipelines:
 * **Pure Vector Similarity:** Uses cosine distance comparisons against high-dimensional embeddings in PostgreSQL with zero LLM token consumption, ensuring near-instantaneous responses.
 * **Contextual Similarity Card:** Renders preview cards of matching issues in the user interface, showing current status, assignee, and direct navigation links.
 
-### B. Intelligent Auto-Triage & Workload Balancing
-* **Cross-Team Triage Trigger Invariant:** The Triage workflow is activated strictly for cross-team requests (when a member of Team A submits an issue targeting Team B). Same-team issues bypass triage directly into active backlog/unstarted states.
-* **Automated Ticket Classification:** Analyzes issue title and description to categorize the incoming request into functional technical domains.
-* **Objective Priority Scoring:** Evaluates reported symptoms, impact, and user descriptions to recommend appropriate priority tiers (Urgent, High, Medium, Low).
-* **Fibonacci Story Point Estimation:** Analyzes technical complexity to suggest realistic point estimates using standard Fibonacci sequences (1, 2, 3, 5, 8).
-* **Taxonomy Label Recommendation:** Automatically assigns relevant tags (e.g., `bug`, `performance`, `security`, `frontend`, `auth`) based on semantic topic extraction.
-* **Workload-Aware Assignee Recommendation:** Inspects active issue commitments, open issue counts, and historical domain ownership of recipient team members to suggest assignees with available bandwidth rather than overloading individual contributors.
-
-### C. Interactive Spec Writer & Subtask Breakdown
+### B. Interactive Spec Writer & Subtask Breakdown
 * **Automated Requirements Expansion:** Expands brief issue summaries into comprehensive technical specifications, outlining prerequisites, architectural considerations, and acceptance criteria.
 * **Granular Subtask Decomposition:** Breaks down broad initiatives into discrete, independently executable child tasks with suggested sizing.
 * **Interactive Human-in-the-Loop Review Gate:** Rather than directly writing to the database, the agent suspends execution and delivers proposed tasks to a review modal where engineers can rename, reorder, delete, or add tasks before finalizing.
 * **Atomic Batch Creation:** Upon engineer approval, resumes graph execution to atomically persist all validated child issues in a single database transaction.
 
-### D. "Linear Ask" Workspace Conversational Assistant
+### C. "Linear Ask" Workspace Conversational Assistant
 * **Natural Language Workspace Discovery:** Allows team members to query workspace state in natural language (e.g., "What critical bugs are blocking the upcoming release?" or "Summarize recently completed issues").
 * **Tool-Augmented Reasoning:** Dynamically invokes domain tools to retrieve issue details, search documentation, and navigate organizational roadmaps.
 * **Streaming Server-Sent Events (SSE):** Delivers incremental response tokens directly to the frontend interface for real-time readability.
 * **Human-in-the-Loop Mutating Safeguards:** When asked to alter issue states, close tickets, or adjust assignments, the agent pauses execution and requests explicit user confirmation before committing mutations.
 
-### E. Multi-Tenant Memory & Checkpoint Persistence
+### D. Multi-Tenant Memory & Checkpoint Persistence
 * **Stateful Thread Management:** Retains conversation context and intermediate reasoning steps across multi-turn interactions.
 * **Direct Database Checkpointing:** Persists agent execution states in PostgreSQL, enabling full replayability, audit verification, and pause-resume lifecycles across distributed server restarts.
 * **Cryptographically Isolated Memory:** Enforces multi-tenant namespace partitioning across all conversation threads, preventing cross-organization or cross-user memory leakage.
@@ -85,7 +76,7 @@ The triage workflow operates as a directed acyclic state graph consisting of fou
    * Bundles all predictions and assignee recommendations into a verified response payload.
    * Stores suggestions in the issue record or returns them directly to the triage inbox client.
 
-### C. Technical Breakdown Agent State Machine Specification
+### B. Technical Breakdown Agent State Machine Specification
 The specification decomposition agent uses a three-node pipeline designed to cleanly support Human-in-the-Loop interruptions:
 
 > **Execution Pipeline & Interruption Boundary:**
@@ -113,7 +104,7 @@ The specification decomposition agent uses a three-node pipeline designed to cle
      * Inserts records into the issues table with `parent_id` linked to the parent issue.
    * Emits a Realtime broadcast event notifying all team members of the newly created subtasks.
 
-### D. "Linear Ask" ReAct Agent Specification
+### C. "Linear Ask" ReAct Agent Specification
 The conversational workspace assistant operates as an iterative ReAct agent:
 
 * **Authenticated Tool Bindings:** The agent is provisioned with discrete, scoped tools:
@@ -170,7 +161,6 @@ The conversational workspace assistant operates as an iterative ReAct agent:
 * **The Architectural Solution:**
   1. A decoupled two-tier detection architecture is implemented:
      * **Drafting Tier (Pure Vector Math):** While the user is typing, input is debounced by 600ms and requires a minimum length of 15 characters. The title is converted into a 768-dimension vector and submitted directly to PostgreSQL via a vector search RPC function. The database returns nearest cosine neighbors in under 150ms. Zero LLM tokens are consumed.
-     * **Triage Tier (Full LLM Reasoning):** The heavier LLM triage agent is invoked only after the user explicitly submits the ticket or clicks an "Auto-Triage" button.
   2. This guarantees sub-200ms real-time feedback during typing with minimal cloud operational expenditure.
 
 ---

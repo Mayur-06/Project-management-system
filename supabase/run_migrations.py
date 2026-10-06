@@ -37,16 +37,32 @@ conn = psycopg2.connect(
 conn.autocommit = True
 cur = conn.cursor()
 
+# Create migrations tracking table if not exists
+cur.execute("""
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+        version VARCHAR(255) PRIMARY KEY,
+        applied_at TIMESTAMPTZ DEFAULT NOW()
+    );
+""")
+
+cur.execute("SELECT version FROM schema_migrations;")
+applied_versions = {r[0] for r in cur.fetchall()}
+
 migrations_dir = os.path.join(os.path.dirname(__file__), "migrations")
 sql_files = sorted(glob.glob(os.path.join(migrations_dir, "*.sql")))
 
-print(f"Found {len(sql_files)} migration file(s).")
+print(f"Found {len(sql_files)} migration file(s). ({len(applied_versions)} already applied)")
 for sql_path in sql_files:
     fname = os.path.basename(sql_path)
+    if fname in applied_versions:
+        print(f"Skipping already applied migration: {fname}")
+        continue
+
     print(f"Running migration: {fname} ...")
     with open(sql_path, "r", encoding="utf-8") as f:
         sql = f.read()
     cur.execute(sql)
+    cur.execute("INSERT INTO schema_migrations (version) VALUES (%s) ON CONFLICT DO NOTHING;", (fname,))
     print(f"Migration {fname} applied successfully!")
 
 cur.close()

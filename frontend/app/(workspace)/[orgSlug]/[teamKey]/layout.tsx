@@ -91,7 +91,6 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   }, []);
 
   const [currentTeamStates, setCurrentTeamStates] = useState<WorkflowState[]>([]);
-  const [triageCount, setTriageCount] = useState<number>(0);
 
   // Derive currentTeam from the URL teamKey — no extra API call needed
   const currentTeam = useMemo(
@@ -101,12 +100,8 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!currentTeam?.id) return;
-    Promise.all([
-      api.getWorkflowStates(currentTeam.id),
-      api.getTriageIssues(currentTeam.id),
-    ]).then(([states, triageIssues]) => {
+    api.getWorkflowStates(currentTeam.id).then((states) => {
       if (states) setCurrentTeamStates(states);
-      if (triageIssues) setTriageCount(triageIssues.length);
     }).catch(() => {});
   }, [currentTeam?.id]);
 
@@ -125,7 +120,6 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           organization={organization}
           teams={teams}
           currentUser={currentUser}
-          triageCount={triageCount}
           onOpenCommandPalette={() => setIsCommandOpen(true)}
           onOpenNewIssue={() => setIsNewIssueOpen(true)}
           onOpenAIAsk={() => setIsAIAskOpen(true)}

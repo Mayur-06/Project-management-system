@@ -65,22 +65,3 @@ class ProjectSummaryResponse(BaseModel):
 class ProjectDetailResponse(ProjectSummaryResponse):
     milestones: List[MilestoneResponse] = []
     issues: List[IssueResponse] = []
-
-
-# ==============================================================================
-# 2. Triage Inbox Schemas
-# ==============================================================================
-
-class TriageAcceptRequest(BaseModel):
-    target_state_id: str
-    assignee_id: Optional[str] = None
-    priority: Optional[str] = None
-    estimate: Optional[int] = None
-
-
-class TriageSnoozeRequest(BaseModel):
-    snoozed_until: datetime
-
-
-class TriageDeclineRequest(BaseModel):
-    reason: str = Field(..., min_length=1, max_length=500)

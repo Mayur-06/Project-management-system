@@ -3,7 +3,6 @@ import {
   WorkflowState,
   IssueComment,
   ActivityLog,
-  TriageOutput,
   Team,
   Organization,
   WorkspaceMember,
@@ -272,6 +271,10 @@ export const api = {
     return data || [];
   },
 
+  async getInbox(orgSlug: string): Promise<Issue[] | null> {
+    return await fetchWithAuth<Issue[]>(`/organizations/${orgSlug}/inbox`);
+  },
+
   async getIssue(idOrKey: string): Promise<Issue | null> {
     return await fetchWithAuth<Issue>(`/issues/${idOrKey}`);
   },
@@ -385,80 +388,6 @@ export const api = {
         similarity: m.similarity,
       })),
     };
-  },
-
-  // AI Auto-Triage
-  async autoTriage(
-    title: string,
-    description: string,
-    teamId?: string,
-    organizationId?: string
-  ): Promise<TriageOutput | null> {
-    const data = await fetchWithAuth<any>(`/ai/triage/classify`, {
-      method: 'POST',
-      body: JSON.stringify({
-        title,
-        description,
-        ...(teamId ? { team_id: teamId } : {}),
-        ...(organizationId ? { organization_id: organizationId } : {}),
-      }),
-    });
-    if (!data) return null;
-    return {
-      suggested_team_key: data.suggested_team_key || 'ENG',
-      suggested_priority: data.suggested_priority || 'medium',
-      suggested_estimate: data.suggested_estimate ?? 3,
-      suggested_labels: data.suggested_labels || [],
-      suggested_assignee_id: data.suggested_assignee_id,
-      reasoning: data.reasoning || data.rationale || '',
-    };
-  },
-
-  // Triage Actions
-  async getTriageIssues(teamId: string, snoozed: boolean = false): Promise<Issue[]> {
-    const data = await fetchWithAuth<Issue[]>(`/teams/${teamId}/triage${snoozed ? '?snoozed=true' : ''}`);
-    return data || [];
-  },
-
-  async acceptTriage(
-    issueId: string,
-    targetStateId: string,
-    assigneeId?: string,
-    priority?: string,
-    estimate?: number
-  ): Promise<Issue | null> {
-    return await fetchWithAuth<Issue>(`/triage/${issueId}/accept`, {
-      method: 'POST',
-      body: JSON.stringify({
-        target_state_id: targetStateId,
-        assignee_id: assigneeId,
-        priority: priority,
-        estimate: estimate,
-      }),
-    });
-  },
-
-  async snoozeTriage(issueId: string, snoozedUntil: string): Promise<boolean> {
-    const res = await fetchWithAuth<any>(`/triage/${issueId}/snooze`, {
-      method: 'POST',
-      body: JSON.stringify({ snoozed_until: snoozedUntil }),
-    });
-    return !!res;
-  },
-
-  async unsnoozeTriage(issueId: string): Promise<boolean> {
-    const res = await fetchWithAuth<any>(`/triage/${issueId}/unsnooze`, {
-      method: 'POST',
-    });
-    return !!res;
-  },
-
-  async declineTriage(issueId: string, reason: string): Promise<boolean> {
-    const res = await fetchWithAuth<any>(`/triage/${issueId}/decline`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
-    return !!res;
   },
 
   // AI Sub-task Breakdown

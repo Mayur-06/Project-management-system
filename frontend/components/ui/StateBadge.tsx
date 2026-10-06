@@ -13,8 +13,6 @@ export const StateBadge: React.FC<StateBadgeProps> = ({ state, showIcon = true, 
 
   const renderIcon = () => {
     switch (state.category) {
-      case 'triage':
-        return <HelpCircle className="w-3.5 h-3.5 text-zinc-400" />;
       case 'backlog':
         return <Circle className="w-3.5 h-3.5 text-zinc-500 stroke-dashed" />;
       case 'unstarted':

@@ -27,11 +27,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onDeleteIssue,
   onDragStateChange,
 }) => {
-  // Exclude triage from main active board columns
-  const activeStates = useMemo(
-    () => states.filter((s) => s.category !== 'triage'),
-    [states]
-  );
+  // All workflow states now displayed on board (no triage exclusion)
+  const activeStates = states;
 
   const handleDragStart = (e: React.DragEvent, issueId: string) => {
     e.dataTransfer.setData('text/plain', issueId);

@@ -127,7 +127,7 @@ export default function IssueDetailPage() {
     loadIssue();
   }, [issueIdentifier]);
 
-  const activeStates = states.filter((s) => s.category !== 'triage');
+  const activeStates = states;
 
   const assignableUsers = React.useMemo(() => {
     const map = new Map<string, any>();

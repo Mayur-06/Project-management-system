@@ -7,9 +7,7 @@ import {
   Command,
   Plus,
   Sparkles,
-  Inbox,
   Layers,
-  Repeat,
   FolderKanban,
   Hash,
   X,
@@ -68,33 +66,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         onOpenNewIssue();
       },
     },
-    {
-      id: 'ai_assistant',
-      title: 'Ask AI Assistant',
-      shortcut: 'AI',
-      icon: <Sparkles className="w-4 h-4 text-white" />,
-      run: () => {
-        onClose();
-        onOpenAIAsk();
-      },
-    },
-    {
+{
       id: 'nav_issues',
-      title: 'Go to Issues Board',
+      title: 'Go to Issues',
       shortcut: 'G I',
-      icon: <Layers className="w-4 h-4 text-zinc-400" />,
+      icon: <Layers className="w-4 h-4 text-blue-400" />,
       run: () => {
         router.push(activeKey ? `/${orgSlug}/${activeKey}/issues` : `/${orgSlug}/issues`);
-        onClose();
-      },
-    },
-    {
-      id: 'nav_triage',
-      title: 'Go to Triage Inbox',
-      shortcut: 'G T',
-      icon: <Inbox className="w-4 h-4 text-pink-400" />,
-      run: () => {
-        router.push(activeKey ? `/${orgSlug}/${activeKey}/triage` : `/${orgSlug}/triage`);
         onClose();
       },
     },

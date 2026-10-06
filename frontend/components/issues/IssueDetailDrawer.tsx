@@ -47,7 +47,7 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   onClose,
   onUpdateIssue,
 }) => {
-  const activeStates = states.filter((s) => s.category !== 'triage');
+  const activeStates = states;
   const [activeTab, setActiveTab] = useState<'comments' | 'activity' | 'ai_breakdown' | 'attachments'>('comments');
   const [comments, setComments] = useState<IssueComment[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);

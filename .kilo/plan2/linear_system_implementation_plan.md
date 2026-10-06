@@ -36,11 +36,9 @@ A foundational architectural rule governs all mutations across the system:
 
 ### B. Team Configuration & Fixed Workflows
 * **Team Identification:** Teams possess unique human-readable keys (such as ENG, DES, PROD) that prefix all issue identifiers.
-* **Standardized 6-State Workflow:** All teams operate on 6 fixed, system-enforced workflow states (`Triage`, `Backlog`, `Unstarted`, `Started`, `Completed`, `Canceled`). Custom statuses and custom column ordering are strictly disallowed to guarantee platform-wide consistency and predictable metrics.
-* **Strict Cross-Team Triage Routing Invariant:**
-  * **Same-Team Creation:** When a member of Team A creates an issue targeting Team A, the issue bypasses Triage completely and routes directly into the active workflow (`Todo` / `Unstarted` or `Backlog`).
-  * **Cross-Team Creation:** When a member of Team A creates an issue targeting Team B, the issue is strictly routed to Team B's workflow state with `category = 'triage'`. It does not appear on Team B's active board or backlog until Team B's leads review and accept it via the Triage Inbox.
-* **Standardized State Visuals:** Each of the 6 fixed states has a system-defined color and fixed column order across Kanban and List views.
+* **Standardized 5-State Workflow:** All teams operate on 5 fixed, system-enforced workflow states (`Backlog`, `Unstarted`, `Started`, `Completed`, `Canceled`). Custom statuses and custom column ordering are strictly disallowed to guarantee platform-wide consistency and predictable metrics.
+* **Unified Routing:** All issues (same-team or cross-team) route directly into the active workflow (`Unstarted` or `Backlog`) without an intermediate triage queue.
+* **Standardized State Visuals:** Each of the 5 fixed states has a system-defined color and fixed column order across Kanban and List views.
 
 ### C. Lean Settings Architecture (Modal & Cmd+,)
 * **Unified Non-Disruptive Modal:** Settings is presented as a high-speed, keyboard-accessible dialog (`Cmd+,` / `Ctrl+,` or sidebar gear button) preserving user context instead of navigating across slow, fragmented route pages.
@@ -79,14 +77,6 @@ A foundational architectural rule governs all mutations across the system:
 ### H. Milestones & Health Statuses
 * **Milestone Sequences:** Granular checkpoints within projects tracking major architectural or business phases.
 * **Project Health Statuses:** Explicit health tracking categorizing projects directly as On Track, At Risk, or Off Track.
-
-### I. Triage Inbox & Inbound Work Routing
-* **Dedicated Triage Queue:** Holding area for untriaged issues originating from external integrations, customer requests, or cross-departmental tickets.
-* **Cross-Team Triage Trigger Invariant:** The Triage inbox is activated strictly when an issue is created cross-team (by a member of Team A targeting Team B). Same-team issues bypass triage directly into active backlog/unstarted states, preventing internal tasks from entering triage.
-* **Three-Way Disposition Actions:**
-  * *Accept:* Move issue into an active workflow state, assign a team member, and allocate to backlog with applied AI priority and estimate recommendations.
-  * *Snooze:* Hide the issue from the active inbox until a specified future date and time (tomorrow, next week, or 30 days).
-  * *Decline:* Archive or cancel the issue into the canceled workflow state with an explicit recorded cancellation rationale.
 
 ### J. Social, Audit & Media Ecosystem
 * **Rich Discussion Threads:** Comment sections supporting TipTap JSON formatting, user mentions, code snippets, and timestamped revisions.
@@ -141,17 +131,17 @@ A foundational architectural rule governs all mutations across the system:
 * **Constraints:** Unique composite constraint on (`team_id`, `user_id`).
 
 #### 5. Workflow States (`workflow_states`)
-* **Purpose:** Defines the 6 standardized workflow progress stages an issue traverses within a team.
+* **Purpose:** Defines the 5 standardized workflow progress stages an issue traverses within a team.
 * **Attributes:**
   * `id`: UUID (Primary Key).
   * `team_id`: UUID (Foreign Key references `teams.id`, cascading delete).
-  * `name`: String (100 chars, required) - Standard state name (`Triage`, `Backlog`, `Unstarted`, `Started`, `Completed`, `Canceled`).
+  * `name`: String (100 chars, required) - Standard state name (`Backlog`, `Unstarted`, `Started`, `Completed`, `Canceled`).
   * `color`: String (20 chars, required) - Standardized color code.
-  * `category`: Enumeration (`triage`, `backlog`, `unstarted`, `started`, `completed`, `canceled`).
+  * `category`: Enumeration (`backlog`, `unstarted`, `started`, `completed`, `canceled`).
   * `position`: String (Collate "C", required) - System-fixed fractional index (e.g. `0|h00000:`, `0|h10000:` etc.) ensuring immutable display order.
   * `is_default`: Boolean (defaults to true for `Unstarted`).
   * `created_at`: Timestamp with time zone.
-* **Note:** Teams are provisioned with these 6 immutable states upon creation. Custom statuses or column reordering are strictly prohibited.
+* **Note:** Teams are provisioned with these 5 immutable states upon creation. Custom statuses or column reordering are strictly prohibited.
 
 #### 6. Projects & Milestones (`projects`, `project_milestones`)
 * **Projects Attributes:**
@@ -205,7 +195,6 @@ A foundational architectural rule governs all mutations across the system:
   * `version`: Integer (defaults to 1, required) - Monotonically increasing revision counter for optimistic locking.
   * `last_modified_by_session`: String (100 chars, optional) - Frontend client session ID for echo suppression.
   * `due_date`: Date (optional).
-  * `snoozed_until`: Timestamp with time zone (optional) - Triage snooze timestamp.
   * `completed_at`: Timestamp with time zone (optional).
   * `canceled_at`: Timestamp with time zone (optional).
   * `created_at`: Timestamp with time zone.
@@ -251,7 +240,7 @@ A foundational architectural rule governs all mutations across the system:
 | `/api/v1/workspaces/{org_slug}/teams` | GET | URL path: `org_slug` | Lists all teams within the specified organization accessible to user. | Array of team objects. |
 | `/api/v1/workspaces/{org_slug}/teams` | POST | URL path: `org_slug`, Body: Team name, key (e.g. ENG) | Validates key uniqueness in org; initializes the 6 fixed workflow states and issue counter. | Created team record (201 Created). |
 | `/api/v1/teams/{team_id}/members` | GET | URL path: `team_id` | Lists all users assigned to the specified team. | Array of user profile objects with team roles. |
-| `/api/v1/teams/{team_id}/states` | GET | URL path: `team_id` | Returns the team's 6 fixed workflow states in standard display order. | Array of workflow states. |
+| `/api/v1/teams/{team_id}/states` | GET | URL path: `team_id` | Returns the team's 5 fixed workflow states in standard display order. | Array of workflow states. |
 | `/api/v1/issues` | GET | Query params: `team_id`, `state_id`, `assignee_id`, `project_id`, `priority`, `search` | Applies multi-parameter filtering, excludes soft-deleted items, orders by sort order. | Paginated issue list. |
 | `/api/v1/issues` | POST | Title, description JSON, team ID, state ID, priority, estimate, assignee, project | Atomically increments team issue counter; generates identifier (e.g. ENG-104); calculates initial sort order; logs creation activity. | Created issue entity (201 Created). |
 | `/api/v1/issues/{issue_id}` | GET | URL path: `issue_id` (UUID or Key like ENG-104) | Resolves issue by UUID or identifier; retrieves full details, labels, attachments, and subtasks. | Detailed issue payload. |

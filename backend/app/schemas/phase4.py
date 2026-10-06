@@ -62,28 +62,7 @@ class DuplicateCheckResponse(BaseModel):
 
 
 # ==============================================================================
-# 3. AI Triage & Classification Schemas
-# ==============================================================================
-
-class TriageClassifyRequest(BaseModel):
-    organization_id: Optional[str] = None
-    team_id: Optional[str] = None
-    title: str = Field(..., min_length=5, max_length=500)
-    description: Optional[str] = None
-
-
-class TriageClassifyResponse(BaseModel):
-    suggested_team_key: Optional[str] = None
-    suggested_priority: str
-    suggested_estimate: Optional[int] = None
-    suggested_labels: List[str] = []
-    suggested_assignee_id: Optional[str] = None
-    rationale: str
-    reasoning: Optional[str] = None
-
-
-# ==============================================================================
-# 4. AI Technical Breakdown (HITL) Schemas
+# 3. AI Technical Breakdown (HITL) Schemas
 # ==============================================================================
 
 class ProposedSubtask(BaseModel):
@@ -162,7 +141,7 @@ class BreakdownResumeResponse(BaseModel):
 
 
 # ==============================================================================
-# 5. AI Chat ReAct Schemas
+# 4. AI Chat ReAct Schemas
 # ==============================================================================
 
 class ChatMessage(BaseModel):

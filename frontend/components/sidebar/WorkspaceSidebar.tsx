@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  Inbox,
   Layers,
   FolderKanban,
   Sparkles,
@@ -14,6 +13,8 @@ import {
   Settings,
   User as UserIcon,
   LogOut,
+  Inbox,
+  List,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
@@ -29,7 +30,6 @@ interface WorkspaceSidebarProps {
   organization?: Organization | null;
   teams?: Team[];
   currentUser?: User | null;
-  triageCount?: number;
   onOpenCommandPalette: () => void;
   onOpenNewIssue: () => void;
   onOpenAIAsk: () => void;
@@ -41,7 +41,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   organization,
   teams = [],
   currentUser,
-  triageCount = 0,
   onOpenCommandPalette,
   onOpenNewIssue,
   onOpenAIAsk,
@@ -144,12 +143,11 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     }
   };
 
-  const navItems = [
+  const navItems: { label: string; href: string; icon: React.ReactNode; badge?: string | number }[] = [
     {
-      label: 'Triage Inbox',
-      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/triage` : `/${currentOrgSlug}/triage`,
+      label: 'Inbox',
+      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/inbox` : `/${currentOrgSlug}/inbox`,
       icon: <Inbox className="w-4 h-4 text-zinc-300" />,
-      badge: triageCount > 0 ? String(triageCount) : undefined,
     },
     {
       label: 'Issues',

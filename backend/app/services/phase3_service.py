@@ -11,9 +11,6 @@ from app.schemas.phase3 import (
     MilestoneCreate,
     MilestoneUpdate,
     MilestoneResponse,
-    TriageAcceptRequest,
-    TriageSnoozeRequest,
-    TriageDeclineRequest,
 )
 from app.schemas.issue import IssueResponse
 from app.core.lexorank import calculate_midpoint_rank
@@ -81,6 +78,25 @@ class Phase3Service:
         if not member_check.data:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to project")
         return project
+
+    # ==============================================================================
+    # 0. Org Inbox
+    # ==============================================================================
+
+    @classmethod
+    def list_inbox(cls, org_slug: str, user_id: str, db: Client) -> List[IssueResponse]:
+        org = cls._verify_org_access(org_slug, user_id, db)
+        res = (
+            db.table("issues")
+            .select("*, workflow_states(category), teams!inner(key, name)")
+            .eq("organization_id", org["id"])
+            .is_("deleted_at", "null")
+            .order("created_at", desc=True)
+            .limit(50)
+            .execute()
+        )
+        issues = [IssueResponse(**iss) for iss in (res.data or [])]
+        return issues
 
     # ==============================================================================
     # 1. Projects & Milestones Implementation
@@ -297,221 +313,3 @@ class Phase3Service:
         if not res.data:
             raise HTTPException(status_code=500, detail="Failed to update milestone")
         return MilestoneResponse(**res.data[0])
-
-    # ==============================================================================
-    # 3. Triage Inbox Implementation
-    # ==============================================================================
-
-    @classmethod
-    def list_triage_issues(
-        cls, team_id: str, user_id: str, db: Client, snoozed_only: bool = False
-    ) -> List[IssueResponse]:
-        cls._verify_team_access(team_id, user_id, db)
-
-        # 1. Resolve triage state ID for team
-        triage_state = (
-            db.table("workflow_states")
-            .select("id")
-            .eq("team_id", team_id)
-            .eq("category", "triage")
-            .limit(1)
-            .execute()
-        )
-        if not triage_state.data:
-            return []
-        triage_state_id = triage_state.data[0]["id"]
-
-        query = (
-            db.table("issues")
-            .select("*")
-            .eq("team_id", team_id)
-            .eq("state_id", triage_state_id)
-            .is_("deleted_at", "null")
-            .order("created_at", desc=True)
-        )
-        res = query.execute()
-
-        now_dt = datetime.now(timezone.utc)
-        results = []
-        for iss in (res.data or []):
-            snoozed = iss.get("snoozed_until")
-            is_currently_snoozed = False
-            if snoozed:
-                try:
-                    if isinstance(snoozed, str):
-                        snoozed_dt = datetime.fromisoformat(snoozed.replace("Z", "+00:00"))
-                    elif isinstance(snoozed, datetime):
-                        snoozed_dt = snoozed
-                    else:
-                        snoozed_dt = None
-                    if snoozed_dt:
-                        if snoozed_dt.tzinfo is None:
-                            snoozed_dt = snoozed_dt.replace(tzinfo=timezone.utc)
-                        if snoozed_dt > now_dt:
-                            is_currently_snoozed = True
-                except Exception:
-                    pass
-            if snoozed_only:
-                if is_currently_snoozed:
-                    results.append(IssueResponse(**iss))
-            else:
-                if not is_currently_snoozed:
-                    results.append(IssueResponse(**iss))
-        return results
-
-    @classmethod
-    def unsnooze_triage_issue(cls, issue_id: str, user_id: str, db: Client) -> Dict[str, Any]:
-        i_res = db.table("issues").select("*").eq("id", issue_id).limit(1).execute()
-        if not i_res.data:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
-        issue = i_res.data[0]
-        cls._verify_team_access(issue["team_id"], user_id, db)
-
-        now_iso = datetime.now(timezone.utc).isoformat()
-        db.table("issues").update({
-            "snoozed_until": None,
-            "updated_at": now_iso,
-            "version": issue["version"] + 1,
-        }).eq("id", issue_id).execute()
-
-        db.table("activity_logs").insert({
-            "organization_id": issue["organization_id"],
-            "issue_id": issue_id,
-            "actor_id": user_id,
-            "action": "triage_unsnoozed",
-            "changes": {"snoozed_until": None},
-        }).execute()
-
-        return {"status": "unsnoozed", "issue_id": issue_id}
-
-    @classmethod
-    def accept_triage_issue(
-        cls, issue_id: str, data: TriageAcceptRequest, user_id: str, db: Client
-    ) -> IssueResponse:
-        i_res = db.table("issues").select("*").eq("id", issue_id).limit(1).execute()
-        if not i_res.data:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
-        issue = i_res.data[0]
-        cls._verify_team_access(issue["team_id"], user_id, db)
-
-        # Validate that target_state_id belongs to this issue's team
-        st_check = (
-            db.table("workflow_states")
-            .select("id")
-            .eq("id", data.target_state_id)
-            .eq("team_id", issue["team_id"])
-            .limit(1)
-            .execute()
-        )
-        if not st_check.data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Target workflow state does not belong to this team",
-            )
-
-        # Update to target state, assign metadata, clear snooze
-        now_iso = datetime.now(timezone.utc).isoformat()
-        update_dict = {
-            "state_id": data.target_state_id,
-            "snoozed_until": None,
-            "updated_at": now_iso,
-            "version": issue["version"] + 1,
-        }
-        if data.assignee_id is not None:
-            update_dict["assignee_id"] = data.assignee_id.strip() if data.assignee_id.strip() else None
-        if data.priority is not None:
-            update_dict["priority"] = data.priority
-        if data.estimate is not None:
-            update_dict["estimate"] = data.estimate
-
-        res = db.table("issues").update(update_dict).eq("id", issue_id).execute()
-        if not res.data:
-            raise HTTPException(status_code=500, detail="Failed to accept triage issue")
-        updated = res.data[0]
-
-        changes_logged = {
-            "target_state_id": data.target_state_id,
-            "assignee_id": data.assignee_id,
-        }
-        if data.priority is not None:
-            changes_logged["priority"] = data.priority
-        if data.estimate is not None:
-            changes_logged["estimate"] = data.estimate
-
-        db.table("activity_logs").insert({
-            "organization_id": issue["organization_id"],
-            "issue_id": issue_id,
-            "actor_id": user_id,
-            "action": "triage_accepted",
-            "changes": changes_logged,
-        }).execute()
-
-        return IssueResponse(**updated)
-
-    @classmethod
-    def snooze_triage_issue(
-        cls, issue_id: str, data: TriageSnoozeRequest, user_id: str, db: Client
-    ) -> Dict[str, Any]:
-        i_res = db.table("issues").select("*").eq("id", issue_id).limit(1).execute()
-        if not i_res.data:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
-        issue = i_res.data[0]
-        cls._verify_team_access(issue["team_id"], user_id, db)
-
-        snooze_iso = data.snoozed_until.isoformat()
-        now_iso = datetime.now(timezone.utc).isoformat()
-        db.table("issues").update({
-            "snoozed_until": snooze_iso,
-            "updated_at": now_iso,
-            "version": issue["version"] + 1,
-        }).eq("id", issue_id).execute()
-
-        db.table("activity_logs").insert({
-            "organization_id": issue["organization_id"],
-            "issue_id": issue_id,
-            "actor_id": user_id,
-            "action": "triage_snoozed",
-            "changes": {"snoozed_until": snooze_iso},
-        }).execute()
-
-        return {"status": "snoozed", "issue_id": issue_id, "snoozed_until": snooze_iso}
-
-    @classmethod
-    def decline_triage_issue(
-        cls, issue_id: str, data: TriageDeclineRequest, user_id: str, db: Client
-    ) -> Dict[str, Any]:
-        i_res = db.table("issues").select("*").eq("id", issue_id).limit(1).execute()
-        if not i_res.data:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
-        issue = i_res.data[0]
-        cls._verify_team_access(issue["team_id"], user_id, db)
-
-        # Move to canceled workflow state
-        canceled_state = (
-            db.table("workflow_states")
-            .select("id")
-            .eq("team_id", issue["team_id"])
-            .eq("category", "canceled")
-            .limit(1)
-            .execute()
-        )
-        now_iso = datetime.now(timezone.utc).isoformat()
-        update_dict = {
-            "canceled_at": now_iso,
-            "updated_at": now_iso,
-            "version": issue["version"] + 1,
-        }
-        if canceled_state.data:
-            update_dict["state_id"] = canceled_state.data[0]["id"]
-
-        db.table("issues").update(update_dict).eq("id", issue_id).execute()
-
-        db.table("activity_logs").insert({
-            "organization_id": issue["organization_id"],
-            "issue_id": issue_id,
-            "actor_id": user_id,
-            "action": "triage_declined",
-            "changes": {"reason": data.reason, "canceled_at": now_iso},
-        }).execute()
-
-        return {"status": "declined", "issue_id": issue_id, "reason": data.reason}

@@ -1,6 +1,6 @@
 export type MemberRole = 'admin' | 'member' | 'guest';
 
-export type StateCategory = 'triage' | 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled';
+export type StateCategory = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled';
 
 export type IssuePriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
 
@@ -86,7 +86,6 @@ export interface Issue {
   sort_order: string;
   version: number;
   due_date?: string;
-  snoozed_until?: string;
   completed_at?: string;
   canceled_at?: string;
   last_modified_by_session?: string;
@@ -119,16 +118,6 @@ export interface ActivityLog {
   created_at: string;
 }
 
-export interface TriageOutput {
-  suggested_team_key: string;
-  suggested_priority: IssuePriority;
-  suggested_estimate: number;
-  suggested_labels: string[];
-  suggested_assignee_id?: string;
-  suggested_assignee?: User;
-  reasoning: string;
-}
-
 export interface IssueAttachment {
   id: string;
   issue_id: string;
@@ -157,4 +146,3 @@ export interface UserWorkspaceItem {
 export interface UserWorkspacesResponse {
   workspaces: UserWorkspaceItem[];
 }
-
