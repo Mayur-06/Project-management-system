@@ -166,6 +166,10 @@ def test_complete_cycle_with_rollover(client, mock_db):
                 ]
             )
             mock_t.update().in_().execute.return_value = MagicMock(data=[])
+        elif table_name == "workflow_states":
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": "state-backlog", "category": "backlog"}]
+            )
         elif table_name == "activity_logs":
             mock_t.insert().execute.return_value = MagicMock(data=[])
         return mock_t
@@ -178,6 +182,151 @@ def test_complete_cycle_with_rollover(client, mock_db):
     data = response.json()
     assert data["transferred_issues_count"] == 1
     assert data["destination"] == "backlog"
+
+
+def test_delete_cycle_success_moves_issues_to_backlog(client, mock_db):
+    """Positive test: Deleting a sprint cycle unassigns issues and moves unfinished ones to team backlog."""
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "cycles":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[
+                    {
+                        "id": MOCK_CYCLE_ID,
+                        "team_id": MOCK_TEAM_ID,
+                        "number": 5,
+                        "name": "Sprint 5",
+                        "starts_at": "2026-10-01T00:00:00Z",
+                        "ends_at": "2026-10-15T00:00:00Z",
+                    }
+                ]
+            )
+            mock_t.delete().eq().execute.return_value = MagicMock(data=[])
+        elif table_name == "teams":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": MOCK_TEAM_ID, "organization_id": MOCK_ORG_ID}]
+            )
+        elif table_name == "workspace_members":
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[{"id": "m1"}])
+        elif table_name == "issues":
+            mock_t.select().eq().is_().execute.return_value = MagicMock(
+                data=[
+                    {
+                        "id": "iss-unresolved-1",
+                        "state_id": MOCK_STATE_ID_1,
+                        "workflow_states": {"category": "started"},
+                    },
+                    {
+                        "id": "iss-done-2",
+                        "state_id": MOCK_STATE_ID_2,
+                        "workflow_states": {"category": "completed"},
+                    },
+                ]
+            )
+            mock_t.update().in_().execute.return_value = MagicMock(data=[])
+        elif table_name == "workflow_states":
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": "state-backlog", "category": "backlog"}]
+            )
+        elif table_name == "activity_logs":
+            mock_t.insert().execute.return_value = MagicMock(data=[])
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    response = client.delete(f"/api/v1/cycles/{MOCK_CYCLE_ID}")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["success"] is True
+    assert data["cycle_id"] == MOCK_CYCLE_ID
+    assert data["unassigned_issues_count"] == 2
+    assert data["moved_to_backlog_count"] == 1
+
+
+def test_delete_cycle_not_found(client, mock_db):
+    """Negative test: Deleting a non-existent cycle returns 404 Not Found."""
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "cycles":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(data=[])
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    response = client.delete(f"/api/v1/cycles/00000000-0000-0000-0000-000000000999")
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_delete_cycle_access_denied(client, mock_db):
+    """Negative test: Deleting a cycle without team membership returns 403 Forbidden."""
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "cycles":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": MOCK_CYCLE_ID, "team_id": MOCK_TEAM_ID}]
+            )
+        elif table_name == "teams":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": MOCK_TEAM_ID, "organization_id": MOCK_ORG_ID}]
+            )
+        elif table_name == "workspace_members":
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[])
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    response = client.delete(f"/api/v1/cycles/{MOCK_CYCLE_ID}")
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_create_cycle_negative_invalid_dates(client, mock_db):
+    """Negative test: ends_at <= starts_at must be rejected with 422 Unprocessable Entity."""
+    payload = {
+        "name": "Invalid Cycle",
+        "starts_at": "2026-10-15T00:00:00Z",
+        "ends_at": "2026-10-10T00:00:00Z",  # Earlier than starts_at
+    }
+    response = client.post(f"/api/v1/teams/{MOCK_TEAM_ID}/cycles", json=payload)
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+def test_create_cycle_access_denied(client, mock_db):
+    """Negative test: Non-member of organization cannot create a cycle (403 Forbidden)."""
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "teams":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(
+                data=[{"id": MOCK_TEAM_ID, "organization_id": MOCK_ORG_ID, "key": "ENG"}]
+            )
+        elif table_name == "workspace_members":
+            # User is NOT a member
+            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[])
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    payload = {
+        "name": "Unauthorized Cycle",
+        "starts_at": "2026-10-01T00:00:00Z",
+        "ends_at": "2026-10-15T00:00:00Z",
+    }
+    response = client.post(f"/api/v1/teams/{MOCK_TEAM_ID}/cycles", json=payload)
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_complete_cycle_not_found(client, mock_db):
+    """Negative test: Completing non-existent cycle must return 404 Not Found."""
+    def mock_table(table_name):
+        mock_t = MagicMock()
+        if table_name == "cycles":
+            mock_t.select().eq().limit().execute.return_value = MagicMock(data=[])
+        return mock_t
+
+    mock_db.table.side_effect = mock_table
+
+    payload = {"destination": "backlog"}
+    response = client.post(f"/api/v1/cycles/00000000-0000-0000-0000-000000000999/complete", json=payload)
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 # ==============================================================================

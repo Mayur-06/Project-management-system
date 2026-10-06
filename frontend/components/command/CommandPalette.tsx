@@ -108,16 +108,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         onClose();
       },
     },
-    {
-      id: 'nav_projects',
-      title: 'Go to Projects & Roadmap',
-      shortcut: 'G P',
-      icon: <FolderKanban className="w-4 h-4 text-emerald-400" />,
-      run: () => {
-        router.push(activeKey ? `/${orgSlug}/${activeKey}/projects` : `/${orgSlug}/projects`);
-        onClose();
-      },
-    },
     ...teams.map((t) => ({
       id: `team_${t.key}`,
       title: `Switch Team to ${t.name} (${t.key})`,

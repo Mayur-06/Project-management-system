@@ -1,14 +1,15 @@
 'use client';
 
 import React from 'react';
-import { Plus, Trash2, CornerDownRight } from 'lucide-react';
-import { Issue, WorkflowState } from '@/types';
+import { Plus, Trash2, CornerDownRight, Repeat } from 'lucide-react';
+import { Issue, WorkflowState, Cycle } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
 
 interface KanbanBoardProps {
   states: WorkflowState[];
   issues: Issue[];
+  cycles?: Cycle[];
   users?: { id: string; name?: string; email?: string; avatar_url?: string }[];
   onSelectIssue: (issue: Issue) => void;
   onOpenNewIssueWithState: (stateId: string) => void;
@@ -19,6 +20,7 @@ interface KanbanBoardProps {
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   states,
   issues,
+  cycles = [],
   users = [],
   onSelectIssue,
   onOpenNewIssueWithState,
@@ -119,6 +121,21 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           <span>subtask</span>
                         </span>
                       )}
+                      {(() => {
+                        const cName =
+                          issue.cycle?.name ||
+                          (issue.cycle_id && cycles ? cycles.find((c) => c.id === issue.cycle_id)?.name : null);
+                        if (!cName) return null;
+                        return (
+                          <span
+                            className="text-[9px] font-mono font-medium px-1.5 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 flex items-center gap-1"
+                            title={`Sprint: ${cName}`}
+                          >
+                            <Repeat className="w-2.5 h-2.5 text-zinc-500" />
+                            <span>{cName}</span>
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">

@@ -159,14 +159,14 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       icon: <Layers className="w-4 h-4 text-zinc-300" />,
     },
     {
+      label: 'AI Assistant',
+      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/ai` : `/${currentOrgSlug}/ai`,
+      icon: <Sparkles className="w-4 h-4 text-zinc-300" />,
+    },
+    {
       label: 'Cycles',
       href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/cycles` : `/${currentOrgSlug}/cycles`,
       icon: <Repeat className="w-4 h-4 text-zinc-300" />,
-    },
-    {
-      label: 'Projects',
-      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/projects` : `/${currentOrgSlug}/projects`,
-      icon: <FolderKanban className="w-4 h-4 text-zinc-300" />,
     },
   ];
 

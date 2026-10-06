@@ -1,27 +1,29 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import { Issue, WorkflowState, Team, User } from '@/types';
+import { useParams, useRouter } from 'next/navigation';
+import { Issue, WorkflowState, Team, User, Cycle } from '@/types';
+import { Repeat } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useRealtimeBoard } from '@/hooks/useRealtime';
 import { TopNav } from '@/components/navigation/TopNav';
 import { KanbanBoard } from '@/components/issues/KanbanBoard';
 import { IssueListView } from '@/components/issues/IssueListView';
-import { IssueDetailDrawer } from '@/components/issues/IssueDetailDrawer';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 
 export default function IssuesPage() {
   const params = useParams();
+  const router = useRouter();
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
   const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [states, setStates] = useState<WorkflowState[]>([]);
+  const [cycles, setCycles] = useState<Cycle[]>([]);
+  const [selectedCycleFilter, setSelectedCycleFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -57,15 +59,17 @@ export default function IssuesPage() {
     };
   }, [orgSlug, teamKey]);
 
-  // 2. Load issues and workflow states for resolved team
+  // 2. Load issues, workflow states, and cycles for resolved team
   const loadData = async (teamId: string) => {
     setIsLoading(true);
-    const [fetchedIssues, fetchedStates] = await Promise.all([
+    const [fetchedIssues, fetchedStates, fetchedCycles] = await Promise.all([
       api.getIssues({ teamId }),
       api.getWorkflowStates(teamId),
+      api.getCycles(teamId),
     ]);
     setIssues(fetchedIssues);
     setStates(fetchedStates);
+    setCycles(fetchedCycles);
     if (fetchedStates.length > 0) {
       const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
       setInitialStateId(defaultState.id);
@@ -90,7 +94,6 @@ export default function IssuesPage() {
     },
     onIssueUpdated: (updatedIssue) => {
       setIssues((prev) => prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i)));
-      setSelectedIssue((prev) => (prev?.id === updatedIssue.id ? { ...prev, ...updatedIssue } : prev));
     },
     onIssueMoved: ({ id, state_id, sort_order }) => {
       setIssues((prev) =>
@@ -99,7 +102,6 @@ export default function IssuesPage() {
     },
     onIssueDeleted: (deletedId) => {
       setIssues((prev) => prev.filter((i) => i.id !== deletedId));
-      setSelectedIssue((prev) => (prev?.id === deletedId ? null : prev));
     },
     onReloadRequested: () => {
       if (currentTeam?.id) loadData(currentTeam.id);
@@ -120,7 +122,6 @@ export default function IssuesPage() {
     const handleDeleted = (e: any) => {
       const deletedId = typeof e.detail === 'string' ? e.detail : e.detail?.id;
       setIssues((prev) => prev.filter((i) => i.id !== deletedId));
-      setSelectedIssue((prev) => (prev?.id === deletedId ? null : prev));
     };
 
     window.addEventListener('issueCreated', handleCreated);
@@ -134,11 +135,16 @@ export default function IssuesPage() {
     };
   }, []);
 
-  const filteredIssues = issues.filter(
-    (i) =>
+  const filteredIssues = issues.filter((i) => {
+    const matchesSearch =
       i.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      i.identifier.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      i.identifier.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+
+    if (selectedCycleFilter === 'all') return true;
+    if (selectedCycleFilter === 'backlog') return !i.cycle_id;
+    return i.cycle_id === selectedCycleFilter;
+  });
 
   const handleMoveIssueState = async (
     issueId: string,
@@ -175,7 +181,6 @@ export default function IssuesPage() {
 
   const handleDeleteIssue = async (issueId: string) => {
     setIssues((prev) => prev.filter((i) => i.id !== issueId));
-    if (selectedIssue?.id === issueId) setSelectedIssue(null);
     await api.deleteIssue(issueId, true);
   };
 
@@ -197,6 +202,51 @@ export default function IssuesPage() {
         }}
       />
 
+      {/* Sprint / Backlog Scope Filter Toolbar */}
+      <div className="flex items-center justify-between px-6 py-2 border-b border-zinc-800 bg-[#090a0c] text-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+          <button
+            onClick={() => setSelectedCycleFilter('all')}
+            className={`px-2.5 py-1 rounded-md text-xs transition-colors cursor-pointer ${
+              selectedCycleFilter === 'all'
+                ? 'bg-zinc-800 text-white font-medium'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            All Issues ({issues.length})
+          </button>
+          <button
+            onClick={() => setSelectedCycleFilter('backlog')}
+            className={`px-2.5 py-1 rounded-md text-xs transition-colors cursor-pointer ${
+              selectedCycleFilter === 'backlog'
+                ? 'bg-zinc-800 text-white font-medium'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            Backlog ({issues.filter((i) => !i.cycle_id).length})
+          </button>
+          {cycles.map((c) => {
+            const isSelected = selectedCycleFilter === c.id;
+            const count = issues.filter((i) => i.cycle_id === c.id).length;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedCycleFilter(c.id)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors cursor-pointer whitespace-nowrap ${
+                  isSelected
+                    ? 'bg-zinc-800 text-white font-medium'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Repeat className="w-3 h-3 text-zinc-500" />
+                <span>{c.name || `Cycle ${c.number}`}</span>
+                <span className="text-[10px] text-zinc-500 font-mono">({count})</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Main View Container */}
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
@@ -207,8 +257,11 @@ export default function IssuesPage() {
           <KanbanBoard
             states={states}
             issues={filteredIssues}
+            cycles={cycles}
             users={workspaceUsers}
-            onSelectIssue={setSelectedIssue}
+            onSelectIssue={(issue) => {
+              router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
+            }}
             onOpenNewIssueWithState={(stateId) => {
               setInitialStateId(stateId);
               setIsNewIssueOpen(true);
@@ -217,31 +270,16 @@ export default function IssuesPage() {
             onDeleteIssue={handleDeleteIssue}
           />
         ) : (
-          <IssueListView issues={filteredIssues} users={workspaceUsers} onSelectIssue={setSelectedIssue} />
+          <IssueListView
+            issues={filteredIssues}
+            cycles={cycles}
+            users={workspaceUsers}
+            onSelectIssue={(issue) => {
+              router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
+            }}
+          />
         )}
       </div>
-
-      {/* Issue Detail Drawer */}
-      <IssueDetailDrawer
-        issue={selectedIssue}
-        states={states}
-        users={workspaceUsers}
-        onClose={() => setSelectedIssue(null)}
-        onUpdateIssue={(updated) => {
-          setSelectedIssue(updated);
-          setIssues((prev) => {
-            let next = prev.map((i) => (i.id === updated.id ? updated : i));
-            if (updated.subtasks && updated.subtasks.length > 0) {
-              const existingIds = new Set(next.map((i) => i.id));
-              const newSubs = updated.subtasks.filter((s) => !existingIds.has(s.id));
-              if (newSubs.length > 0) {
-                next = [...newSubs, ...next];
-              }
-            }
-            return next;
-          });
-        }}
-      />
 
       {/* Create Modal */}
       <CreateIssueModal

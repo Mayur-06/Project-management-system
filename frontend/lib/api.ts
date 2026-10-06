@@ -2,7 +2,8 @@ import {
   Issue,
   WorkflowState,
   Cycle,
-  Project,
+  CycleMetrics,
+  CycleCompleteResult,
   IssueComment,
   ActivityLog,
   TriageOutput,
@@ -90,6 +91,24 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
     if (!response.ok) {
       if (response.status === 401) {
         if (typeof window !== 'undefined') {
+          try {
+            const { data } = await supabase.auth.refreshSession();
+            if (data?.session?.access_token) {
+              const newToken = data.session.access_token;
+              localStorage.setItem('supabase_access_token', newToken);
+              document.cookie = `sb-access-token=${newToken}; path=/; max-age=604800; SameSite=Lax`;
+              const retryResponse = await fetch(`${getApiBase()}${endpoint}`, {
+                ...options,
+                headers: {
+                  ...headers,
+                  Authorization: `Bearer ${newToken}`,
+                },
+              });
+              if (retryResponse.ok) {
+                return (await retryResponse.json()) as T;
+              }
+            }
+          } catch {}
           localStorage.removeItem('supabase_access_token');
           document.cookie = 'sb-access-token=; path=/; max-age=0';
         }
@@ -352,10 +371,35 @@ export const api = {
     return data || [];
   },
 
-  // Projects
-  async getProjects(orgSlug: string): Promise<Project[]> {
-    const data = await fetchWithAuth<Project[]>(`/organizations/${orgSlug}/projects`);
-    return data || [];
+  async createCycle(
+    teamId: string,
+    payload: { name?: string; starts_at: string; ends_at: string }
+  ): Promise<Cycle | null> {
+    return await fetchWithAuth<Cycle>(`/teams/${teamId}/cycles`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getCycleMetrics(cycleId: string): Promise<CycleMetrics | null> {
+    return await fetchWithAuth<CycleMetrics>(`/cycles/${cycleId}`);
+  },
+
+  async completeCycle(
+    cycleId: string,
+    destination: 'backlog' | string
+  ): Promise<CycleCompleteResult | null> {
+    return await fetchWithAuth<CycleCompleteResult>(`/cycles/${cycleId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ destination }),
+    });
+  },
+
+  async deleteCycle(cycleId: string): Promise<boolean> {
+    const res = await fetchWithAuth<{ success: boolean }>(`/cycles/${cycleId}`, {
+      method: 'DELETE',
+    });
+    return Boolean(res?.success);
   },
 
   // AI Duplicates Check

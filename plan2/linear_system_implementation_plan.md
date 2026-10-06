@@ -59,7 +59,7 @@ A foundational architectural rule governs all mutations across the system:
 * **Readable Sequential Identifiers:** Automatic sequential numbering per team producing clean identifiers (e.g., ENG-101, ENG-102) managed through transactional database counters.
 * **Rich Markdown Editing:** TipTap-powered editor supporting rich formatting, code blocks, task lists, and slash commands.
 * **Hierarchical Subtasks:** Arbitrary nesting of parent issues and child subtasks with aggregated progress tracking.
-* **Granular Issue Attributes:** Native support for priority tiers (Urgent, High, Medium, Low, None), Fibonacci story point estimates, due dates, assignees, project associations, cycle allocations, and customizable color-coded labels.
+* **Granular Issue Attributes:** Native support for priority tiers (Urgent, High, Medium, Low, None), Fibonacci story point estimates, due dates, assignees, cycle allocations, and customizable color-coded labels.
 
 ### E. High-Speed Keyboard-First User Experience
 * **Universal Command Palette (Cmd+K / Ctrl+K):** Instant global search and action launcher capable of finding issues, navigating views, switching teams, and executing system commands without touching the mouse.
@@ -72,7 +72,7 @@ A foundational architectural rule governs all mutations across the system:
 
 ### F. Collaborative Real-Time Workspace
 * **Interactive Kanban Board View:** Drag-and-drop issue movement across workflow columns powered by accessible drag engines.
-* **Synchronized List View:** High-density, configurable data grid supporting multi-column sorting, grouping by priority/assignee/project, and custom filtering.
+* **Synchronized List View:** High-density, configurable data grid supporting multi-column sorting, grouping by priority/assignee/cycle, and custom filtering.
 * **Sub-50ms Realtime Broadcasting:** Instant state propagation to all active workspace viewers via WebSocket broadcast channels.
 * **Optimistic Local Mutations:** Zero-latency UI response where card positions and field edits reflect immediately on the user's screen before the backend response resolves.
 * **Presence Indicators:** Live indicators showing which team members are currently viewing or modifying specific issues.
@@ -82,10 +82,6 @@ A foundational architectural rule governs all mutations across the system:
 * **Cycle Velocity Metrics:** Real-time calculation of completed versus planned story points, total issues closed, and scope changes mid-sprint.
 * **Burnup & Burndown Analytics:** Interactive charts showing progress trends throughout the active cycle lifecycle.
 * **Unfinished Work Rollover Engine:** One-click or automated migration of incomplete issues from a closed cycle to either the team backlog or the immediate next cycle.
-
-### H. Milestones & Health Statuses
-* **Milestone Sequences:** Granular checkpoints within projects tracking major architectural or business phases.
-* **Project Health Statuses:** Explicit health tracking categorizing projects directly as On Track, At Risk, or Off Track.
 
 ### I. Triage Inbox & Inbound Work Routing
 * **Dedicated Triage Queue:** Holding area for untriaged issues originating from external integrations, customer requests, or cross-departmental tickets.
@@ -174,26 +170,7 @@ A foundational architectural rule governs all mutations across the system:
   * `created_at`: Timestamp with time zone.
 * **Constraints:** Unique composite constraint on (`team_id`, `number`).
 
-#### 7. Projects & Milestones (`projects`, `project_milestones`)
-* **Projects Attributes:**
-  * `id`: UUID (Primary Key).
-  * `organization_id`: UUID (Foreign Key references `organizations.id`, cascading delete).
-  * `name`: String (255 chars, required).
-  * `slug`: String (255 chars, required).
-  * `health`: Enumeration (`on_track`, `at_risk`, `off_track`). Defaults to `on_track`.
-  * `sort_order`: String (Collate "C", required) - Fractional index.
-  * `created_at`: Timestamp with time zone.
-  * *Constraints:* Unique composite constraint on (`organization_id`, `slug`).
-* **Project Milestones Attributes:**
-  * `id`: UUID (Primary Key).
-  * `project_id`: UUID (Foreign Key references `projects.id`, cascading delete).
-  * `name`: String (255 chars, required).
-  * `target_date`: Date (optional).
-  * `completed_at`: Timestamp with time zone (optional).
-  * `sort_order`: String (Collate "C", required).
-  * `created_at`: Timestamp with time zone.
-
-#### 8. Labels (`labels`)
+#### 7. Labels (`labels`)
 * **Purpose:** Organization-wide taxonomy tags for categorizing work.
 * **Attributes:**
   * `id`: UUID (Primary Key).
@@ -204,7 +181,7 @@ A foundational architectural rule governs all mutations across the system:
   * `created_at`: Timestamp with time zone.
 * **Constraints:** Unique composite constraint on (`organization_id`, `name`).
 
-#### 9. Issues (`issues`) - Core Entity
+#### 8. Issues (`issues`) - Core Entity
 * **Purpose:** The fundamental unit of work across the platform.
 * **Attributes:**
   * `id`: UUID (Primary Key).
@@ -220,7 +197,6 @@ A foundational architectural rule governs all mutations across the system:
   * `state_id`: UUID (Foreign Key references `workflow_states.id`).
   * `assignee_id`: UUID (Foreign Key references authentication users, null on delete).
   * `creator_id`: UUID (Foreign Key references authentication users).
-  * `project_id`: UUID (Foreign Key references `projects.id`, null on delete).
   * `cycle_id`: UUID (Foreign Key references `cycles.id`, null on delete).
   * `parent_id`: UUID (Foreign Key references `issues.id`, null on delete) - Subtask parent link.
   * `sort_order`: String (Collate "C", required) - Lexicographical fractional position within current state column.
@@ -235,7 +211,7 @@ A foundational architectural rule governs all mutations across the system:
   * `deleted_at`: Timestamp with time zone (optional) - Soft-deletion marker.
 * **Constraints:** Unique composite constraint on (`team_id`, `number`).
 
-#### 10. Supporting Issue Entities
+#### 9. Supporting Issue Entities
 * **Issue Labels (`issue_labels`):** Join table between `issues` and `labels` with composite primary key (`issue_id`, `label_id`).
 * **Issue Comments (`issue_comments`):** Threaded comments on issues with rich JSON and plain text fields, user attribution, soft-delete timestamp, and update tracking.
 * **Comment Reactions (`comment_reactions`):** Mapping of user emoji reactions to specific comments. Constrained to one reaction per emoji per user per comment.
@@ -245,7 +221,7 @@ A foundational architectural rule governs all mutations across the system:
 
 ### Database Indexing & Query Acceleration
 * **Board Sorting Index:** Composite B-tree index on `issues (team_id, state_id, sort_order)` filtered where `deleted_at IS NULL`. Directly accelerates Kanban board column rendering and avoids full table scans.
-* **Entity Relationship Indexes:** Dedicated indexes on `organization_id`, `assignee_id`, `cycle_id`, `project_id`, `parent_id`, and `identifier`.
+* **Entity Relationship Indexes:** Dedicated indexes on `organization_id`, `assignee_id`, `cycle_id`, `parent_id`, and `identifier`.
 * **Vector Similarity Index:** Hierarchical Navigable Small World (HNSW) index on `issue_embeddings` using cosine vector operations with parameters `m = 16` and `ef_construction = 64`.
 
 ### Multi-Tenant Row-Level Security (RLS) Strategy

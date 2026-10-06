@@ -86,6 +86,19 @@ async def complete_cycle(
     return Phase3Service.complete_cycle(cycle_id, payload, current_user.id, db)
 
 
+@router.delete(
+    "/cycles/{cycle_id}",
+    response_model=Dict[str, Any],
+    summary="Delete sprint cycle and return unfinished issues to team backlog",
+)
+async def delete_cycle(
+    cycle_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return Phase3Service.delete_cycle(cycle_id, current_user.id, db)
+
+
 @router.post(
     "/cycles/trigger-rollover",
     response_model=List[Dict[str, Any]],

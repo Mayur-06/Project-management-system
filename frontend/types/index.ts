@@ -6,8 +6,6 @@ export type IssuePriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
 
 export type IssueRelationType = 'blocks' | 'blocked_by' | 'relates_to' | 'duplicate_of';
 
-export type ProjectHealth = 'on_track' | 'at_risk' | 'off_track';
-
 export interface User {
   id: string;
   email: string;
@@ -69,29 +67,20 @@ export interface Cycle {
   completed_points?: number;
 }
 
-export interface Project {
-  id: string;
-  organization_id: string;
-  name: string;
-  slug: string;
-  summary?: string;
-  lead_id?: string;
-  lead?: User;
-  health: ProjectHealth;
-  target_date?: string;
-  sort_order: string;
-  created_at: string;
-  progress?: number;
+export interface CycleMetrics {
+  cycle: Cycle;
+  total_issues: number;
+  completed_issues: number;
+  total_estimate_points: number;
+  completed_estimate_points: number;
+  completion_percentage: number;
+  burnup_data: { date: string; completed_points: number; total_points: number }[];
 }
 
-export interface ProjectMilestone {
-  id: string;
-  project_id: string;
-  name: string;
-  target_date?: string;
-  completed_at?: string;
-  sort_order: string;
-  created_at: string;
+export interface CycleCompleteResult {
+  cycle: Cycle;
+  transferred_issues_count: number;
+  destination: string;
 }
 
 export interface Label {
@@ -120,8 +109,6 @@ export interface Issue {
   assignee?: User;
   creator_id: string;
   creator?: User;
-  project_id?: string;
-  project?: Project;
   cycle_id?: string;
   cycle?: Cycle;
   parent_id?: string;

@@ -1074,16 +1074,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               </div>
             </div>
 
-            {/* Project */}
-            {issue.project && (
-              <div>
-                <label className="text-[11px] text-zinc-400 block mb-1">Project</label>
-                <div className="p-2 rounded bg-zinc-900 border border-zinc-800 text-zinc-200">
-                  {issue.project.name}
-                </div>
-              </div>
-            )}
-
             {/* Cycle */}
             {issue.cycle && (
               <div>

@@ -5,7 +5,7 @@ import {
   X,
   AlertCircle,
 } from 'lucide-react';
-import { IssuePriority, Issue, WorkflowState, User, Label, Project, Cycle } from '@/types';
+import { IssuePriority, Issue, WorkflowState, User, Label, Cycle } from '@/types';
 import { api } from '@/lib/api';
 
 interface CreateIssueModalProps {
@@ -16,7 +16,6 @@ interface CreateIssueModalProps {
   states?: WorkflowState[];
   users?: User[];
   labels?: Label[];
-  projects?: Project[];
   cycles?: Cycle[];
   teamKey?: string;
   teamId?: string;
@@ -31,7 +30,6 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   states = [],
   users = [],
   labels = [],
-  projects = [],
   cycles = [],
   teamKey = '',
   teamId,
@@ -46,8 +44,8 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [estimate, setEstimate] = useState<number>(2);
-  const [projectId, setProjectId] = useState<string>('');
   const [cycleId, setCycleId] = useState<string>('');
+  const [teamCycles, setTeamCycles] = useState<Cycle[]>(cycles);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [modalUsers, setModalUsers] = useState<User[]>(users);
 
@@ -83,6 +81,12 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
             email: tm.user?.email || '',
           }))
         );
+      }
+    }).catch(() => {});
+
+    api.getCycles(selectedTeamId).then((cList) => {
+      if (isMounted && cList) {
+        setTeamCycles(cList.filter((c) => !c.completed_at));
       }
     }).catch(() => {});
 
@@ -159,7 +163,6 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
         state_id: targetState,
         assignee_id: isCrossTeam ? undefined : (assigneeId || undefined),
         estimate,
-        project_id: projectId || undefined,
         cycle_id: isCrossTeam ? undefined : (cycleId || undefined),
         labels: labels.filter((l) => selectedLabels.includes(l.id)),
       });
@@ -346,6 +349,25 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
                 <option value={8}>8 pts</option>
               </select>
             </div>
+
+            {/* Sprint / Cycle */}
+            {!isCrossTeam && (
+              <div>
+                <label className="text-[11px] font-medium text-zinc-400 block mb-1">Sprint Cycle</label>
+                <select
+                  value={cycleId}
+                  onChange={(e) => setCycleId(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none cursor-pointer"
+                >
+                  <option value="">No cycle (Backlog)</option>
+                  {teamCycles.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || `Cycle ${c.number}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Footer Controls */}

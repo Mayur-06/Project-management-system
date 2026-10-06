@@ -6,7 +6,6 @@ import { WorkspaceSidebar } from '@/components/sidebar/WorkspaceSidebar';
 import { CommandPalette } from '@/components/command/CommandPalette';
 import { AIAssistantModal } from '@/components/ai/AIAssistantModal';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
-import { IssueDetailDrawer } from '@/components/issues/IssueDetailDrawer';
 import { Issue, Organization, Team, User } from '@/types';
 import { api } from '@/lib/api';
 
@@ -24,7 +23,6 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isAIAskOpen, setIsAIAskOpen] = useState(false);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
-  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
 
   useEffect(() => {
@@ -134,16 +132,6 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         users={workspaceUsers}
         onCreated={(issue) => {
           window.dispatchEvent(new CustomEvent('issueCreated', { detail: issue }));
-        }}
-      />
-
-      <IssueDetailDrawer
-        issue={selectedIssue}
-        users={workspaceUsers}
-        onClose={() => setSelectedIssue(null)}
-        onUpdateIssue={(updated) => {
-          setSelectedIssue(updated);
-          window.dispatchEvent(new CustomEvent('issueUpdated', { detail: updated }));
         }}
       />
     </div>

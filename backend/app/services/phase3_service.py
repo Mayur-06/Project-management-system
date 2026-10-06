@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import Any, Dict, List, Optional
 from fastapi import HTTPException, status
 from supabase import Client
@@ -224,7 +224,20 @@ class Phase3Service:
 
         # 3. Transfer incomplete issues to destination atomically
         if unresolved_ids:
-            update_payload = {"cycle_id": destination_cycle_id, "updated_at": now_iso}
+            update_payload: Dict[str, Any] = {"cycle_id": destination_cycle_id, "updated_at": now_iso}
+            # If rolling over to backlog, also transition state_id to the team's 'backlog' workflow state
+            if data.destination == "backlog":
+                backlog_st = (
+                    db.table("workflow_states")
+                    .select("id")
+                    .eq("team_id", cycle["team_id"])
+                    .eq("category", "backlog")
+                    .limit(1)
+                    .execute()
+                )
+                if backlog_st.data:
+                    update_payload["state_id"] = backlog_st.data[0]["id"]
+
             db.table("issues").update(update_payload).in_("id", unresolved_ids).execute()
 
             # Batch activity audit log
@@ -246,6 +259,79 @@ class Phase3Service:
             transferred_issues_count=len(unresolved_ids),
             destination=data.destination,
         )
+
+    @classmethod
+    def delete_cycle(cls, cycle_id: str, user_id: str, db: Client) -> Dict[str, Any]:
+        c_res = db.table("cycles").select("*").eq("id", cycle_id).limit(1).execute()
+        if not c_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cycle not found")
+        cycle = c_res.data[0]
+        team = cls._verify_team_access(cycle["team_id"], user_id, db)
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # 1. Find all active/incomplete issues currently linked to this cycle
+        issues_res = (
+            db.table("issues")
+            .select("id, state_id, workflow_states(category)")
+            .eq("cycle_id", cycle_id)
+            .is_("deleted_at", "null")
+            .execute()
+        )
+        linked_issues = issues_res.data or []
+        unresolved_ids = [
+            iss["id"]
+            for iss in linked_issues
+            if (iss.get("workflow_states") or {}).get("category") not in ("completed", "canceled")
+        ]
+        all_ids = [iss["id"] for iss in linked_issues]
+
+        # 2. Find team's backlog state
+        backlog_st = (
+            db.table("workflow_states")
+            .select("id")
+            .eq("team_id", cycle["team_id"])
+            .eq("category", "backlog")
+            .limit(1)
+            .execute()
+        )
+        backlog_state_id = backlog_st.data[0]["id"] if backlog_st.data else None
+
+        # 3. For unfinished issues, move cycle_id -> None and state_id -> backlog_state_id
+        if unresolved_ids:
+            unresolved_payload: Dict[str, Any] = {"cycle_id": None, "updated_at": now_iso}
+            if backlog_state_id:
+                unresolved_payload["state_id"] = backlog_state_id
+            db.table("issues").update(unresolved_payload).in_("id", unresolved_ids).execute()
+
+        # For completed/canceled issues, simply unassign cycle_id
+        completed_ids = [i for i in all_ids if i not in unresolved_ids]
+        if completed_ids:
+            db.table("issues").update({"cycle_id": None, "updated_at": now_iso}).in_("id", completed_ids).execute()
+
+        # 4. Activity log for transferred issues
+        for iid in unresolved_ids:
+            db.table("activity_logs").insert({
+                "organization_id": team["organization_id"],
+                "issue_id": iid,
+                "actor_id": user_id,
+                "action": "cycle_deleted_rollover",
+                "changes": {
+                    "from_cycle": cycle_id,
+                    "cycle_name": cycle.get("name"),
+                    "destination": "backlog",
+                },
+            }).execute()
+
+        # 5. Delete cycle row
+        db.table("cycles").delete().eq("id", cycle_id).execute()
+
+        return {
+            "success": True,
+            "cycle_id": cycle_id,
+            "unassigned_issues_count": len(all_ids),
+            "moved_to_backlog_count": len(unresolved_ids),
+        }
 
     @classmethod
     def auto_rollover_expired_cycles(cls, db: Client) -> List[Dict[str, Any]]:
