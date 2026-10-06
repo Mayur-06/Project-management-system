@@ -20,7 +20,6 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { Organization, Team, User, UserWorkspaceItem } from '@/types';
-import { SettingsModal } from '@/components/settings/SettingsModal';
 import { CreateTeamModal } from '@/components/teams/CreateTeamModal';
 import { Check, Building2, ExternalLink } from 'lucide-react';
 
@@ -47,10 +46,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 }) => {
   const router = useRouter();
   const pathname = usePathname();
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
-  const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
   const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
+  const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
   const [userWorkspaces, setUserWorkspaces] = useState<UserWorkspaceItem[]>([]);
   
   // New workspace modal form state
@@ -73,18 +71,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         setUserWorkspaces(list);
       }
     }).catch(() => {});
-  }, []);
-
-  // Listen for Cmd+, or Ctrl+, to open settings
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
-        e.preventDefault();
-        setIsSettingsOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   useEffect(() => {
@@ -158,6 +144,11 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       label: 'AI Assistant',
       href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/ai` : `/${currentOrgSlug}/ai`,
       icon: <Sparkles className="w-4 h-4 text-zinc-300" />,
+    },
+    {
+      label: 'Settings',
+      href: effectiveTeamKey ? `/${currentOrgSlug}/settings/workspace` : `/${currentOrgSlug}/settings/workspace`,
+      icon: <Settings className="w-4 h-4 text-zinc-300" />,
     },
   ];
 
@@ -366,26 +357,15 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           >
             <LogOut className="w-3.5 h-3.5" />
           </button>
-          <button
-            onClick={() => setIsSettingsOpen(true)}
+          <Link
+            href={effectiveTeamKey ? `/${currentOrgSlug}/settings/workspace` : `/${currentOrgSlug}/settings/workspace`}
             className="p-1.5 rounded-md hover:bg-[#1a1d22] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
             title="Settings (Cmd+,)"
           >
             <Settings className="w-3.5 h-3.5" />
-          </button>
+          </Link>
         </div>
       </div>
-
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        organization={orgState}
-        currentTeam={activeTeam}
-        teams={teams}
-        currentUser={currentUser}
-        onWorkspaceUpdated={(updated) => setOrgState(updated)}
-        onTeamUpdated={() => router.refresh()}
-      />
 
       <CreateTeamModal
         isOpen={isCreateTeamOpen}

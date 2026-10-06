@@ -1,14 +1,14 @@
 'use client';
 
 import React, { createContext, useContext } from 'react';
-import { Organization, Team, User } from '@/types';
+import { Organization, Team, User, WorkspaceMember } from '@/types';
 
 export interface WorkspaceContextValue {
   organization: Organization | null;
   teams: Team[];
   /** Active team matching the current [teamKey] URL segment */
   currentTeam: Team | null;
-  workspaceUsers: User[];
+  workspaceUsers: WorkspaceMember[];
   currentUser: User | null;
 }
 

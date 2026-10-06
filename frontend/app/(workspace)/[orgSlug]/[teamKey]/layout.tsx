@@ -6,7 +6,7 @@ import { WorkspaceSidebar } from '@/components/sidebar/WorkspaceSidebar';
 import { CommandPalette } from '@/components/command/CommandPalette';
 import { AIAssistantModal } from '@/components/ai/AIAssistantModal';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
-import { Issue, Organization, Team, User, WorkflowState } from '@/types';
+import { Issue, Organization, Team, User, WorkspaceMember, WorkflowState } from '@/types';
 import { api } from '@/lib/api';
 import { WorkspaceContext } from '@/lib/WorkspaceContext';
 import { supabase } from '@/lib/supabase/client';
@@ -23,7 +23,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isAIAskOpen, setIsAIAskOpen] = useState(false);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
-  const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
+  const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceMember[]>([]);
 
   useEffect(() => {
     // Resolve auth token first so all downstream API calls can proceed immediately
@@ -55,13 +55,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       ]).then(([org, fetchedTeams, members]) => {
         if (org) setOrganization(org);
         if (fetchedTeams) setTeams(fetchedTeams);
-        const active = (members || [])
-          .filter((m) => m.status !== 'invited' && m.user)
-          .map((m) => ({
-            id: m.user_id,
-            name: m.user?.name || m.user?.email || 'Member',
-            email: m.user?.email || '',
-          }));
+        const active = (members || []).filter((m) => m.status !== 'invited' && m.user);
         setWorkspaceUsers(active);
       }).catch(() => {});
     });
@@ -155,7 +149,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           teamId={currentTeam?.id || teams[0]?.id}
           teams={teams}
           states={currentTeamStates}
-          users={workspaceUsers}
+          users={workspaceUsers.filter((m) => m.user).map((m) => m.user!)}
           onCreated={(issue) => {
             window.dispatchEvent(new CustomEvent('issueCreated', { detail: issue }));
           }}

@@ -73,6 +73,57 @@ export default function InboxPage() {
     );
   }
 
+  const renderIssueRow = (issue: Issue) => {
+    const issueTeams = (issue as any).teams;
+    const teamKey = issueTeams?.key || issue.identifier?.split('-')[0] || 'ENG';
+    const issueId = issue.identifier || issue.id;
+    const displayIdentifier = issue.identifier || issue.id;
+
+    return (
+      <Link
+        key={issue.id}
+        href={`/${orgSlug}/${teamKey}/issues/${issueId}`}
+        className="block p-4 bg-zinc-900 border border-zinc-800 rounded-lg hover:border-zinc-600 transition-colors"
+      >
+        <div className="flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-mono text-xs text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-700">
+                {displayIdentifier}
+              </span>
+              <span className="text-xs text-zinc-500">
+                {teamKey} • {new Date(issue.created_at).toLocaleDateString()}
+              </span>
+            </div>
+
+            <h3 className="font-medium text-white truncate mb-2">
+              {issue.title}
+            </h3>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1">
+                {getStateIcon(issue.state?.name || 'Unknown')}
+                <span className="text-xs text-zinc-400">
+                  {issue.state?.name || 'Unknown'}
+                </span>
+              </div>
+
+              <span className={`text-xs px-2 py-0.5 rounded border ${getPriorityColor(issue.priority)}`}>
+                {issue.priority}
+              </span>
+
+              {issue.assignee?.name && (
+                <span className="text-xs text-zinc-500">
+                  Assignee: {issue.assignee.name}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </Link>
+    );
+  };
+
   return (
     <div className="h-full flex flex-col">
       <div className="p-4 border-b border-zinc-800 bg-zinc-950/50">
@@ -88,49 +139,7 @@ export default function InboxPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {issues.map((issue) => (
-              <Link
-                key={issue.id}
-                href={`/${orgSlug}/${issue.identifier.split('-')[0]}/${issue.id}`}
-                className="block p-4 bg-zinc-900 border border-zinc-800 rounded-lg hover:border-zinc-600 transition-colors"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-mono text-xs text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-700">
-                        {issue.identifier}
-                      </span>
-                      <span className="text-xs text-zinc-500">
-                        {issue.identifier ? issue.identifier.split('-')[0] : 'Issue'} • {new Date(issue.created_at).toLocaleDateString()}
-                      </span>
-                    </div>
-
-                    <h3 className="font-medium text-white truncate mb-2">
-                      {issue.title}
-                    </h3>
-
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <div className="flex items-center gap-1">
-                        {getStateIcon(issue.state?.name || 'Unknown')}
-                        <span className="text-xs text-zinc-400">
-                          {issue.state?.name || 'Unknown'}
-                        </span>
-                      </div>
-
-                      <span className={`text-xs px-2 py-0.5 rounded border ${getPriorityColor(issue.priority)}`}>
-                        {issue.priority}
-                      </span>
-
-                      {issue.assignee?.name && (
-                        <span className="text-xs text-zinc-500">
-                          Assignee: {issue.assignee.name}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
+            {issues.map(renderIssueRow)}
           </div>
         )}
       </div>

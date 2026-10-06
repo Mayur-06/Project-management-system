@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Issue, WorkflowState } from '@/types';
+import { Issue, WorkflowState, User } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
 import { useRealtimeBoard } from '@/hooks/useRealtime';
@@ -19,6 +19,12 @@ export default function IssuesPage() {
 
   // ─── Workspace data from layout context — no extra API calls needed ───
   const { currentTeam, workspaceUsers, teams: workspaceTeams } = useWorkspace();
+
+  // Map WorkspaceMember[] to User[] for CreateIssueModal
+  const modalUsers = useMemo(() => 
+    workspaceUsers.map(m => m.user).filter((u): u is User => u !== undefined),
+    [workspaceUsers]
+  );
 
   const [issues, setIssues] = useState<Issue[]>([]);
   const [states, setStates] = useState<WorkflowState[]>([]);
@@ -243,7 +249,7 @@ export default function IssuesPage() {
         isOpen={isNewIssueOpen}
         initialStateId={initialStateId}
         states={states}
-        users={workspaceUsers}
+        users={modalUsers}
         teamKey={teamKey}
         teamId={currentTeam?.id}
         teams={workspaceTeams}
