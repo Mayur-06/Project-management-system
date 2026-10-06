@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Issue, WorkflowState, Cycle } from '@/types';
 import { Repeat } from 'lucide-react';
@@ -33,6 +33,29 @@ export default function IssuesPage() {
   // doesn't show before we even know which team to load for.
   const [isLoading, setIsLoading] = useState(false);
 
+  // ─── Active Drag Interruption Guard ──────────────────────────────────────
+  // Prevents incoming CDC/Broadcast events from mutating the board while user
+  // is actively dragging a card, avoiding DOM detachment or cursor snatching.
+  const isDraggingRef = useRef(false);
+  const pendingUpdatesRef = useRef<(() => void)[]>([]);
+
+  const queueOrExecute = (updateFn: () => void) => {
+    if (isDraggingRef.current) {
+      pendingUpdatesRef.current.push(updateFn);
+    } else {
+      updateFn();
+    }
+  };
+
+  const handleDragStateChange = (isDragging: boolean) => {
+    isDraggingRef.current = isDragging;
+    if (!isDragging && pendingUpdatesRef.current.length > 0) {
+      const updates = [...pendingUpdatesRef.current];
+      pendingUpdatesRef.current = [];
+      updates.forEach((fn) => fn());
+    }
+  };
+
   // ─── Load issues, workflow states, and cycles once team is known ───────
   const loadData = async (teamId: string) => {
     setIsLoading(true);
@@ -61,24 +84,34 @@ export default function IssuesPage() {
   useRealtimeBoard({
     teamId: currentTeam?.id,
     onIssueCreated: (newIssue) => {
-      setIssues((prev) => {
-        if (prev.some((i) => i.id === newIssue.id)) return prev;
-        return [newIssue, ...prev];
+      queueOrExecute(() => {
+        setIssues((prev) => {
+          if (prev.some((i) => i.id === newIssue.id)) return prev;
+          return [newIssue, ...prev];
+        });
       });
     },
     onIssueUpdated: (updatedIssue) => {
-      setIssues((prev) => prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i)));
+      queueOrExecute(() => {
+        setIssues((prev) => prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i)));
+      });
     },
     onIssueMoved: ({ id, state_id, sort_order }) => {
-      setIssues((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, state_id, sort_order } : i))
-      );
+      queueOrExecute(() => {
+        setIssues((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, state_id, sort_order } : i))
+        );
+      });
     },
     onIssueDeleted: (deletedId) => {
-      setIssues((prev) => prev.filter((i) => i.id !== deletedId));
+      queueOrExecute(() => {
+        setIssues((prev) => prev.filter((i) => i.id !== deletedId));
+      });
     },
     onReloadRequested: () => {
-      if (currentTeam?.id) loadData(currentTeam.id);
+      queueOrExecute(() => {
+        if (currentTeam?.id) loadData(currentTeam.id);
+      });
     },
   });
 
@@ -256,6 +289,7 @@ export default function IssuesPage() {
             }}
             onMoveIssueState={handleMoveIssueState}
             onDeleteIssue={handleDeleteIssue}
+            onDragStateChange={handleDragStateChange}
           />
         ) : (
           <IssueListView

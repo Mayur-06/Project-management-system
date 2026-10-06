@@ -206,14 +206,15 @@ async def update_milestone(
 @router.get(
     "/teams/{team_id}/triage",
     response_model=List[IssueResponse],
-    summary="Fetch all active (unsnoozed) triage issues for a team",
+    summary="Fetch all active (unsnoozed) or snoozed triage issues for a team",
 )
 async def list_triage_issues(
     team_id: str,
+    snoozed: bool = False,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
 ):
-    return Phase3Service.list_triage_issues(team_id, current_user.id, db)
+    return Phase3Service.list_triage_issues(team_id, current_user.id, db, snoozed_only=snoozed)
 
 
 @router.post(
@@ -242,6 +243,19 @@ async def snooze_triage_issue(
     db: Client = Depends(get_admin_db),
 ):
     return Phase3Service.snooze_triage_issue(issue_id, payload, current_user.id, db)
+
+
+@router.post(
+    "/triage/{issue_id}/unsnooze",
+    response_model=Dict[str, Any],
+    summary="Unsnooze triage issue immediately back into active triage inbox",
+)
+async def unsnooze_triage_issue(
+    issue_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return Phase3Service.unsnooze_triage_issue(issue_id, current_user.id, db)
 
 
 @router.post(

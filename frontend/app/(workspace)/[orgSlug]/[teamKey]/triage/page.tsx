@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import {
   Inbox,
   Send,
@@ -15,7 +15,6 @@ import {
   ArrowUpRight,
   Loader2,
   Sliders,
-  ExternalLink,
   ChevronRight,
   CornerDownRight,
 } from 'lucide-react';
@@ -31,7 +30,6 @@ interface SentTriageIssue extends Issue {
 
 export default function TriagePage() {
   const params = useParams();
-  const router = useRouter();
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
@@ -41,9 +39,10 @@ export default function TriagePage() {
   const [teamStates, setTeamStates] = useState<WorkflowState[]>([]);
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; email: string }[]>([]);
 
-  // Triage Tabs: 'incoming' (inbox) or 'sent' (outbox to other teams)
-  const [activeTab, setActiveTab] = useState<'incoming' | 'sent'>('incoming');
+  // Triage Tabs: 'incoming' (inbox), 'snoozed' (snoozed items), or 'sent' (outbox to other teams)
+  const [activeTab, setActiveTab] = useState<'incoming' | 'snoozed' | 'sent'>('incoming');
   const [triageIssues, setTriageIssues] = useState<Issue[]>([]);
+  const [snoozedIssues, setSnoozedIssues] = useState<Issue[]>([]);
   const [sentIssues, setSentIssues] = useState<SentTriageIssue[]>([]);
 
   // Selection & Details
@@ -70,14 +69,16 @@ export default function TriagePage() {
     let isMounted = true;
     const teamId = currentTeam.id;
 
-    // Fetch states, triage issues, and team members in parallel
+    // Fetch states, triage issues (incoming & snoozed), and team members in parallel
     Promise.all([
       api.getWorkflowStates(teamId),
       api.getTriageIssues(teamId),
+      api.getTriageIssues(teamId, true),
       api.getTeamMembers(teamId),
-    ]).then(async ([states, triageRes, tms]) => {
+    ]).then(async ([states, triageRes, snoozedRes, tms]) => {
       if (!isMounted) return;
       setTeamStates(states || []);
+      setSnoozedIssues(snoozedRes || []);
 
       if (tms) {
         setTeamMembers(
@@ -116,7 +117,7 @@ export default function TriagePage() {
     return () => { isMounted = false; };
   }, [currentTeam?.id, allTeams.length]);
 
-  // When an incoming issue is selected: populate form fields with defaults and run AI triage
+  // When an incoming/snoozed issue is selected: populate form fields with defaults and run AI triage
   const handleSelectIncoming = async (issue: Issue, statesOverride?: WorkflowState[]) => {
     setSelectedIssue(issue);
     setSelectedSentIssue(null);
@@ -195,10 +196,13 @@ export default function TriagePage() {
         formEstimate ? formEstimate : undefined
       );
 
-      const nextList = triageIssues.filter((i) => i.id !== selectedIssue.id);
-      setTriageIssues(nextList);
-      if (nextList.length > 0) {
-        handleSelectIncoming(nextList[0]);
+      const nextIncoming = triageIssues.filter((i) => i.id !== selectedIssue.id);
+      const nextSnoozed = snoozedIssues.filter((i) => i.id !== selectedIssue.id);
+      setTriageIssues(nextIncoming);
+      setSnoozedIssues(nextSnoozed);
+      const activeList = activeTab === 'snoozed' ? nextSnoozed : nextIncoming;
+      if (activeList.length > 0) {
+        handleSelectIncoming(activeList[0]);
       } else {
         setSelectedIssue(null);
         setTriageAnalysis(null);
@@ -222,26 +226,64 @@ export default function TriagePage() {
       snoozedUntilDate.setHours(9, 0, 0, 0);
     }
 
-    const ok = await api.snoozeTriage(issueId, snoozedUntilDate.toISOString());
+    const isoStr = snoozedUntilDate.toISOString();
+    const ok = await api.snoozeTriage(issueId, isoStr);
     if (ok) {
-      const nextList = triageIssues.filter((i) => i.id !== issueId);
-      setTriageIssues(nextList);
-      if (nextList.length > 0) {
-        handleSelectIncoming(nextList[0]);
-      } else {
-        setSelectedIssue(null);
-        setTriageAnalysis(null);
+      const movedIssue = selectedIssue?.id === issueId ? selectedIssue : (triageIssues.find((i) => i.id === issueId) || snoozedIssues.find((i) => i.id === issueId));
+      const updatedIssue = movedIssue ? { ...movedIssue, snoozed_until: isoStr } : null;
+
+      const nextIncoming = triageIssues.filter((i) => i.id !== issueId);
+      setTriageIssues(nextIncoming);
+      if (updatedIssue) {
+        setSnoozedIssues((prev) => [updatedIssue, ...prev.filter((i) => i.id !== issueId)]);
+      }
+
+      if (activeTab === 'incoming') {
+        if (nextIncoming.length > 0) {
+          handleSelectIncoming(nextIncoming[0]);
+        } else {
+          setSelectedIssue(null);
+          setTriageAnalysis(null);
+        }
+      } else if (activeTab === 'snoozed' && updatedIssue) {
+        setSelectedIssue(updatedIssue);
       }
       setIsSnoozeOpen(false);
     }
   };
 
+  const handleUnsnooze = async (issueId: string) => {
+    const ok = await api.unsnoozeTriage(issueId);
+    if (ok) {
+      const movedIssue = selectedIssue?.id === issueId ? selectedIssue : snoozedIssues.find((i) => i.id === issueId);
+      const updatedIssue = movedIssue ? { ...movedIssue, snoozed_until: undefined } : null;
+
+      const nextSnoozed = snoozedIssues.filter((i) => i.id !== issueId);
+      setSnoozedIssues(nextSnoozed);
+      if (updatedIssue) {
+        setTriageIssues((prev) => [updatedIssue, ...prev.filter((i) => i.id !== issueId)]);
+      }
+
+      if (activeTab === 'snoozed') {
+        if (nextSnoozed.length > 0) {
+          handleSelectIncoming(nextSnoozed[0]);
+        } else {
+          setSelectedIssue(null);
+          setTriageAnalysis(null);
+        }
+      }
+    }
+  };
+
   const handleDecline = async (issueId: string) => {
     await api.declineTriage(issueId, 'Declined from Triage inbox');
-    const nextList = triageIssues.filter((i) => i.id !== issueId);
-    setTriageIssues(nextList);
-    if (nextList.length > 0) {
-      handleSelectIncoming(nextList[0]);
+    const nextIncoming = triageIssues.filter((i) => i.id !== issueId);
+    const nextSnoozed = snoozedIssues.filter((i) => i.id !== issueId);
+    setTriageIssues(nextIncoming);
+    setSnoozedIssues(nextSnoozed);
+    const activeList = activeTab === 'snoozed' ? nextSnoozed : nextIncoming;
+    if (activeList.length > 0) {
+      handleSelectIncoming(activeList[0]);
     } else {
       setSelectedIssue(null);
       setTriageAnalysis(null);
@@ -267,11 +309,13 @@ export default function TriagePage() {
             <button
               onClick={() => {
                 setActiveTab('incoming');
-                if (triageIssues.length > 0 && (!selectedIssue || selectedSentIssue)) {
+                if (triageIssues.length > 0 && (!selectedIssue || selectedSentIssue || selectedIssue.snoozed_until)) {
                   handleSelectIncoming(triageIssues[0]);
+                } else if (triageIssues.length === 0) {
+                  setSelectedIssue(null);
                 }
               }}
-              className={`flex-1 py-3 px-3 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors cursor-pointer ${
+              className={`flex-1 py-3 px-2 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-colors cursor-pointer ${
                 activeTab === 'incoming'
                   ? 'border-white text-white bg-zinc-900/70'
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
@@ -286,6 +330,29 @@ export default function TriagePage() {
 
             <button
               onClick={() => {
+                setActiveTab('snoozed');
+                if (snoozedIssues.length > 0) {
+                  handleSelectIncoming(snoozedIssues[0]);
+                } else {
+                  setSelectedIssue(null);
+                  setSelectedSentIssue(null);
+                }
+              }}
+              className={`flex-1 py-3 px-2 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-colors cursor-pointer ${
+                activeTab === 'snoozed'
+                  ? 'border-white text-white bg-zinc-900/70'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+              <span>Snoozed</span>
+              <span className="font-mono text-[10px] bg-zinc-800 px-1.5 py-0.2 rounded border border-zinc-700">
+                {snoozedIssues.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
                 setActiveTab('sent');
                 if (sentIssues.length > 0) {
                   handleSelectSent(sentIssues[0]);
@@ -294,14 +361,14 @@ export default function TriagePage() {
                   setSelectedSentIssue(null);
                 }
               }}
-              className={`flex-1 py-3 px-3 text-xs font-semibold flex items-center justify-center gap-2 border-b-2 transition-colors cursor-pointer ${
+              className={`flex-1 py-3 px-2 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-colors cursor-pointer ${
                 activeTab === 'sent'
                   ? 'border-white text-white bg-zinc-900/70'
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
               <Send className="w-3.5 h-3.5" />
-              <span>Sent to Others</span>
+              <span>Sent</span>
               <span className="font-mono text-[10px] bg-zinc-800 px-1.5 py-0.2 rounded border border-zinc-700">
                 {sentIssues.length}
               </span>
@@ -346,6 +413,48 @@ export default function TriagePage() {
                     <p className="font-medium text-zinc-400">Incoming inbox is clean!</p>
                     <p className="text-[11px] text-zinc-600 leading-normal">
                       When another team creates an issue for {currentTeam?.key || 'this team'}, it will arrive here for triage review.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {activeTab === 'snoozed' && (
+              <>
+                {snoozedIssues.map((issue) => {
+                  const isSelected = selectedIssue?.id === issue.id;
+                  const snoozeDate = issue.snoozed_until ? new Date(issue.snoozed_until) : null;
+                  return (
+                    <div
+                      key={issue.id}
+                      onClick={() => handleSelectIncoming(issue)}
+                      className={`p-4 cursor-pointer transition-colors space-y-2 ${
+                        isSelected ? 'bg-zinc-900 border-l-2 border-amber-400' : 'hover:bg-zinc-900/60'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono font-medium text-white">{issue.identifier}</span>
+                        <PriorityBadge priority={issue.priority} />
+                      </div>
+                      <h4 className="text-xs font-medium text-white line-clamp-2 leading-relaxed">
+                        {issue.title}
+                      </h4>
+                      <div className="flex items-center gap-1.5 text-[11px] text-amber-400/90 font-medium">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                        <span>
+                          Snoozed until {snoozeDate ? snoozeDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Future'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {snoozedIssues.length === 0 && (
+                  <div className="py-16 text-center text-xs text-zinc-500 space-y-2 px-6">
+                    <Clock className="w-8 h-8 text-zinc-600 mx-auto stroke-[1.5]" />
+                    <p className="font-medium text-zinc-400">No snoozed issues</p>
+                    <p className="text-[11px] text-zinc-600 leading-normal">
+                      Issues snoozed from the incoming inbox will appear here until their timer expires.
                     </p>
                   </div>
                 )}
@@ -397,8 +506,8 @@ export default function TriagePage() {
 
         {/* Right Column: Interactive Review / Details Area */}
         <div className="flex-1 bg-black p-8 overflow-y-auto">
-          {/* View 1: Incoming Issue Triaging Mode */}
-          {activeTab === 'incoming' && selectedIssue && (
+          {/* View 1: Incoming & Snoozed Issue Triaging Mode */}
+          {(activeTab === 'incoming' || activeTab === 'snoozed') && selectedIssue && (
             <div className="max-w-3xl space-y-6 animate-fade-in">
               {/* Header Banner */}
               <div className="flex items-start justify-between gap-4">
@@ -408,9 +517,16 @@ export default function TriagePage() {
                       {selectedIssue.identifier}
                     </span>
                     <span>•</span>
-                    <span className="text-amber-300 bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded text-[10px] font-sans">
-                      Incoming Cross-Team Request
-                    </span>
+                    {selectedIssue.snoozed_until ? (
+                      <span className="text-amber-300 bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded text-[10px] font-sans flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-amber-400" />
+                        Snoozed until {new Date(selectedIssue.snoozed_until).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    ) : (
+                      <span className="text-amber-300 bg-amber-950/40 border border-amber-800/60 px-2 py-0.5 rounded text-[10px] font-sans">
+                        Incoming Cross-Team Request
+                      </span>
+                    )}
                     <span>•</span>
                     <span>Received {new Date(selectedIssue.created_at).toLocaleDateString()}</span>
                   </div>
@@ -419,6 +535,18 @@ export default function TriagePage() {
 
                 {/* Primary Decision Action Buttons */}
                 <div className="flex items-center gap-2 relative shrink-0">
+                  {/* Unsnooze Button if snoozed */}
+                  {selectedIssue.snoozed_until && (
+                    <button
+                      onClick={() => handleUnsnooze(selectedIssue.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-amber-300 hover:text-white bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/80 transition-colors cursor-pointer"
+                      title="Move back to incoming triage inbox"
+                    >
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>Unsnooze</span>
+                    </button>
+                  )}
+
                   {/* Decline Button */}
                   <button
                     onClick={() => handleDecline(selectedIssue.id)}
@@ -437,7 +565,7 @@ export default function TriagePage() {
                       title="Snooze issue from triage inbox"
                     >
                       <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>Snooze</span>
+                      <span>{selectedIssue.snoozed_until ? 'Re-snooze' : 'Snooze'}</span>
                     </button>
 
                     {isSnoozeOpen && (
@@ -686,18 +814,12 @@ export default function TriagePage() {
                   <h2 className="text-xl font-semibold text-white tracking-tight">{selectedSentIssue.title}</h2>
                 </div>
 
-                {/* Jump to recipient team triage if user has access */}
-                {selectedSentIssue.destinationTeam && (
-                  <button
-                    onClick={() =>
-                      router.push(`/${orgSlug}/${selectedSentIssue.destinationTeam?.key.toLowerCase()}/triage`)
-                    }
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors shadow-xs cursor-pointer shrink-0"
-                  >
-                    <span>Open {selectedSentIssue.destinationTeam.key} Triage</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
-                )}
+                <div className="shrink-0 flex items-center gap-2">
+                  <span className="text-xs font-medium text-zinc-400 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Awaiting External Review</span>
+                  </span>
+                </div>
               </div>
 
               {/* Outbox Status Explanation Card */}

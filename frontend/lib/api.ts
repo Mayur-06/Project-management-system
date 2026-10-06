@@ -456,8 +456,8 @@ export const api = {
   },
 
   // Triage Actions
-  async getTriageIssues(teamId: string): Promise<Issue[]> {
-    const data = await fetchWithAuth<Issue[]>(`/teams/${teamId}/triage`);
+  async getTriageIssues(teamId: string, snoozed: boolean = false): Promise<Issue[]> {
+    const data = await fetchWithAuth<Issue[]>(`/teams/${teamId}/triage${snoozed ? '?snoozed=true' : ''}`);
     return data || [];
   },
 
@@ -485,6 +485,13 @@ export const api = {
     const res = await fetchWithAuth<any>(`/triage/${issueId}/snooze`, {
       method: 'POST',
       body: JSON.stringify({ snoozed_until: snoozedUntil }),
+    });
+    return !!res;
+  },
+
+  async unsnoozeTriage(issueId: string): Promise<boolean> {
+    const res = await fetchWithAuth<any>(`/triage/${issueId}/unsnooze`, {
+      method: 'POST',
     });
     return !!res;
   },

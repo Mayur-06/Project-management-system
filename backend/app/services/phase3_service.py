@@ -671,7 +671,9 @@ class Phase3Service:
     # ==============================================================================
 
     @classmethod
-    def list_triage_issues(cls, team_id: str, user_id: str, db: Client) -> List[IssueResponse]:
+    def list_triage_issues(
+        cls, team_id: str, user_id: str, db: Client, snoozed_only: bool = False
+    ) -> List[IssueResponse]:
         cls._verify_team_access(team_id, user_id, db)
 
         # 1. Resolve triage state ID for team
@@ -698,9 +700,10 @@ class Phase3Service:
         res = query.execute()
 
         now_dt = datetime.now(timezone.utc)
-        active_triage = []
+        results = []
         for iss in (res.data or []):
             snoozed = iss.get("snoozed_until")
+            is_currently_snoozed = False
             if snoozed:
                 try:
                     if isinstance(snoozed, str):
@@ -713,11 +716,41 @@ class Phase3Service:
                         if snoozed_dt.tzinfo is None:
                             snoozed_dt = snoozed_dt.replace(tzinfo=timezone.utc)
                         if snoozed_dt > now_dt:
-                            continue
+                            is_currently_snoozed = True
                 except Exception:
                     pass
-            active_triage.append(IssueResponse(**iss))
-        return active_triage
+            if snoozed_only:
+                if is_currently_snoozed:
+                    results.append(IssueResponse(**iss))
+            else:
+                if not is_currently_snoozed:
+                    results.append(IssueResponse(**iss))
+        return results
+
+    @classmethod
+    def unsnooze_triage_issue(cls, issue_id: str, user_id: str, db: Client) -> Dict[str, Any]:
+        i_res = db.table("issues").select("*").eq("id", issue_id).limit(1).execute()
+        if not i_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
+        issue = i_res.data[0]
+        cls._verify_team_access(issue["team_id"], user_id, db)
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        db.table("issues").update({
+            "snoozed_until": None,
+            "updated_at": now_iso,
+            "version": issue["version"] + 1,
+        }).eq("id", issue_id).execute()
+
+        db.table("activity_logs").insert({
+            "organization_id": issue["organization_id"],
+            "issue_id": issue_id,
+            "actor_id": user_id,
+            "action": "triage_unsnoozed",
+            "changes": {"snoozed_until": None},
+        }).execute()
+
+        return {"status": "unsnoozed", "issue_id": issue_id}
 
     @classmethod
     def accept_triage_issue(
