@@ -69,6 +69,11 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     api.getWorkflowStates(selectedTeamId).then((res) => {
       if (isMounted && res && res.length > 0) {
         setTeamWorkflowStates(res);
+        const nonTriage = res.filter((s) => s.category !== 'triage');
+        const defaultSt = nonTriage.find((s) => s.is_default) || nonTriage[0] || res[0];
+        if (defaultSt) {
+          setStateId((prev) => prev || defaultSt.id);
+        }
       }
     }).catch(() => {});
 
@@ -112,10 +117,15 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     if (isCrossTeam && targetTriageState) {
       setStateId(targetTriageState.id);
     } else if (activeStates.length > 0) {
-      const defaultState = activeStates.find((s) => s.is_default) || activeStates[0];
-      setStateId(defaultState.id);
+      const isCurrentValid = activeStates.some((s) => s.id === stateId);
+      if (!isCurrentValid || !stateId) {
+        const defaultState = activeStates.find((s) => s.is_default) || activeStates[0];
+        if (defaultState) {
+          setStateId(defaultState.id);
+        }
+      }
     }
-  }, [isCrossTeam, targetTriageState, selectedTeamId]);
+  }, [isCrossTeam, targetTriageState, selectedTeamId, activeStates, stateId]);
 
   // Real-time debounced duplicate check
   const [duplicateMatches, setDuplicateMatches] = useState<

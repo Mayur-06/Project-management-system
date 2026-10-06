@@ -390,6 +390,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         onClose={() => setIsSettingsOpen(false)}
         organization={orgState}
         currentTeam={activeTeam}
+        teams={teams}
         currentUser={currentUser}
         onWorkspaceUpdated={(updated) => setOrgState(updated)}
         onTeamUpdated={() => router.refresh()}

@@ -6,7 +6,7 @@ import { WorkspaceSidebar } from '@/components/sidebar/WorkspaceSidebar';
 import { CommandPalette } from '@/components/command/CommandPalette';
 import { AIAssistantModal } from '@/components/ai/AIAssistantModal';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
-import { Issue, Organization, Team, User } from '@/types';
+import { Issue, Organization, Team, User, WorkflowState } from '@/types';
 import { api } from '@/lib/api';
 import { WorkspaceContext } from '@/lib/WorkspaceContext';
 import { supabase } from '@/lib/supabase/client';
@@ -90,11 +90,25 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const [currentTeamStates, setCurrentTeamStates] = useState<WorkflowState[]>([]);
+  const [triageCount, setTriageCount] = useState<number>(0);
+
   // Derive currentTeam from the URL teamKey — no extra API call needed
   const currentTeam = useMemo(
     () => teams.find((t) => t.key.toUpperCase() === teamKey.toUpperCase()) || teams[0] || null,
     [teams, teamKey]
   );
+
+  useEffect(() => {
+    if (!currentTeam?.id) return;
+    Promise.all([
+      api.getWorkflowStates(currentTeam.id),
+      api.getTriageIssues(currentTeam.id),
+    ]).then(([states, triageIssues]) => {
+      if (states) setCurrentTeamStates(states);
+      if (triageIssues) setTriageCount(triageIssues.length);
+    }).catch(() => {});
+  }, [currentTeam?.id]);
 
   const contextValue = useMemo(
     () => ({ organization, teams, currentTeam, workspaceUsers, currentUser }),
@@ -111,6 +125,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           organization={organization}
           teams={teams}
           currentUser={currentUser}
+          triageCount={triageCount}
           onOpenCommandPalette={() => setIsCommandOpen(true)}
           onOpenNewIssue={() => setIsNewIssueOpen(true)}
           onOpenAIAsk={() => setIsAIAskOpen(true)}
@@ -145,6 +160,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           teamKey={(teamKey || teams[0]?.key || '').toUpperCase()}
           teamId={currentTeam?.id || teams[0]?.id}
           teams={teams}
+          states={currentTeamStates}
           users={workspaceUsers}
           onCreated={(issue) => {
             window.dispatchEvent(new CustomEvent('issueCreated', { detail: issue }));

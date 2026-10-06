@@ -27,11 +27,26 @@ export default function SignupPage() {
   const [workspaceName, setWorkspaceName] = useState('');
   const [workspaceSlug, setWorkspaceSlug] = useState('');
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
-  const [teamName, setTeamName] = useState('Engineering');
-  const [teamKey, setTeamKey] = useState('ENG');
+  const [teamName, setTeamName] = useState('');
+  const [teamKey, setTeamKey] = useState('');
+  const [keyManuallyEdited, setKeyManuallyEdited] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  const handleTeamNameChange = (val: string) => {
+    setTeamName(val);
+    if (fieldErrors.teamName) setFieldErrors((prev) => ({ ...prev, teamName: undefined }));
+    if (!keyManuallyEdited) {
+      const clean = val.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      if (clean.length > 0) {
+        setTeamKey(clean.slice(0, 4));
+        if (fieldErrors.teamKey) setFieldErrors((prev) => ({ ...prev, teamKey: undefined }));
+      } else {
+        setTeamKey('');
+      }
+    }
+  };
 
   const handleWorkspaceNameChange = (val: string) => {
     setWorkspaceName(val);
@@ -415,16 +430,13 @@ export default function SignupPage() {
                 <input
                   type="text"
                   value={teamName}
-                  onChange={(e) => {
-                    setTeamName(e.target.value);
-                    if (fieldErrors.teamName) setFieldErrors((prev) => ({ ...prev, teamName: undefined }));
-                  }}
+                  onChange={(e) => handleTeamNameChange(e.target.value)}
                   className={`w-full bg-zinc-900 text-xs text-white pl-9 pr-3 py-2.5 rounded border transition-colors focus:outline-none ${
                     fieldErrors.teamName
                       ? 'border-red-500/80 focus:border-red-400 ring-1 ring-red-500/20'
                       : 'border-zinc-800 focus:border-white'
                   }`}
-                  placeholder="Engineering"
+                  placeholder="e.g. Engineering"
                   required
                 />
               </div>
@@ -438,6 +450,7 @@ export default function SignupPage() {
                 type="text"
                 value={teamKey}
                 onChange={(e) => {
+                  setKeyManuallyEdited(true);
                   setTeamKey(e.target.value.toUpperCase().slice(0, 5));
                   if (fieldErrors.teamKey) setFieldErrors((prev) => ({ ...prev, teamKey: undefined }));
                 }}
@@ -446,7 +459,7 @@ export default function SignupPage() {
                     ? 'border-red-500/80 focus:border-red-400 ring-1 ring-red-500/20'
                     : 'border-zinc-800 focus:border-white'
                 }`}
-                placeholder="ENG"
+                placeholder="e.g. ENG"
                 required
                 maxLength={5}
               />

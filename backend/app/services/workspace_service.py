@@ -54,18 +54,6 @@ class WorkspaceService:
                     db.table("workspace_invitations").update(
                         {"status": "accepted"}
                     ).eq("id", inv["id"]).execute()
-
-                    # Automatically grant member access to workspace teams
-                    teams_res = db.table("teams").select("id").eq("organization_id", org_id).execute()
-                    if teams_res.data:
-                        for tm in teams_res.data:
-                            try:
-                                db.table("team_members").upsert(
-                                    {"team_id": tm["id"], "user_id": user_id},
-                                    on_conflict="team_id,user_id"
-                                ).execute()
-                            except Exception:
-                                pass
         except Exception:
             pass
 

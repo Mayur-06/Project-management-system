@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Building2,
@@ -10,7 +10,6 @@ import {
   Loader2,
   Mail,
   Shield,
-  Clock,
   Sparkles,
   LogOut,
   Keyboard,
@@ -29,6 +28,7 @@ interface SettingsModalProps {
   onClose: () => void;
   organization: Organization | null;
   currentTeam: Team | null;
+  teams?: Team[];
   currentUser?: User | null;
   onWorkspaceUpdated?: (updated: Organization) => void;
   onTeamUpdated?: (updated: Team) => void;
@@ -41,17 +41,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   organization,
   currentTeam,
+  teams = [],
   currentUser,
   onWorkspaceUpdated,
   onTeamUpdated,
 }) => {
   const [activeTab, setActiveTab] = useState<TabType>('workspace');
+
+  // List of all teams available in workspace
+  const allTeams = useMemo(() => {
+    if (teams && teams.length > 0) return teams;
+    if (currentTeam) return [currentTeam];
+    return [];
+  }, [teams, currentTeam]);
+
+  // Selected team for Tab 1 (Workspace & Team configuration)
+  const [selectedConfigTeamId, setSelectedConfigTeamId] = useState<string>(currentTeam?.id || '');
+
+  // Selected team for Tab 2 (Members & Access > Team membership)
+  const [selectedMembersTeamId, setSelectedMembersTeamId] = useState<string>(currentTeam?.id || '');
+
+  // Active teams based on selected IDs
+  const activeConfigTeam = useMemo(
+    () => allTeams.find((t) => t.id === selectedConfigTeamId) || currentTeam || allTeams[0] || null,
+    [allTeams, selectedConfigTeamId, currentTeam]
+  );
+
+  const activeMembersTeam = useMemo(
+    () => allTeams.find((t) => t.id === selectedMembersTeamId) || currentTeam || allTeams[0] || null,
+    [allTeams, selectedMembersTeamId, currentTeam]
+  );
   
   // Workspace & Team state
   const [orgName, setOrgName] = useState(organization?.name || '');
-  const [teamName, setTeamName] = useState(currentTeam?.name || '');
-  const [teamKey, setTeamKey] = useState(currentTeam?.key || '');
-  const [cycleWeeks, setCycleWeeks] = useState(currentTeam?.cycle_duration_weeks || 2);
+  const [teamName, setTeamName] = useState(activeConfigTeam?.name || '');
+  const [teamKey, setTeamKey] = useState(activeConfigTeam?.key || '');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [teamError, setTeamError] = useState<string | null>(null);
@@ -76,13 +100,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (organization) {
       setOrgName(organization.name);
     }
-    if (currentTeam) {
-      setTeamName(currentTeam.name);
-      setTeamKey(currentTeam.key || '');
-      setCycleWeeks(currentTeam.cycle_duration_weeks || 2);
+  }, [organization, isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (currentTeam?.id && !selectedConfigTeamId) {
+        setSelectedConfigTeamId(currentTeam.id);
+      }
+      if (currentTeam?.id && !selectedMembersTeamId) {
+        setSelectedMembersTeamId(currentTeam.id);
+      }
+    }
+  }, [isOpen, currentTeam?.id]);
+
+  useEffect(() => {
+    if (activeConfigTeam) {
+      setTeamName(activeConfigTeam.name);
+      setTeamKey(activeConfigTeam.key || '');
     }
     setTeamError(null);
-  }, [organization, currentTeam, isOpen]);
+  }, [activeConfigTeam]);
 
   // Load members when modal is open
   useEffect(() => {
@@ -93,17 +130,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         .then((data) => setMembers(data))
         .catch(() => setMembers([]))
         .finally(() => setIsLoadingMembers(false));
-
-      if (currentTeam?.id) {
-        setIsLoadingTeamMembers(true);
-        api
-          .getTeamMembers(currentTeam.id)
-          .then((data) => setTeamMembers(data))
-          .catch(() => setTeamMembers([]))
-          .finally(() => setIsLoadingTeamMembers(false));
-      }
     }
-  }, [isOpen, organization?.slug, currentTeam?.id]);
+  }, [isOpen, organization?.slug]);
+
+  // Load team members when activeMembersTeam changes
+  useEffect(() => {
+    if (isOpen && activeMembersTeam?.id) {
+      setIsLoadingTeamMembers(true);
+      api
+        .getTeamMembers(activeMembersTeam.id)
+        .then((data) => setTeamMembers(data))
+        .catch(() => setTeamMembers([]))
+        .finally(() => setIsLoadingTeamMembers(false));
+    } else {
+      setTeamMembers([]);
+    }
+  }, [isOpen, activeMembersTeam?.id]);
 
   // Derive current user's role in this organization
   const currentMember = members.find((m) => m.user_id === currentUser?.id || m.user?.email === currentUser?.email);
@@ -138,15 +180,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       }
 
       if (
-        currentTeam?.id &&
-        (teamName.trim() !== currentTeam.name ||
-          (teamKey.trim().toUpperCase() && teamKey.trim().toUpperCase() !== currentTeam.key) ||
-          cycleWeeks !== currentTeam.cycle_duration_weeks)
+        activeConfigTeam?.id &&
+        (teamName.trim() !== activeConfigTeam.name ||
+          (teamKey.trim().toUpperCase() && teamKey.trim().toUpperCase() !== activeConfigTeam.key))
       ) {
-        const updatedTeam = await api.updateTeam(currentTeam.id, {
+        const updatedTeam = await api.updateTeam(activeConfigTeam.id, {
           name: teamName.trim(),
           key: teamKey.trim().toUpperCase() || undefined,
-          cycle_duration_weeks: cycleWeeks,
         });
         if (updatedTeam && onTeamUpdated) {
           onTeamUpdated(updatedTeam);
@@ -163,11 +203,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleAddTeamMember = async (userId: string) => {
-    if (!currentTeam?.id || !userId || isAddingTeamMember) return;
+    if (!activeMembersTeam?.id || !userId || isAddingTeamMember) return;
     setIsAddingTeamMember(true);
     setTeamError(null);
     try {
-      const added = await api.addTeamMember(currentTeam.id, userId);
+      const added = await api.addTeamMember(activeMembersTeam.id, userId);
       if (added) {
         setTeamMembers((prev) => {
           const filtered = prev.filter((tm) => tm.user_id !== userId);
@@ -184,9 +224,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleRemoveTeamMember = async (userId: string) => {
-    if (!currentTeam?.id || !userId) return;
+    if (!activeMembersTeam?.id || !userId) return;
     try {
-      await api.removeTeamMember(currentTeam.id, userId);
+      await api.removeTeamMember(activeMembersTeam.id, userId);
       setTeamMembers((prev) => prev.filter((tm) => tm.user_id !== userId));
     } catch (err) {
       console.error('Failed to remove team member', err);
@@ -347,7 +387,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                    Team & Sprint Cadence
+                    Teams Configuration
                   </h3>
                   {isAdmin ? (
                     <button
@@ -363,10 +403,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
+                {/* Team Switcher Tabs if multiple teams exist */}
+                {allTeams.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                      Select Team to Edit
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {allTeams.map((t) => (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setSelectedConfigTeamId(t.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+                            activeConfigTeam?.id === t.id
+                              ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/50 shadow-sm'
+                              : 'bg-zinc-900/60 text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:bg-zinc-800/50'
+                          }`}
+                        >
+                          <span className="font-semibold text-zinc-300 mr-1.5">[{t.key}]</span>
+                          {t.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                      Active Team Name
+                      Team Name
                     </label>
                     <input
                       type="text"
@@ -393,29 +459,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         className="w-28 bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs font-mono font-semibold text-indigo-400 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors uppercase disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                       <span className="text-[11px] text-zinc-500">(Prefix for {teamKey || 'KEY'}-1, {teamKey || 'KEY'}-2)</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                    Sprint Cycle Duration
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <select
-                      value={cycleWeeks}
-                      onChange={(e) => setCycleWeeks(Number(e.target.value))}
-                      disabled={!isAdmin}
-                      className="bg-[#161920] border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      <option value={1}>1 Week (Weekly)</option>
-                      <option value={2}>2 Weeks (Standard Sprint)</option>
-                      <option value={3}>3 Weeks</option>
-                      <option value={4}>4 Weeks (Monthly)</option>
-                    </select>
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-                      <Clock className="w-3.5 h-3.5 text-zinc-400" />
-                      <span>Incomplete issues automatically migrate upon cycle close.</span>
                     </div>
                   </div>
                 </div>
@@ -579,15 +622,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Team Members Section */}
-              {currentTeam && (
+              {activeMembersTeam && (
                 <div className="space-y-3 pt-4 border-t border-zinc-800/80">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h4 className="text-xs font-semibold text-zinc-200">
-                        {currentTeam.name} Team Members ({teamMembers.length})
-                      </h4>
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-xs font-semibold text-zinc-200">
+                          {activeMembersTeam.name} Team Members ({teamMembers.length})
+                        </h4>
+                        {allTeams.length > 1 && (
+                          <select
+                            value={selectedMembersTeamId}
+                            onChange={(e) => setSelectedMembersTeamId(e.target.value)}
+                            className="bg-[#181b22] border border-zinc-800 rounded-lg px-2 py-0.5 text-xs text-indigo-400 font-medium focus:outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+                          >
+                            {allTeams.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                Team: {t.name} ({t.key})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
                       <p className="text-[11px] text-zinc-500">
-                        Collaborators assigned to team {currentTeam.key}
+                        Collaborators assigned to team {activeMembersTeam.key}
                       </p>
                     </div>
 
