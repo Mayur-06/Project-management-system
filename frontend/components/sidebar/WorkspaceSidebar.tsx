@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import {
   Inbox,
   Layers,
-  Repeat,
   FolderKanban,
   Sparkles,
   Command,
@@ -133,7 +132,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       const team = await api.createTeam(created.slug, {
         name: newWsTeamName.trim() || 'Engineering',
         key: (newWsTeamKey.trim() || 'ENG').toUpperCase(),
-        cycle_duration_weeks: 2,
       });
 
       const teamKey = team?.key ? team.key.toLowerCase() : '';
@@ -162,11 +160,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       label: 'AI Assistant',
       href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/ai` : `/${currentOrgSlug}/ai`,
       icon: <Sparkles className="w-4 h-4 text-zinc-300" />,
-    },
-    {
-      label: 'Cycles',
-      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/cycles` : `/${currentOrgSlug}/cycles`,
-      icon: <Repeat className="w-4 h-4 text-zinc-300" />,
     },
   ];
 

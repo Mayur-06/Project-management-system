@@ -30,7 +30,7 @@ A foundational architectural rule governs all mutations across the system:
 * **Multi-Tenant Organization Isolation:** Complete separation of company data through dedicated organization entities and tenant identifiers on all downstream records.
 * **Lean Role-Based Access Control (RBAC):** Focused three-tier hierarchical roles within organizations (`Admin`, `Member`, `Guest`). Eliminates complex enterprise 40+ permission matrices in favor of clear, predictable access boundaries.
   * *Admin:* Full administrative control over organization settings, team creation, and member invitation/removal.
-  * *Member:* Standard access to create, update, and manage issues, projects, cycles, and comments across joined teams.
+  * *Member:* Standard access to create, update, and manage issues, projects, and comments across joined teams.
   * *Guest:* Restricted read-only or single-team access for external contractors and stakeholders.
 * **Cross-Team Memberships:** Users can belong to multiple functional teams within an organization, each with independent visibility and notification settings.
 
@@ -39,19 +39,18 @@ A foundational architectural rule governs all mutations across the system:
 * **Standardized 6-State Workflow:** All teams operate on 6 fixed, system-enforced workflow states (`Triage`, `Backlog`, `Unstarted`, `Started`, `Completed`, `Canceled`). Custom statuses and custom column ordering are strictly disallowed to guarantee platform-wide consistency and predictable metrics.
 * **Strict Cross-Team Triage Routing Invariant:**
   * **Same-Team Creation:** When a member of Team A creates an issue targeting Team A, the issue bypasses Triage completely and routes directly into the active workflow (`Todo` / `Unstarted` or `Backlog`).
-  * **Cross-Team Creation:** When a member of Team A creates an issue targeting Team B, the issue is strictly routed to Team B's workflow state with `category = 'triage'`. It does not appear on Team B's active sprint board or backlog until Team B's leads review and accept it via the Triage Inbox.
+  * **Cross-Team Creation:** When a member of Team A creates an issue targeting Team B, the issue is strictly routed to Team B's workflow state with `category = 'triage'`. It does not appear on Team B's active board or backlog until Team B's leads review and accept it via the Triage Inbox.
 * **Standardized State Visuals:** Each of the 6 fixed states has a system-defined color and fixed column order across Kanban and List views.
-* **Configurable Sprint Cadence:** Teams configure custom cycle lengths (e.g., 1-week, 2-week, or custom durations) and automated cycle rollover rules.
 
 ### C. Lean Settings Architecture (Modal & Cmd+,)
 * **Unified Non-Disruptive Modal:** Settings is presented as a high-speed, keyboard-accessible dialog (`Cmd+,` / `Ctrl+,` or sidebar gear button) preserving user context instead of navigating across slow, fragmented route pages.
 * **The 3 Essential Tabs:**
-  1. *Workspace & Team:* Manage Organization name, URL slug, company logo, Team name, Key prefix (e.g. `ENG`), and sprint cycle cadence (duration in weeks).
+  1. *Workspace & Team:* Manage Organization name, URL slug, company logo, Team name, Key prefix (e.g. `ENG`).
   2. *Members & Access:* View active organization members, their role badges (`Admin`, `Member`, `Guest`), and invite new collaborators via email.
   3. *My Profile:* View display name, email address, avatar initials, dark theme preference, and sign-out action.
 * **Explicitly Removed Administrative Bloat:**
   * *No Billing/Invoicing Gateways:* Eliminates payment processor bloat and extraneous commercial billing workflows.
-  * *No Custom Workflow State Builder:* Prohibits arbitrary custom state creation to prevent board fragmentation and broken cycle velocity analytics.
+  * *No Custom Workflow State Builder:* Prohibits arbitrary custom state creation to prevent board fragmentation and broken velocity analytics.
   * *No 40+ Permission Matrices:* Discards tedious enterprise checkbox matrices in favor of clean 3-tier roles.
   * *No Dedicated Labels CRUD Screen:* Labels are created and tagged directly in-line on issues.
 
@@ -59,7 +58,7 @@ A foundational architectural rule governs all mutations across the system:
 * **Readable Sequential Identifiers:** Automatic sequential numbering per team producing clean identifiers (e.g., ENG-101, ENG-102) managed through transactional database counters.
 * **Rich Markdown Editing:** TipTap-powered editor supporting rich formatting, code blocks, task lists, and slash commands.
 * **Hierarchical Subtasks:** Arbitrary nesting of parent issues and child subtasks with aggregated progress tracking.
-* **Granular Issue Attributes:** Native support for priority tiers (Urgent, High, Medium, Low, None), Fibonacci story point estimates, due dates, assignees, project associations, cycle allocations, and customizable color-coded labels.
+* **Granular Issue Attributes:** Native support for priority tiers (Urgent, High, Medium, Low, None), Fibonacci story point estimates, due dates, assignees, project associations, and customizable color-coded labels.
 
 ### E. High-Speed Keyboard-First User Experience
 * **Universal Command Palette (Cmd+K / Ctrl+K):** Instant global search and action launcher capable of finding issues, navigating views, switching teams, and executing system commands without touching the mouse.
@@ -77,12 +76,6 @@ A foundational architectural rule governs all mutations across the system:
 * **Optimistic Local Mutations:** Zero-latency UI response where card positions and field edits reflect immediately on the user's screen before the backend response resolves.
 * **Presence Indicators:** Live indicators showing which team members are currently viewing or modifying specific issues.
 
-### G. Sprint & Cycle Automation
-* **Automated Cycle Progression:** Automatic transition of sprints based on configured start and end timestamps.
-* **Cycle Velocity Metrics:** Real-time calculation of completed versus planned story points, total issues closed, and scope changes mid-sprint.
-* **Burnup & Burndown Analytics:** Interactive charts showing progress trends throughout the active cycle lifecycle.
-* **Unfinished Work Rollover Engine:** One-click or automated migration of incomplete issues from a closed cycle to either the team backlog or the immediate next cycle.
-
 ### H. Milestones & Health Statuses
 * **Milestone Sequences:** Granular checkpoints within projects tracking major architectural or business phases.
 * **Project Health Statuses:** Explicit health tracking categorizing projects directly as On Track, At Risk, or Off Track.
@@ -91,7 +84,7 @@ A foundational architectural rule governs all mutations across the system:
 * **Dedicated Triage Queue:** Holding area for untriaged issues originating from external integrations, customer requests, or cross-departmental tickets.
 * **Cross-Team Triage Trigger Invariant:** The Triage inbox is activated strictly when an issue is created cross-team (by a member of Team A targeting Team B). Same-team issues bypass triage directly into active backlog/unstarted states, preventing internal tasks from entering triage.
 * **Three-Way Disposition Actions:**
-  * *Accept:* Move issue into an active workflow state, assign a team member, and allocate to a sprint or backlog with applied AI priority and estimate recommendations.
+  * *Accept:* Move issue into an active workflow state, assign a team member, and allocate to backlog with applied AI priority and estimate recommendations.
   * *Snooze:* Hide the issue from the active inbox until a specified future date and time (tomorrow, next week, or 30 days).
   * *Decline:* Archive or cancel the issue into the canceled workflow state with an explicit recorded cancellation rationale.
 
@@ -135,7 +128,6 @@ A foundational architectural rule governs all mutations across the system:
   * `name`: String (255 chars, required) - Team name.
   * `key`: String (10 chars, required) - Prefix key for issues (e.g., ENG).
   * `issue_counter`: Integer (defaults to 0, required) - Monotonically increasing counter for sequential issue numbering.
-  * `cycle_duration_weeks`: Integer (defaults to 2) - Sprint duration setting.
   * `created_at`: Timestamp with time zone.
 * **Constraints:** Unique composite constraint on (`organization_id`, `key`).
 
@@ -161,20 +153,7 @@ A foundational architectural rule governs all mutations across the system:
   * `created_at`: Timestamp with time zone.
 * **Note:** Teams are provisioned with these 6 immutable states upon creation. Custom statuses or column reordering are strictly prohibited.
 
-#### 6. Cycles (`cycles`)
-* **Purpose:** Time-boxed sprint periods for tracking team execution cadence.
-* **Attributes:**
-  * `id`: UUID (Primary Key).
-  * `team_id`: UUID (Foreign Key references `teams.id`, cascading delete).
-  * `number`: Integer (required) - Sequential cycle number within the team.
-  * `name`: String (255 chars, optional) - Custom cycle title.
-  * `starts_at`: Timestamp with time zone (required).
-  * `ends_at`: Timestamp with time zone (required).
-  * `completed_at`: Timestamp with time zone (optional) - Recorded upon manual or automatic closure.
-  * `created_at`: Timestamp with time zone.
-* **Constraints:** Unique composite constraint on (`team_id`, `number`).
-
-#### 7. Projects & Milestones (`projects`, `project_milestones`)
+#### 6. Projects & Milestones (`projects`, `project_milestones`)
 * **Projects Attributes:**
   * `id`: UUID (Primary Key).
   * `organization_id`: UUID (Foreign Key references `organizations.id`, cascading delete).
@@ -221,7 +200,6 @@ A foundational architectural rule governs all mutations across the system:
   * `assignee_id`: UUID (Foreign Key references authentication users, null on delete).
   * `creator_id`: UUID (Foreign Key references authentication users).
   * `project_id`: UUID (Foreign Key references `projects.id`, null on delete).
-  * `cycle_id`: UUID (Foreign Key references `cycles.id`, null on delete).
   * `parent_id`: UUID (Foreign Key references `issues.id`, null on delete) - Subtask parent link.
   * `sort_order`: String (Collate "C", required) - Lexicographical fractional position within current state column.
   * `version`: Integer (defaults to 1, required) - Monotonically increasing revision counter for optimistic locking.
@@ -245,7 +223,7 @@ A foundational architectural rule governs all mutations across the system:
 
 ### Database Indexing & Query Acceleration
 * **Board Sorting Index:** Composite B-tree index on `issues (team_id, state_id, sort_order)` filtered where `deleted_at IS NULL`. Directly accelerates Kanban board column rendering and avoids full table scans.
-* **Entity Relationship Indexes:** Dedicated indexes on `organization_id`, `assignee_id`, `cycle_id`, `project_id`, `parent_id`, and `identifier`.
+* **Entity Relationship Indexes:** Dedicated indexes on `organization_id`, `assignee_id`, `project_id`, `parent_id`, and `identifier`.
 * **Vector Similarity Index:** Hierarchical Navigable Small World (HNSW) index on `issue_embeddings` using cosine vector operations with parameters `m = 16` and `ef_construction = 64`.
 
 ### Multi-Tenant Row-Level Security (RLS) Strategy
@@ -271,17 +249,17 @@ A foundational architectural rule governs all mutations across the system:
 | `/api/v1/workspaces/me` | GET | None | Retrieves user profile, organizations list, and active team memberships. | Organization and team metadata array. |
 | `/api/v1/workspaces` | POST | Organization name, slug, logo URL | Validates unique slug; creates organization; assigns caller as initial admin. | Created organization record (201 Created). |
 | `/api/v1/workspaces/{org_slug}/teams` | GET | URL path: `org_slug` | Lists all teams within the specified organization accessible to user. | Array of team objects. |
-| `/api/v1/workspaces/{org_slug}/teams` | POST | URL path: `org_slug`, Body: Team name, key (e.g. ENG), cycle duration | Validates key uniqueness in org; initializes the 6 fixed workflow states and issue counter. | Created team record (201 Created). |
+| `/api/v1/workspaces/{org_slug}/teams` | POST | URL path: `org_slug`, Body: Team name, key (e.g. ENG) | Validates key uniqueness in org; initializes the 6 fixed workflow states and issue counter. | Created team record (201 Created). |
 | `/api/v1/teams/{team_id}/members` | GET | URL path: `team_id` | Lists all users assigned to the specified team. | Array of user profile objects with team roles. |
 | `/api/v1/teams/{team_id}/states` | GET | URL path: `team_id` | Returns the team's 6 fixed workflow states in standard display order. | Array of workflow states. |
-| `/api/v1/issues` | GET | Query params: `team_id`, `state_id`, `assignee_id`, `cycle_id`, `project_id`, `priority`, `search` | Applies multi-parameter filtering, excludes soft-deleted items, orders by sort order. | Paginated issue list. |
-| `/api/v1/issues` | POST | Title, description JSON, team ID, state ID, priority, estimate, assignee, project, cycle | Atomically increments team issue counter; generates identifier (e.g. ENG-104); calculates initial sort order; logs creation activity. | Created issue entity (201 Created). |
+| `/api/v1/issues` | GET | Query params: `team_id`, `state_id`, `assignee_id`, `project_id`, `priority`, `search` | Applies multi-parameter filtering, excludes soft-deleted items, orders by sort order. | Paginated issue list. |
+| `/api/v1/issues` | POST | Title, description JSON, team ID, state ID, priority, estimate, assignee, project | Atomically increments team issue counter; generates identifier (e.g. ENG-104); calculates initial sort order; logs creation activity. | Created issue entity (201 Created). |
 | `/api/v1/issues/{issue_id}` | GET | URL path: `issue_id` (UUID or Key like ENG-104) | Resolves issue by UUID or identifier; retrieves full details, labels, attachments, and subtasks. | Detailed issue payload. |
 | `/api/v1/issues/{issue_id}` | PATCH | URL path: `issue_id`, Body: Partial issue fields, `expected_version`, `client_session_id` | Checks `expected_version` against DB version; rejects with 409 Conflict if mismatched; increments version; writes audit log; broadcasts change. | Updated issue entity. |
 | `/api/v1/issues/{issue_id}` | DELETE | URL path: `issue_id` | Marks `deleted_at = NOW()`; cascades soft-delete to subtasks; broadcasts deletion. | Status confirmation (204 No Content). |
 | `/api/v1/issues/{issue_id}/reorder` | PUT | URL path: `issue_id`, Body: Target state ID, previous issue position, next issue position | Generates midpoint fractional index between adjacent items; updates state and sort order; broadcasts to board. | Updated issue with new position. |
 | `/api/v1/issues/batch-reorder` | POST | Array of issue IDs with target state IDs and calculated positions | Executes atomic database transaction updating all positions in a single batch. | Success confirmation with modified count. |
-| `/api/v1/issues/batch-update` | POST | Array of issue IDs, target modifications (state, assignee, cycle, priority) | Applies bulk updates within a single transaction; triggers audit logging for each item. | Array of updated issue IDs. |
+| `/api/v1/issues/batch-update` | POST | Array of issue IDs, target modifications (state, assignee, priority) | Applies bulk updates within a single transaction; triggers audit logging for each item. | Array of updated issue IDs. |
 | `/api/v1/issues/{issue_id}/subtasks` | GET | URL path: `issue_id` | Lists all child issues linked via `parent_id`. | Array of sub-issue records. |
 | `/api/v1/issues/{issue_id}/subtasks` | POST | URL path: `issue_id`, Body: Subtask title, assignee, estimate, priority | Creates issue with `parent_id` pre-populated; calculates position within parent. | Created subtask record (201 Created). |
 | `/api/v1/issues/{issue_id}/activity` | GET | URL path: `issue_id` | Retrieves chronological audit trail showing changes, timestamps, and actors. | Array of activity audit logs. |
@@ -290,10 +268,6 @@ A foundational architectural rule governs all mutations across the system:
 | `/api/v1/comments/{comment_id}` | PATCH | URL path: `comment_id`, Body: Updated body JSON/text | Validates author ownership; updates body and sets `updated_at`. | Updated comment object. |
 | `/api/v1/comments/{comment_id}` | DELETE | URL path: `comment_id` | Verifies caller is author or admin; sets soft-delete timestamp. | Confirmation (204 No Content). |
 | `/api/v1/comments/{comment_id}/reactions` | POST | URL path: `comment_id`, Body: Emoji string | Toggles emoji reaction (removes if already active, creates if not). | Active reactions summary for comment. |
-| `/api/v1/teams/{team_id}/cycles` | GET | URL path: `team_id` | Returns active, upcoming, and past completed sprints. | Array of cycle records with metrics. |
-| `/api/v1/teams/{team_id}/cycles` | POST | URL path: `team_id`, Body: Start date, end date, optional name | Generates next sequential cycle number; creates sprint record. | Created cycle entity (201 Created). |
-| `/api/v1/cycles/{cycle_id}` | GET | URL path: `cycle_id` | Calculates velocity, point completion percentages, and burnup data. | Detailed cycle metrics object. |
-| `/api/v1/cycles/{cycle_id}/complete` | POST | URL path: `cycle_id`, Body: Unfinished issue destination (next cycle or backlog) | Closes cycle; marks `completed_at`; transfers incomplete issues to destination atomically. | Closed cycle summary and transfer count. |
 | `/api/v1/organizations/{org_slug}/projects` | GET | URL path: `org_slug` | Lists all projects with issue completion progress, milestone counts, and health status. | Array of project summaries. |
 | `/api/v1/organizations/{org_slug}/projects` | POST | Name, slug | Validates slug uniqueness; initializes project sort order and default health. | Created project entity (201 Created). |
 | `/api/v1/projects/{project_id}` | GET | URL path: `project_id` | Fetches project metadata, milestones, and linked issue summaries. | Complete project overview. |
@@ -301,7 +275,7 @@ A foundational architectural rule governs all mutations across the system:
 | `/api/v1/projects/{project_id}/milestones` | POST | URL path: `project_id`, Body: Name, target date | Adds a granular milestone checkpoint to the project. | Created milestone entity (201 Created). |
 | `/api/v1/milestones/{milestone_id}` | PATCH | URL path: `milestone_id`, Body: Name, target date, completed_at | Updates milestone checkpoint details or marks as completed. | Updated milestone entity. |
 | `/api/v1/teams/{team_id}/triage` | GET | URL path: `team_id` | Retrieves issues currently in Triage state that have not been snoozed. | Array of triage issues. |
-| `/api/v1/triage/{issue_id}/accept` | POST | URL path: `issue_id`, Body: Target state ID, assignee ID, cycle ID | Moves issue from Triage category to target state; assigns metadata; clears triage flag. | Updated issue object. |
+| `/api/v1/triage/{issue_id}/accept` | POST | URL path: `issue_id`, Body: Target state ID, assignee ID, priority, estimate | Moves issue from Triage category to target state; assigns metadata; clears triage flag. | Updated issue object. |
 | `/api/v1/triage/{issue_id}/snooze` | POST | URL path: `issue_id`, Body: Snooze timestamp | Sets `snoozed_until` timestamp; hides issue from default triage inbox until elapsed. | Snoozed confirmation. |
 | `/api/v1/triage/{issue_id}/decline` | POST | URL path: `issue_id`, Body: Decline reason | Transitions issue to Canceled category; records reason in activity log. | Canceled issue confirmation. |
 | `/api/v1/attachments/upload-url` | POST | Issue ID, file name, MIME type, file size | Validates file limits; generates pre-signed upload URL for direct storage write; creates attachment placeholder. | Signed upload URL and attachment ID. |
@@ -389,12 +363,3 @@ To achieve Linear-grade responsiveness, the frontend executes optimistic UI upda
   3. If an issue is restored (`deleted_at` set back to null), a reciprocal trigger reactivates immediate child tasks.
 
 ---
-
-### Problem Set 7: Race Conditions During Sprint Cycle Closure & Rollover
-* **The Problem:** When closing a sprint cycle, dozens of incomplete issues must be transitioned to the next cycle or returned to the backlog while cycle velocity statistics are calculated. If team members are actively updating issue statuses during the closure operation, items can be omitted from rollover, velocity counts can become inaccurate, and issues can end up in inconsistent states.
-* **The Architectural Solution:**
-  1. Cycle completion is implemented as an atomic PostgreSQL stored procedure.
-  2. The procedure locks the cycle record exclusively to block concurrent closure attempts.
-  3. It calculates final sprint metrics (completed story points, total completed issues, incomplete points) from an isolated snapshot and writes them into the completed cycle record.
-  4. In the same atomic transaction, it executes a batch update moving all unresolved issues (states not in category `completed` or `canceled`) into the designated destination cycle or backlog.
-  5. An audit log entry is batch-created for each transferred issue, and a single consolidated Realtime broadcast notifies all connected clients to reload cycle state simultaneously.

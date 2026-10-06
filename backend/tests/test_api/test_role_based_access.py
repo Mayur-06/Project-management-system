@@ -81,7 +81,7 @@ def rbac_mock_db():
         {"id": "inv-1", "organization_id": TEST_ORG_ID, "email": "charlie@testcorp.com", "role": "member", "status": "pending", "created_at": "2026-10-01T00:00:00Z"}
     ]
     teams = [
-        {"id": TEST_TEAM_ID, "organization_id": TEST_ORG_ID, "name": "Development", "key": TEST_TEAM_KEY, "issue_counter": 10, "cycle_duration_weeks": 2, "created_at": "2026-10-01T00:00:00Z"}
+        {"id": TEST_TEAM_ID, "organization_id": TEST_ORG_ID, "name": "Development", "key": TEST_TEAM_KEY, "issue_counter": 10, "created_at": "2026-10-01T00:00:00Z"}
     ]
     team_members = [
         {"id": "tm-1", "team_id": TEST_TEAM_ID, "user_id": ADMIN_ID, "created_at": "2026-10-01T00:00:00Z"}
@@ -238,7 +238,7 @@ def test_admin_can_create_teams(rbac_mock_db):
     with TestClient(app) as client:
         res = client.post(
             f"/api/v1/workspaces/{TEST_ORG_SLUG}/teams",
-            json={"name": "Design Team", "key": "DES", "cycle_duration_weeks": 2}
+            json={"name": "Design Team", "key": "DES"}
         )
         assert res.status_code == status.HTTP_201_CREATED
         assert res.json()["key"] == "DES"

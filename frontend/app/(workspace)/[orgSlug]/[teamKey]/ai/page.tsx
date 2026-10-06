@@ -107,7 +107,6 @@ export default function AIPage() {
   const quickPrompts = [
     'How should we architect our caching layer?',
     'Brainstorm ideas for our next sprint',
-    'Summarize current cycle velocity',
     'Move ENG-1 to Completed',
   ];
 

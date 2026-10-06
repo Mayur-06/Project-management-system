@@ -2,20 +2,18 @@
 
 import React from 'react';
 import { Repeat } from 'lucide-react';
-import { Issue, Cycle } from '@/types';
+import { Issue } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
 
 interface IssueListViewProps {
   issues: Issue[];
-  cycles?: Cycle[];
   users?: { id: string; name?: string; email?: string; avatar_url?: string }[];
   onSelectIssue: (issue: Issue) => void;
 }
 
 export const IssueListView: React.FC<IssueListViewProps> = ({
   issues,
-  cycles = [],
   users = [],
   onSelectIssue,
 }) => {
@@ -42,18 +40,6 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
             >
               <div className="col-span-2 font-mono font-medium text-white flex items-center gap-1.5 flex-wrap">
                 <span>{issue.identifier}</span>
-                {(() => {
-                  const cName =
-                    issue.cycle?.name ||
-                    (issue.cycle_id && cycles ? cycles.find((c) => c.id === issue.cycle_id)?.name : null);
-                  if (!cName) return null;
-                  return (
-                    <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 font-normal flex items-center gap-1">
-                      <Repeat className="w-2.5 h-2.5 text-zinc-500" />
-                      <span>{cName}</span>
-                    </span>
-                  );
-                })()}
               </div>
               <div className="col-span-5 font-medium text-white truncate pr-4">{issue.title}</div>
               <div className="col-span-2">

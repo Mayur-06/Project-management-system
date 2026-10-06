@@ -1,9 +1,6 @@
 import {
   Issue,
   WorkflowState,
-  Cycle,
-  CycleMetrics,
-  CycleCompleteResult,
   IssueComment,
   ActivityLog,
   TriageOutput,
@@ -190,7 +187,7 @@ export const api = {
 
   async createTeam(
     orgSlug: string,
-    teamData: { name: string; key: string; cycle_duration_weeks?: number }
+    teamData: { name: string; key: string }
   ): Promise<Team | null> {
     return await fetchWithAuth<Team>(`/workspaces/${orgSlug}/teams`, {
       method: 'POST',
@@ -265,11 +262,10 @@ export const api = {
   },
 
   // Issues
-  async getIssues(params?: { teamId?: string; stateId?: string; cycleId?: string }): Promise<Issue[]> {
+  async getIssues(params?: { teamId?: string; stateId?: string }): Promise<Issue[]> {
     const query = new URLSearchParams();
     if (params?.teamId) query.append('team_id', params.teamId);
     if (params?.stateId) query.append('state_id', params.stateId);
-    if (params?.cycleId) query.append('cycle_id', params.cycleId);
 
     const qs = query.toString();
     const data = await fetchWithAuth<Issue[]>(`/issues${qs ? `?${qs}` : ''}`);
@@ -365,43 +361,6 @@ export const api = {
     return data || [];
   },
 
-  // Cycles
-  async getCycles(teamId: string): Promise<Cycle[]> {
-    const data = await fetchWithAuth<Cycle[]>(`/teams/${teamId}/cycles`);
-    return data || [];
-  },
-
-  async createCycle(
-    teamId: string,
-    payload: { name?: string; starts_at: string; ends_at: string }
-  ): Promise<Cycle | null> {
-    return await fetchWithAuth<Cycle>(`/teams/${teamId}/cycles`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  },
-
-  async getCycleMetrics(cycleId: string): Promise<CycleMetrics | null> {
-    return await fetchWithAuth<CycleMetrics>(`/cycles/${cycleId}`);
-  },
-
-  async completeCycle(
-    cycleId: string,
-    destination: 'backlog' | string
-  ): Promise<CycleCompleteResult | null> {
-    return await fetchWithAuth<CycleCompleteResult>(`/cycles/${cycleId}/complete`, {
-      method: 'POST',
-      body: JSON.stringify({ destination }),
-    });
-  },
-
-  async deleteCycle(cycleId: string): Promise<boolean> {
-    const res = await fetchWithAuth<{ success: boolean }>(`/cycles/${cycleId}`, {
-      method: 'DELETE',
-    });
-    return Boolean(res?.success);
-  },
-
   // AI Duplicates Check
   async checkDuplicates(
     title: string,
@@ -465,7 +424,6 @@ export const api = {
     issueId: string,
     targetStateId: string,
     assigneeId?: string,
-    cycleId?: string,
     priority?: string,
     estimate?: number
   ): Promise<Issue | null> {
@@ -474,7 +432,6 @@ export const api = {
       body: JSON.stringify({
         target_state_id: targetStateId,
         assignee_id: assigneeId,
-        cycle_id: cycleId,
         priority: priority,
         estimate: estimate,
       }),

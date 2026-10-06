@@ -1,63 +1,13 @@
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, model_validator
+from typing import List, Optional
+from pydantic import BaseModel, Field
 
 from app.schemas.issue import IssueResponse
 
 
 # ==============================================================================
-# 1. Cycles Schemas
-# ==============================================================================
-
-class CycleCreate(BaseModel):
-    name: Optional[str] = None
-    starts_at: datetime
-    ends_at: datetime
-
-    @model_validator(mode="after")
-    def validate_dates(self) -> "CycleCreate":
-        if self.ends_at <= self.starts_at:
-            raise ValueError("ends_at must be strictly after starts_at")
-        return self
-
-
-class CycleResponse(BaseModel):
-    id: str
-    team_id: str
-    number: int
-    name: Optional[str] = None
-    starts_at: datetime
-    ends_at: datetime
-    completed_at: Optional[datetime] = None
-    created_at: datetime
-
-
-class CycleMetricsResponse(BaseModel):
-    cycle: CycleResponse
-    total_issues: int
-    completed_issues: int
-    total_estimate_points: int
-    completed_estimate_points: int
-    completion_percentage: float
-    burnup_data: List[Dict[str, Any]] = []
-
-
-class CycleCompleteRequest(BaseModel):
-    destination: str = Field(
-        ...,
-        description="'backlog' or cycle UUID where unfinished issues will be transferred",
-    )
-
-
-class CycleCompleteResponse(BaseModel):
-    cycle: CycleResponse
-    transferred_issues_count: int
-    destination: str
-
-
-# ==============================================================================
-# 2. Projects & Milestones Schemas
+# 1. Projects & Milestones Schemas
 # ==============================================================================
 
 class ProjectHealth(str, Enum):
@@ -118,13 +68,12 @@ class ProjectDetailResponse(ProjectSummaryResponse):
 
 
 # ==============================================================================
-# 3. Triage Inbox Schemas
+# 2. Triage Inbox Schemas
 # ==============================================================================
 
 class TriageAcceptRequest(BaseModel):
     target_state_id: str
     assignee_id: Optional[str] = None
-    cycle_id: Optional[str] = None
     priority: Optional[str] = None
     estimate: Optional[int] = None
 

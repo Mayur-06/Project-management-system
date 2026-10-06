@@ -12,7 +12,6 @@ from tests.conftest import (
 )
 
 MOCK_ISSUE_ID = "11111111-2222-3333-4444-555555555555"
-MOCK_CYCLE_ID = "99999999-8888-7777-6666-555555555555"
 
 
 # ==============================================================================
@@ -272,40 +271,6 @@ def test_react_assistant_search_issues_sse_stream(client, mock_db, monkeypatch):
     assert "event: session" in body
     assert "event: tool_start" in body
     assert "event: tool_complete" in body
-    assert "event: token" in body
-    assert "event: done" in body
-
-
-def test_react_assistant_cycle_velocity_sse_stream(client, mock_db, monkeypatch):
-    """Verify Linear Ask inspects sprint velocity and reports completion metrics."""
-    scoped_client_mock = MagicMock()
-    # Mock active cycle
-    scoped_client_mock.table.return_value.select.return_value.is_.return_value.order.return_value.limit.return_value.execute.return_value = MagicMock(
-        data=[{"id": MOCK_CYCLE_ID, "name": "Cycle 14"}]
-    )
-    # Mock cycle issues (10 points total, 5 completed)
-    scoped_client_mock.table.return_value.select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
-        data=[{"name": "Cycle 14"}]
-    )
-    scoped_client_mock.table.return_value.select.return_value.eq.return_value.is_.return_value.execute.return_value = MagicMock(
-        data=[
-            {"estimate": 5, "completed_at": "2026-10-01T00:00:00Z", "workflow_states": {"category": "completed"}},
-            {"estimate": 5, "completed_at": None, "workflow_states": {"category": "started"}},
-        ]
-    )
-
-    import app.agents.tools.workspace_tools as wt
-    monkeypatch.setattr(wt, "get_user_scoped_client", lambda jwt: scoped_client_mock)
-
-    payload = {
-        "organization_id": MOCK_ORG_ID,
-        "messages": [{"role": "user", "content": "What is our current cycle velocity?"}],
-    }
-    res = client.post("/api/v1/ai/chat/stream", json=payload)
-    assert res.status_code == status.HTTP_200_OK
-    body = res.text
-    assert "event: tool_start" in body
-    assert "get_cycle_velocity" in body
     assert "event: token" in body
     assert "event: done" in body
 

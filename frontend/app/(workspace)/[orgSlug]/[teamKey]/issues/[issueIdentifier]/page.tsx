@@ -19,7 +19,7 @@ import {
   ArrowLeft,
   ChevronDown,
 } from 'lucide-react';
-import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User, Cycle } from '@/types';
+import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User } from '@/types';
 import { api } from '@/lib/api';
 import { TopNav } from '@/components/navigation/TopNav';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
@@ -43,7 +43,6 @@ export default function IssueDetailPage() {
   const [states, setStates] = useState<WorkflowState[]>([]);
   const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
-  const [teamCycles, setTeamCycles] = useState<Cycle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState<'comments' | 'activity' | 'ai_breakdown' | 'attachments'>('comments');
@@ -96,9 +95,6 @@ export default function IssueDetailPage() {
         });
         api.getTeamMembers(matched.id).then((tm) => {
           if (isMounted) setTeamMembers(tm);
-        }).catch(() => {});
-        api.getCycles(matched.id).then((cyc) => {
-          if (isMounted && cyc) setTeamCycles(cyc);
         }).catch(() => {});
       }
     });
@@ -201,22 +197,6 @@ export default function IssueDetailPage() {
     try {
       const updated = await api.updateIssue(issue.id, {
         estimate: est,
-        expected_version: issue.version,
-      });
-      if (updated) {
-        setIssue(updated);
-        window.dispatchEvent(new CustomEvent('issueUpdated', { detail: updated }));
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleCycleChange = async (cycleId: string) => {
-    if (!issue) return;
-    try {
-      const updated = await api.updateIssue(issue.id, {
-        cycle_id: cycleId ? cycleId : undefined,
         expected_version: issue.version,
       });
       if (updated) {
@@ -970,23 +950,6 @@ export default function IssueDetailPage() {
               <option value="5">5 pts</option>
               <option value="8">8 pts</option>
               <option value="13">13 pts</option>
-            </select>
-          </div>
-
-          {/* Sprint / Cycle */}
-          <div>
-            <label className="text-[11px] text-zinc-400 block mb-1">Sprint Cycle</label>
-            <select
-              value={issue.cycle_id || ''}
-              onChange={(e) => handleCycleChange(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none cursor-pointer"
-            >
-              <option value="">No cycle (Backlog)</option>
-              {teamCycles.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name || `Cycle ${c.number}`}
-                </option>
-              ))}
             </select>
           </div>
         </div>

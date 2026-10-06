@@ -29,7 +29,7 @@ The AI architecture comprises four specialized agents and pipelines:
 * **Objective Priority Scoring:** Evaluates reported symptoms, impact, and user descriptions to recommend appropriate priority tiers (Urgent, High, Medium, Low).
 * **Fibonacci Story Point Estimation:** Analyzes technical complexity to suggest realistic point estimates using standard Fibonacci sequences (1, 2, 3, 5, 8).
 * **Taxonomy Label Recommendation:** Automatically assigns relevant tags (e.g., `bug`, `performance`, `security`, `frontend`, `auth`) based on semantic topic extraction.
-* **Workload-Aware Assignee Recommendation:** Inspects active sprint commitments, open issue counts, and historical domain ownership of recipient team members to suggest assignees with available bandwidth rather than overloading individual contributors.
+* **Workload-Aware Assignee Recommendation:** Inspects active issue commitments, open issue counts, and historical domain ownership of recipient team members to suggest assignees with available bandwidth rather than overloading individual contributors.
 
 ### C. Interactive Spec Writer & Subtask Breakdown
 * **Automated Requirements Expansion:** Expands brief issue summaries into comprehensive technical specifications, outlining prerequisites, architectural considerations, and acceptance criteria.
@@ -38,8 +38,8 @@ The AI architecture comprises four specialized agents and pipelines:
 * **Atomic Batch Creation:** Upon engineer approval, resumes graph execution to atomically persist all validated child issues in a single database transaction.
 
 ### D. "Linear Ask" Workspace Conversational Assistant
-* **Natural Language Workspace Discovery:** Allows team members to query workspace state in natural language (e.g., "What critical bugs are blocking the upcoming release?" or "Summarize issues completed in the current cycle").
-* **Tool-Augmented Reasoning:** Dynamically invokes domain tools to retrieve issue details, inspect sprint velocity, search documentation, and navigate organizational roadmaps.
+* **Natural Language Workspace Discovery:** Allows team members to query workspace state in natural language (e.g., "What critical bugs are blocking the upcoming release?" or "Summarize recently completed issues").
+* **Tool-Augmented Reasoning:** Dynamically invokes domain tools to retrieve issue details, search documentation, and navigate organizational roadmaps.
 * **Streaming Server-Sent Events (SSE):** Delivers incremental response tokens directly to the frontend interface for real-time readability.
 * **Human-in-the-Loop Mutating Safeguards:** When asked to alter issue states, close tickets, or adjust assignments, the agent pauses execution and requests explicit user confirmation before committing mutations.
 
@@ -71,16 +71,16 @@ The triage workflow operates as a directed acyclic state graph consisting of fou
 
 #### Detailed Phase Mechanics:
 1. **Phase 1: Fetch Team Capacity & Active Workloads:**
-   * Receives issue attributes (title, description, team ID, organization ID).
-   * Queries the database to retrieve active team members, their current open issue counts, and total committed story points in the active cycle.
-   * Compiles team capacity into a contextual workload summary dictionary.
+    * Receives issue attributes (title, description, team ID, organization ID).
+    * Queries the database to retrieve active team members, their current open issue counts, and total committed story points in active issues.
+    * Compiles team capacity into a contextual workload summary dictionary.
 2. **Phase 2: LLM Classification & Sizing:**
    * Formulates a structured prompt containing the issue content and taxonomy definitions.
    * Invokes the language model using structured schema outputs to predict team key, priority level, Fibonacci point estimate, and label identifiers.
    * Generates a concise diagnostic rationale explaining the classifications.
 3. **Phase 3: Assignee Matching:**
    * Cross-references the predicted domain (e.g., auth, frontend) with team member historical issue resolution data.
-   * Selects candidate members possessing relevant domain experience who are currently under their maximum sprint capacity threshold.
+   * Selects candidate members possessing relevant domain experience who are currently under their maximum capacity threshold.
 4. **Phase 4: Structured Output Delivery:**
    * Bundles all predictions and assignee recommendations into a verified response payload.
    * Stores suggestions in the issue record or returns them directly to the triage inbox client.
@@ -119,7 +119,6 @@ The conversational workspace assistant operates as an iterative ReAct agent:
 * **Authenticated Tool Bindings:** The agent is provisioned with discrete, scoped tools:
   * *Search Issues Tool:* Performs hybrid semantic vector and text matching across the organization's issue catalog.
   * *Get Issue Details Tool:* Retrieves full metadata, comments, activity logs, and subtasks for a specific issue identifier.
-  * *Get Cycle Metrics Tool:* Computes velocity, burndown data, and active issues for a team's current sprint.
   * *Update Issue Status Tool:* Transitions an issue to a new workflow state (protected by a Human-in-the-Loop confirmation gate).
   * *Assign Issue Tool:* Assigns an issue to a designated team member (protected by confirmation).
 * **User Authentication Propagation:** Each tool call receives the requesting user's Bearer JWT via runtime configuration. Tools instantiate an authenticated Supabase client on demand, ensuring that all queries and mutations strictly honor PostgreSQL Row-Level Security rules.

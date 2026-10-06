@@ -98,16 +98,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         onClose();
       },
     },
-    {
-      id: 'nav_cycles',
-      title: 'Go to Cycles & Velocity',
-      shortcut: 'G C',
-      icon: <Repeat className="w-4 h-4 text-amber-400" />,
-      run: () => {
-        router.push(activeKey ? `/${orgSlug}/${activeKey}/cycles` : `/${orgSlug}/cycles`);
-        onClose();
-      },
-    },
     ...teams.map((t) => ({
       id: `team_${t.key}`,
       title: `Switch Team to ${t.name} (${t.key})`,

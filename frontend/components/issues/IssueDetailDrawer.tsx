@@ -1073,16 +1073,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                 {issue.estimate || 1} points
               </div>
             </div>
-
-            {/* Cycle */}
-            {issue.cycle && (
-              <div>
-                <label className="text-[11px] text-zinc-400 block mb-1">Cycle</label>
-                <div className="p-2 rounded bg-zinc-900 border border-zinc-800 text-zinc-200">
-                  {issue.cycle.name}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

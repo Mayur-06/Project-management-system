@@ -109,7 +109,6 @@ def test_list_workspace_teams(client, mock_db):
                         "name": "Engineering",
                         "key": "ENG",
                         "issue_counter": 12,
-                        "cycle_duration_weeks": 2,
                         "created_at": "2026-09-30T10:00:00Z",
                     }
                 ]
@@ -146,7 +145,6 @@ def test_create_workspace_team(client, mock_db):
                         "name": "Product",
                         "key": "PROD",
                         "issue_counter": 0,
-                        "cycle_duration_weeks": 2,
                         "created_at": "2026-09-30T10:00:00Z",
                     }
                 ]
@@ -160,7 +158,6 @@ def test_create_workspace_team(client, mock_db):
     payload = {
         "name": "Product",
         "key": "PROD",
-        "cycle_duration_weeks": 2,
     }
     response = client.post("/api/v1/workspaces/acme/teams", json=payload)
     assert response.status_code == status.HTTP_201_CREATED

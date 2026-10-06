@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Issue, WorkflowState, Cycle } from '@/types';
-import { Repeat } from 'lucide-react';
+import { Issue, WorkflowState } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
 import { useRealtimeBoard } from '@/hooks/useRealtime';
@@ -23,8 +22,6 @@ export default function IssuesPage() {
 
   const [issues, setIssues] = useState<Issue[]>([]);
   const [states, setStates] = useState<WorkflowState[]>([]);
-  const [cycles, setCycles] = useState<Cycle[]>([]);
-  const [selectedCycleFilter, setSelectedCycleFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
@@ -56,17 +53,15 @@ export default function IssuesPage() {
     }
   };
 
-  // ─── Load issues, workflow states, and cycles once team is known ───────
+  // ─── Load issues and workflow states once team is known ───────
   const loadData = async (teamId: string) => {
     setIsLoading(true);
-    const [fetchedIssues, fetchedStates, fetchedCycles] = await Promise.all([
+    const [fetchedIssues, fetchedStates] = await Promise.all([
       api.getIssues({ teamId }),
       api.getWorkflowStates(teamId),
-      api.getCycles(teamId),
     ]);
     setIssues(fetchedIssues);
     setStates(fetchedStates);
-    setCycles(fetchedCycles);
     if (fetchedStates.length > 0) {
       const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
       setInitialStateId(defaultState.id);
@@ -149,22 +144,9 @@ export default function IssuesPage() {
       const matchesSearch =
         i.title.toLowerCase().includes(q) ||
         i.identifier.toLowerCase().includes(q);
-      if (!matchesSearch) return false;
-      if (selectedCycleFilter === 'all') return true;
-      if (selectedCycleFilter === 'backlog') return !i.cycle_id;
-      return i.cycle_id === selectedCycleFilter;
+      return matchesSearch;
     });
-  }, [issues, searchQuery, selectedCycleFilter]);
-
-  // ─── Memoized cycle counts — avoids per-render .filter() in JSX ────────
-  const cycleIssueCounts = useMemo(() => {
-    const backlogCount = issues.filter((i) => !i.cycle_id).length;
-    const perCycle: Record<string, number> = {};
-    issues.forEach((i) => {
-      if (i.cycle_id) perCycle[i.cycle_id] = (perCycle[i.cycle_id] || 0) + 1;
-    });
-    return { backlogCount, perCycle };
-  }, [issues]);
+  }, [issues, searchQuery]);
 
   // ─── Issue actions ─────────────────────────────────────────────────────
   const handleMoveIssueState = async (
@@ -223,51 +205,6 @@ export default function IssuesPage() {
         }}
       />
 
-      {/* Sprint / Backlog Scope Filter Toolbar */}
-      <div className="flex items-center justify-between px-6 py-2 border-b border-zinc-800 bg-[#090a0c] text-xs">
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
-          <button
-            onClick={() => setSelectedCycleFilter('all')}
-            className={`px-2.5 py-1 rounded-md text-xs transition-colors cursor-pointer ${
-              selectedCycleFilter === 'all'
-                ? 'bg-zinc-800 text-white font-medium'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            All Issues ({issues.length})
-          </button>
-          <button
-            onClick={() => setSelectedCycleFilter('backlog')}
-            className={`px-2.5 py-1 rounded-md text-xs transition-colors cursor-pointer ${
-              selectedCycleFilter === 'backlog'
-                ? 'bg-zinc-800 text-white font-medium'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Backlog ({cycleIssueCounts.backlogCount})
-          </button>
-          {cycles.map((c) => {
-            const isSelected = selectedCycleFilter === c.id;
-            const count = cycleIssueCounts.perCycle[c.id] || 0;
-            return (
-              <button
-                key={c.id}
-                onClick={() => setSelectedCycleFilter(c.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-colors cursor-pointer whitespace-nowrap ${
-                  isSelected
-                    ? 'bg-zinc-800 text-white font-medium'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                <Repeat className="w-3 h-3 text-zinc-500" />
-                <span>{c.name || `Cycle ${c.number}`}</span>
-                <span className="text-[10px] text-zinc-500 font-mono">({count})</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Main View Container */}
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
@@ -278,7 +215,6 @@ export default function IssuesPage() {
           <KanbanBoard
             states={states}
             issues={filteredIssues}
-            cycles={cycles}
             users={workspaceUsers}
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
@@ -294,7 +230,6 @@ export default function IssuesPage() {
         ) : (
           <IssueListView
             issues={filteredIssues}
-            cycles={cycles}
             users={workspaceUsers}
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);

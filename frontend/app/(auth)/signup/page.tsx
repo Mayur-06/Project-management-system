@@ -245,7 +245,6 @@ export default function SignupPage() {
         createdTeam = await api.createTeam(createdOrg.slug, {
           name: cleanTeamName,
           key: cleanKey,
-          cycle_duration_weeks: 2,
         });
       } catch (teamErr: any) {
         console.warn('Team creation error:', teamErr);

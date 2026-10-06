@@ -22,7 +22,6 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
   const router = useRouter();
   const [name, setName] = useState('');
   const [key, setKey] = useState('');
-  const [cycleWeeks, setCycleWeeks] = useState(2);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,7 +57,6 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
       const newTeam = await api.createTeam(orgSlug, {
         name: cleanName,
         key: cleanKey,
-        cycle_duration_weeks: cycleWeeks,
       });
 
       if (!newTeam) {
@@ -89,7 +87,7 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">Create New Team</h3>
-              <p className="text-[11px] text-zinc-400">Establish a dedicated issue queue, sprint cycle, and workflow</p>
+              <p className="text-[11px] text-zinc-400">Establish a dedicated issue queue and workflow</p>
             </div>
           </div>
           <button
@@ -139,23 +137,6 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
                 />
               </div>
               <p className="text-[10px] text-zinc-500 mt-1">Prefix for all issue IDs (e.g. {key || 'ENG'}-101)</p>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-zinc-300 block mb-1">
-                Sprint Cadence
-              </label>
-              <select
-                value={cycleWeeks}
-                onChange={(e) => setCycleWeeks(Number(e.target.value))}
-                className="w-full bg-zinc-900 text-xs text-white px-3 py-2 rounded-md border border-zinc-800 focus:border-white focus:outline-none cursor-pointer"
-              >
-                <option value={1}>1 Week (Weekly)</option>
-                <option value={2}>2 Weeks (Standard)</option>
-                <option value={3}>3 Weeks</option>
-                <option value={4}>4 Weeks (Monthly)</option>
-              </select>
-              <p className="text-[10px] text-zinc-500 mt-1">Duration of automated sprint cycles</p>
             </div>
           </div>
 

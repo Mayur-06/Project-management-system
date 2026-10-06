@@ -5,7 +5,6 @@ from app.agents.breakdown_agent import breakdown_graph
 from app.agents.tools.workspace_tools import (
     search_issues_tool,
     get_issue_details_tool,
-    get_cycle_velocity_tool,
 )
 
 

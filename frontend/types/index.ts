@@ -38,7 +38,6 @@ export interface Team {
   name: string;
   key: string;
   issue_counter: number;
-  cycle_duration_weeks: number;
   created_at: string;
 }
 
@@ -51,36 +50,6 @@ export interface WorkflowState {
   position: string;
   is_default: boolean;
   created_at: string;
-}
-
-export interface Cycle {
-  id: string;
-  team_id: string;
-  number: number;
-  name?: string;
-  starts_at: string;
-  ends_at: string;
-  completed_at?: string;
-  created_at: string;
-  progress?: number;
-  total_points?: number;
-  completed_points?: number;
-}
-
-export interface CycleMetrics {
-  cycle: Cycle;
-  total_issues: number;
-  completed_issues: number;
-  total_estimate_points: number;
-  completed_estimate_points: number;
-  completion_percentage: number;
-  burnup_data: { date: string; completed_points: number; total_points: number }[];
-}
-
-export interface CycleCompleteResult {
-  cycle: Cycle;
-  transferred_issues_count: number;
-  destination: string;
 }
 
 export interface Label {
@@ -109,8 +78,7 @@ export interface Issue {
   assignee?: User;
   creator_id: string;
   creator?: User;
-  cycle_id?: string;
-  cycle?: Cycle;
+  project_id?: string;
   parent_id?: string;
   parent?: Issue;
   subtasks?: Issue[];

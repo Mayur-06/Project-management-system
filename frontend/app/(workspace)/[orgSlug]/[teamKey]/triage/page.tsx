@@ -191,7 +191,6 @@ export default function TriagePage() {
         selectedIssue.id,
         targetStateId,
         formAssigneeId ? formAssigneeId : undefined,
-        undefined,
         formPriority,
         formEstimate ? formEstimate : undefined
       );
