@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Issue, IssuePriority, TriageOutput, Team, WorkflowState } from '@/types';
 import { api } from '@/lib/api';
+import { useWorkspace } from '@/lib/WorkspaceContext';
 import { TopNav } from '@/components/navigation/TopNav';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 
@@ -34,8 +35,9 @@ export default function TriagePage() {
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
-  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
-  const [allTeams, setAllTeams] = useState<Team[]>([]);
+  // ─── Get currentTeam + allTeams from layout context — no getTeams call needed
+  const { currentTeam, teams: allTeams } = useWorkspace();
+
   const [teamStates, setTeamStates] = useState<WorkflowState[]>([]);
   const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; email: string }[]>([]);
 
@@ -64,70 +66,55 @@ export default function TriagePage() {
   const [isSnoozeOpen, setIsSnoozeOpen] = useState(false);
 
   useEffect(() => {
+    if (!currentTeam?.id) return;
     let isMounted = true;
-    api.getTeams(orgSlug).then(async (teams) => {
+    const teamId = currentTeam.id;
+
+    // Fetch states, triage issues, and team members in parallel
+    Promise.all([
+      api.getWorkflowStates(teamId),
+      api.getTriageIssues(teamId),
+      api.getTeamMembers(teamId),
+    ]).then(async ([states, triageRes, tms]) => {
       if (!isMounted) return;
-      setAllTeams(teams);
-      const matched = teams.find((t) => t.key.toUpperCase() === teamKey) || teams[0];
-      if (matched) {
-        setCurrentTeam(matched);
+      setTeamStates(states || []);
 
-        // Fetch workflow states
-        const states = await api.getWorkflowStates(matched.id);
-        if (!isMounted) return;
-        setTeamStates(states);
-
-        // Fetch team members for assignee dropdown
-        api.getTeamMembers(matched.id).then((tms) => {
-          if (!isMounted || !tms) return;
-          setTeamMembers(
-            tms.map((tm: any) => ({
-              id: tm.user_id || tm.id,
-              name: tm.user?.name || tm.user?.email || 'Member',
-              email: tm.user?.email || '',
-            }))
-          );
-        }).catch(() => {});
-
-        // Fetch incoming triage issues for current team
-        const triageState = states.find((s) => s.category === 'triage') || states[0];
-        let res = await api.getTriageIssues(matched.id);
-        if (!res || res.length === 0) {
-          res = await api.getIssues({
-            teamId: matched.id,
-            stateId: triageState?.id,
-          });
-        }
-        if (!isMounted) return;
-        setTriageIssues(res || []);
-        if (res && res.length > 0) {
-          handleSelectIncoming(res[0], states);
-        }
-
-        // Fetch outgoing cross-team issues sent to OTHER teams currently in triage
-        const otherTeams = teams.filter((t) => t.id !== matched.id);
-        const sentPromises = otherTeams.map(async (other) => {
-          try {
-            const otherTriage = await api.getTriageIssues(other.id);
-            return (otherTriage || []).map((iss) => ({
-              ...iss,
-              destinationTeam: other,
-            }));
-          } catch {
-            return [];
-          }
-        });
-        const allSent = (await Promise.all(sentPromises)).flat();
-        if (isMounted) {
-          setSentIssues(allSent);
-        }
+      if (tms) {
+        setTeamMembers(
+          tms.map((tm: any) => ({
+            id: tm.user_id || tm.id,
+            name: tm.user?.name || tm.user?.email || 'Member',
+            email: tm.user?.email || '',
+          }))
+        );
       }
-    });
 
-    return () => {
-      isMounted = false;
-    };
-  }, [orgSlug, teamKey]);
+      // Fall back to state-filtered issues if triage endpoint returns empty
+      let res = triageRes || [];
+      if (res.length === 0 && states) {
+        const triageState = states.find((s) => s.category === 'triage') || states[0];
+        res = await api.getIssues({ teamId, stateId: triageState?.id }) || [];
+      }
+      if (!isMounted) return;
+      setTriageIssues(res);
+      if (res.length > 0) handleSelectIncoming(res[0], states || []);
+
+      // Fetch outgoing cross-team issues in parallel
+      const otherTeams = allTeams.filter((t) => t.id !== teamId);
+      const sentPromises = otherTeams.map(async (other) => {
+        try {
+          const otherTriage = await api.getTriageIssues(other.id);
+          return (otherTriage || []).map((iss) => ({ ...iss, destinationTeam: other }));
+        } catch {
+          return [];
+        }
+      });
+      const allSent = (await Promise.all(sentPromises)).flat();
+      if (isMounted) setSentIssues(allSent);
+    }).catch(() => {});
+
+    return () => { isMounted = false; };
+  }, [currentTeam?.id, allTeams.length]);
 
   // When an incoming issue is selected: populate form fields with defaults and run AI triage
   const handleSelectIncoming = async (issue: Issue, statesOverride?: WorkflowState[]) => {

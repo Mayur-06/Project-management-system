@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useWorkspace } from '@/lib/WorkspaceContext';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -34,13 +35,15 @@ export default function CyclesPage() {
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
-  const [currentTeam, setCurrentTeam] = useState<any>(null);
+  // ─── Get currentTeam from layout context — no getTeams call needed ───
+  const { currentTeam } = useWorkspace();
+
   const [cycles, setCycles] = useState<Cycle[]>([]);
   const [activeCycle, setActiveCycle] = useState<Cycle | null>(null);
   const [cycleMetrics, setCycleMetrics] = useState<CycleMetrics | null>(null);
   const [cycleIssues, setCycleIssues] = useState<Issue[]>([]);
   const [filterTab, setFilterTab] = useState<'all' | 'active' | 'upcoming' | 'completed'>('all');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Modal States
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -57,28 +60,23 @@ export default function CyclesPage() {
   // Complete Cycle Form State
   const [rolloverDestination, setRolloverDestination] = useState<string>('backlog');
 
-  const loadTeamData = async () => {
+  const loadCyclesData = async (teamId: string) => {
     setIsLoading(true);
     try {
-      const teams = await api.getTeams(orgSlug);
-      const matched = teams.find((t) => t.key.toUpperCase() === teamKey) || teams[0];
-      if (matched) {
-        setCurrentTeam(matched);
-        const cycleList = await api.getCycles(matched.id);
-        setCycles(cycleList);
+      const cycleList = await api.getCycles(teamId);
+      setCycles(cycleList);
 
-        // Determine currently active or first cycle
-        const now = new Date();
-        const active = cycleList.find((c) => {
-          const s = new Date(c.starts_at);
-          const e = new Date(c.ends_at);
-          return !c.completed_at && s <= now && e >= now;
-        }) || cycleList[0] || null;
+      // Determine currently active or first cycle
+      const now = new Date();
+      const active = cycleList.find((c) => {
+        const s = new Date(c.starts_at);
+        const e = new Date(c.ends_at);
+        return !c.completed_at && s <= now && e >= now;
+      }) || cycleList[0] || null;
 
-        setActiveCycle(active);
-        if (active) {
-          loadCycleDetails(active.id, matched.id);
-        }
+      setActiveCycle(active);
+      if (active) {
+        loadCycleDetails(active.id, teamId);
       }
     } catch (err) {
       console.error('Failed to load team cycles', err);
@@ -101,8 +99,10 @@ export default function CyclesPage() {
   };
 
   useEffect(() => {
-    loadTeamData();
-  }, [orgSlug, teamKey]);
+    if (currentTeam?.id) {
+      loadCyclesData(currentTeam.id);
+    }
+  }, [currentTeam?.id]);
 
   // Realtime Supabase updates for cycle board
   useRealtimeBoard({

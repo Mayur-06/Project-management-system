@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Plus, Trash2, CornerDownRight, Repeat } from 'lucide-react';
 import { Issue, WorkflowState, Cycle } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
@@ -28,7 +28,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onDeleteIssue,
 }) => {
   // Exclude triage from main active board columns
-  const activeStates = states.filter((s) => s.category !== 'triage');
+  const activeStates = useMemo(
+    () => states.filter((s) => s.category !== 'triage'),
+    [states]
+  );
+
+  // O(1) cycle name lookup — avoids cycles.find() inside every card render
+  const cycleMap = useMemo(
+    () => Object.fromEntries(cycles.map((c) => [c.id, c])),
+    [cycles]
+  );
 
   const handleDragStart = (e: React.DragEvent, issueId: string) => {
     e.dataTransfer.setData('text/plain', issueId);
@@ -124,7 +133,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       {(() => {
                         const cName =
                           issue.cycle?.name ||
-                          (issue.cycle_id && cycles ? cycles.find((c) => c.id === issue.cycle_id)?.name : null);
+                          (issue.cycle_id ? cycleMap[issue.cycle_id]?.name : null);
                         if (!cName) return null;
                         return (
                           <span

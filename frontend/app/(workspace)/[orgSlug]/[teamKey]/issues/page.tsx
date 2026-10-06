@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Issue, WorkflowState, Team, User, Cycle } from '@/types';
+import { Issue, WorkflowState, Cycle } from '@/types';
 import { Repeat } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useWorkspace } from '@/lib/WorkspaceContext';
 import { useRealtimeBoard } from '@/hooks/useRealtime';
 import { TopNav } from '@/components/navigation/TopNav';
 import { KanbanBoard } from '@/components/issues/KanbanBoard';
@@ -17,7 +18,9 @@ export default function IssuesPage() {
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
-  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
+  // ─── Workspace data from layout context — no extra API calls needed ───
+  const { currentTeam, workspaceUsers, teams: workspaceTeams } = useWorkspace();
+
   const [issues, setIssues] = useState<Issue[]>([]);
   const [states, setStates] = useState<WorkflowState[]>([]);
   const [cycles, setCycles] = useState<Cycle[]>([]);
@@ -26,40 +29,11 @@ export default function IssuesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
+  // Start false — only flip true inside loadData so the spinner
+  // doesn't show before we even know which team to load for.
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    api.getWorkspaceMembers(orgSlug).then((members) => {
-      const active = (members || [])
-        .filter((m) => m.status !== 'invited' && m.user)
-        .map((m) => ({
-          id: m.user_id,
-          name: m.user?.name || m.user?.email || 'Member',
-          email: m.user?.email || '',
-        }));
-      setWorkspaceUsers(active);
-    }).catch(() => {});
-  }, [orgSlug]);
-
-  const [workspaceTeams, setWorkspaceTeams] = useState<any[]>([]);
-
-  // 1. Resolve active team dynamically
-  useEffect(() => {
-    let isMounted = true;
-    api.getTeams(orgSlug).then((teams) => {
-      if (!isMounted) return;
-      setWorkspaceTeams(teams);
-      const matched = teams.find((t) => t.key.toUpperCase() === teamKey);
-      const team = matched || teams[0] || null;
-      setCurrentTeam(team);
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [orgSlug, teamKey]);
-
-  // 2. Load issues, workflow states, and cycles for resolved team
+  // ─── Load issues, workflow states, and cycles once team is known ───────
   const loadData = async (teamId: string) => {
     setIsLoading(true);
     const [fetchedIssues, fetchedStates, fetchedCycles] = await Promise.all([
@@ -83,7 +57,7 @@ export default function IssuesPage() {
     }
   }, [currentTeam?.id]);
 
-  // 3. Supabase Realtime Subscription with Self-Echo Suppression
+  // ─── Supabase Realtime Subscription with Self-Echo Suppression ─────────
   useRealtimeBoard({
     teamId: currentTeam?.id,
     onIssueCreated: (newIssue) => {
@@ -108,7 +82,7 @@ export default function IssuesPage() {
     },
   });
 
-  // Local window event listeners for synchronous immediate feedback
+  // ─── Local window events for immediate optimistic feedback ─────────────
   useEffect(() => {
     const handleCreated = (e: any) => {
       setIssues((prev) => {
@@ -135,17 +109,31 @@ export default function IssuesPage() {
     };
   }, []);
 
-  const filteredIssues = issues.filter((i) => {
-    const matchesSearch =
-      i.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      i.identifier.toLowerCase().includes(searchQuery.toLowerCase());
-    if (!matchesSearch) return false;
+  // ─── Memoized filtering — recomputes only when inputs change ──────────
+  const filteredIssues = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return issues.filter((i) => {
+      const matchesSearch =
+        i.title.toLowerCase().includes(q) ||
+        i.identifier.toLowerCase().includes(q);
+      if (!matchesSearch) return false;
+      if (selectedCycleFilter === 'all') return true;
+      if (selectedCycleFilter === 'backlog') return !i.cycle_id;
+      return i.cycle_id === selectedCycleFilter;
+    });
+  }, [issues, searchQuery, selectedCycleFilter]);
 
-    if (selectedCycleFilter === 'all') return true;
-    if (selectedCycleFilter === 'backlog') return !i.cycle_id;
-    return i.cycle_id === selectedCycleFilter;
-  });
+  // ─── Memoized cycle counts — avoids per-render .filter() in JSX ────────
+  const cycleIssueCounts = useMemo(() => {
+    const backlogCount = issues.filter((i) => !i.cycle_id).length;
+    const perCycle: Record<string, number> = {};
+    issues.forEach((i) => {
+      if (i.cycle_id) perCycle[i.cycle_id] = (perCycle[i.cycle_id] || 0) + 1;
+    });
+    return { backlogCount, perCycle };
+  }, [issues]);
 
+  // ─── Issue actions ─────────────────────────────────────────────────────
   const handleMoveIssueState = async (
     issueId: string,
     newStateId: string,
@@ -170,7 +158,7 @@ export default function IssuesPage() {
       prev.map((i) => (i.id === issueId ? { ...i, state_id: newStateId, sort_order: optimisticRank } : i))
     );
 
-    // Call server to persist and calculate accurate midpoint rank
+    // Persist to server and reconcile accurate rank
     const updated = await api.reorderIssue(issueId, newStateId, prevRank, nextRank);
     if (updated) {
       setIssues((prev) =>
@@ -223,11 +211,11 @@ export default function IssuesPage() {
                 : 'text-zinc-400 hover:text-white'
             }`}
           >
-            Backlog ({issues.filter((i) => !i.cycle_id).length})
+            Backlog ({cycleIssueCounts.backlogCount})
           </button>
           {cycles.map((c) => {
             const isSelected = selectedCycleFilter === c.id;
-            const count = issues.filter((i) => i.cycle_id === c.id).length;
+            const count = cycleIssueCounts.perCycle[c.id] || 0;
             return (
               <button
                 key={c.id}
