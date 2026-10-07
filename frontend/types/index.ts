@@ -1,12 +1,10 @@
 export type MemberRole = 'admin' | 'member' | 'guest';
 
-export type StateCategory = 'triage' | 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled';
+export type StateCategory = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled';
 
 export type IssuePriority = 'none' | 'low' | 'medium' | 'high' | 'urgent';
 
 export type IssueRelationType = 'blocks' | 'blocked_by' | 'relates_to' | 'duplicate_of';
-
-export type ProjectHealth = 'on_track' | 'at_risk' | 'off_track';
 
 export interface User {
   id: string;
@@ -40,7 +38,6 @@ export interface Team {
   name: string;
   key: string;
   issue_counter: number;
-  cycle_duration_weeks: number;
   created_at: string;
 }
 
@@ -52,45 +49,6 @@ export interface WorkflowState {
   category: StateCategory;
   position: string;
   is_default: boolean;
-  created_at: string;
-}
-
-export interface Cycle {
-  id: string;
-  team_id: string;
-  number: number;
-  name?: string;
-  starts_at: string;
-  ends_at: string;
-  completed_at?: string;
-  created_at: string;
-  progress?: number;
-  total_points?: number;
-  completed_points?: number;
-}
-
-export interface Project {
-  id: string;
-  organization_id: string;
-  name: string;
-  slug: string;
-  summary?: string;
-  lead_id?: string;
-  lead?: User;
-  health: ProjectHealth;
-  target_date?: string;
-  sort_order: string;
-  created_at: string;
-  progress?: number;
-}
-
-export interface ProjectMilestone {
-  id: string;
-  project_id: string;
-  name: string;
-  target_date?: string;
-  completed_at?: string;
-  sort_order: string;
   created_at: string;
 }
 
@@ -121,9 +79,6 @@ export interface Issue {
   creator_id: string;
   creator?: User;
   project_id?: string;
-  project?: Project;
-  cycle_id?: string;
-  cycle?: Cycle;
   parent_id?: string;
   parent?: Issue;
   subtasks?: Issue[];
@@ -131,7 +86,6 @@ export interface Issue {
   sort_order: string;
   version: number;
   due_date?: string;
-  snoozed_until?: string;
   completed_at?: string;
   canceled_at?: string;
   last_modified_by_session?: string;
@@ -164,16 +118,6 @@ export interface ActivityLog {
   created_at: string;
 }
 
-export interface TriageOutput {
-  suggested_team_key: string;
-  suggested_priority: IssuePriority;
-  suggested_estimate: number;
-  suggested_labels: string[];
-  suggested_assignee_id?: string;
-  suggested_assignee?: User;
-  reasoning: string;
-}
-
 export interface IssueAttachment {
   id: string;
   issue_id: string;
@@ -202,4 +146,3 @@ export interface UserWorkspaceItem {
 export interface UserWorkspacesResponse {
   workspaces: UserWorkspaceItem[];
 }
-

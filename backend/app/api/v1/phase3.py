@@ -5,11 +5,6 @@ from supabase import Client
 from app.core.security import AuthenticatedUser
 from app.core.dependencies import get_current_user, get_admin_db
 from app.schemas.phase3 import (
-    CycleCreate,
-    CycleResponse,
-    CycleMetricsResponse,
-    CycleCompleteRequest,
-    CycleCompleteResponse,
     ProjectCreate,
     ProjectUpdate,
     ProjectSummaryResponse,
@@ -17,89 +12,32 @@ from app.schemas.phase3 import (
     MilestoneCreate,
     MilestoneUpdate,
     MilestoneResponse,
-    TriageAcceptRequest,
-    TriageSnoozeRequest,
-    TriageDeclineRequest,
 )
 from app.schemas.issue import IssueResponse
 from app.services.phase3_service import Phase3Service
 
-router = APIRouter(tags=["Cycles, Projects, Milestones & Triage"])
+router = APIRouter(tags=["Projects & Milestones"])
 
 
 # ==============================================================================
-# 1. Cycles (Sprints) Endpoints
+# 0. Org Inbox
 # ==============================================================================
 
 @router.get(
-    "/teams/{team_id}/cycles",
-    response_model=List[CycleResponse],
-    summary="List active, upcoming, and past completed sprints for a team",
+    "/organizations/{org_slug}/inbox",
+    response_model=List[IssueResponse],
+    summary="Recent issues across the organization",
 )
-async def list_team_cycles(
-    team_id: str,
+async def list_inbox(
+    org_slug: str,
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
 ):
-    return Phase3Service.list_cycles(team_id, current_user.id, db)
-
-
-@router.post(
-    "/teams/{team_id}/cycles",
-    response_model=CycleResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Create a custom sprint cycle with sequential numbering",
-)
-async def create_team_cycle(
-    team_id: str,
-    payload: CycleCreate,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase3Service.create_cycle(team_id, payload, current_user.id, db)
-
-
-@router.get(
-    "/cycles/{cycle_id}",
-    response_model=CycleMetricsResponse,
-    summary="Get cycle detail, velocity metrics, and burnup data",
-)
-async def get_cycle_metrics(
-    cycle_id: str,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase3Service.get_cycle_metrics(cycle_id, current_user.id, db)
-
-
-@router.post(
-    "/cycles/{cycle_id}/complete",
-    response_model=CycleCompleteResponse,
-    summary="Close active cycle, calculate final metrics, and rollover unfinished issues to next cycle or backlog",
-)
-async def complete_cycle(
-    cycle_id: str,
-    payload: CycleCompleteRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase3Service.complete_cycle(cycle_id, payload, current_user.id, db)
-
-
-@router.post(
-    "/cycles/trigger-rollover",
-    response_model=List[Dict[str, Any]],
-    summary="Trigger immediate evaluation and rollover of expired cycles across all teams",
-)
-async def trigger_cycle_rollover(
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase3Service.auto_rollover_expired_cycles(db)
+    return Phase3Service.list_inbox(org_slug, current_user.id, db)
 
 
 # ==============================================================================
-# 2. Projects & Milestones Endpoints
+# 1. Projects & Milestones Endpoints
 # ==============================================================================
 
 @router.get(
@@ -184,62 +122,3 @@ async def update_milestone(
     db: Client = Depends(get_admin_db),
 ):
     return Phase3Service.update_milestone(milestone_id, payload, current_user.id, db)
-
-
-# ==============================================================================
-# 3. Triage Inbox Endpoints
-# ==============================================================================
-
-@router.get(
-    "/teams/{team_id}/triage",
-    response_model=List[IssueResponse],
-    summary="Fetch all active (unsnoozed) triage issues for a team",
-)
-async def list_triage_issues(
-    team_id: str,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase3Service.list_triage_issues(team_id, current_user.id, db)
-
-
-@router.post(
-    "/triage/{issue_id}/accept",
-    response_model=IssueResponse,
-    summary="Accept triage issue into an active workflow state, assign cycle/assignee",
-)
-async def accept_triage_issue(
-    issue_id: str,
-    payload: TriageAcceptRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase3Service.accept_triage_issue(issue_id, payload, current_user.id, db)
-
-
-@router.post(
-    "/triage/{issue_id}/snooze",
-    response_model=Dict[str, Any],
-    summary="Snooze triage issue until a future timestamp",
-)
-async def snooze_triage_issue(
-    issue_id: str,
-    payload: TriageSnoozeRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase3Service.snooze_triage_issue(issue_id, payload, current_user.id, db)
-
-
-@router.post(
-    "/triage/{issue_id}/decline",
-    response_model=Dict[str, Any],
-    summary="Decline/cancel triage issue with a recorded reason",
-)
-async def decline_triage_issue(
-    issue_id: str,
-    payload: TriageDeclineRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase3Service.decline_triage_issue(issue_id, payload, current_user.id, db)

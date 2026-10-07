@@ -1,28 +1,25 @@
 """
-Background Cron/Scheduled Worker for Sprint Cycle Rollover
-Strict alignment with plan2/linear_system_implementation_plan.md Section 2.G & Problem Set 7
-
-Periodically checks for expired cycles (ends_at < NOW()) and triggers
-automated rollover into the next sequential sprint cycle or backlog.
+Background Cron/Scheduled Worker for Agentic AI Runtime Tasks
+This file is now replaced by phase4 service worker.
 """
 
 import asyncio
 from typing import Optional
 from app.core.database import get_supabase_admin
-from app.services.phase3_service import Phase3Service
+from app.services.phase4_service import Phase4Service
 
 _worker_task: Optional[asyncio.Task] = None
 _stop_event: Optional[asyncio.Event] = None
 
 
-async def cycle_rollover_worker_loop(interval_seconds: int = 300):
+async def agent_worker_loop(interval_seconds: int = 300):
     """
     Background worker loop that runs every interval_seconds (default 5 minutes).
-    Checks for expired cycles and performs automatic rollover safely without blocking the event loop.
+    Executes background AI agent tasks.
     """
     global _stop_event
 
-    # Initial delay before the first cycle check so server starts up instantly
+    # Initial delay before the first agent check so server starts up instantly
     try:
         if _stop_event is not None:
             await asyncio.wait_for(_stop_event.wait(), timeout=10.0)
@@ -32,11 +29,10 @@ async def cycle_rollover_worker_loop(interval_seconds: int = 300):
     while _stop_event is not None and not _stop_event.is_set():
         try:
             db = get_supabase_admin()
-            rollovers = await asyncio.to_thread(Phase3Service.auto_rollover_expired_cycles, db)
-            if rollovers:
-                print(f"[Cycle Worker] Completed auto-rollover for {len(rollovers)} expired cycle(s): {rollovers}")
+            if hasattr(Phase4Service, "execute_background_tasks"):
+                await asyncio.to_thread(Phase4Service.execute_background_tasks, db)
         except Exception as e:
-            print(f"[Cycle Worker] Error during cycle rollover check: {e}")
+            print(f"[Agent Worker] Error during background task execution: {e}")
 
         try:
             # Wait for either interval or cancellation
@@ -48,15 +44,15 @@ async def cycle_rollover_worker_loop(interval_seconds: int = 300):
             pass
 
 
-def start_cycle_rollover_worker(interval_seconds: int = 300):
+def start_agent_worker(interval_seconds: int = 300):
     global _worker_task, _stop_event
     _stop_event = asyncio.Event()
     if _worker_task is None or _worker_task.done():
-        _worker_task = asyncio.create_task(cycle_rollover_worker_loop(interval_seconds))
-        print(f"[Cycle Worker] Background rollover worker started (interval: {interval_seconds}s)")
+        _worker_task = asyncio.create_task(agent_worker_loop(interval_seconds))
+        print(f"[Agent Worker] Background agent worker started (interval: {interval_seconds}s)")
 
 
-async def stop_cycle_rollover_worker():
+async def stop_agent_worker():
     global _worker_task, _stop_event
     if _stop_event is not None:
         _stop_event.set()
@@ -67,5 +63,6 @@ async def stop_cycle_rollover_worker():
         except asyncio.CancelledError:
             pass
         _worker_task = None
-        print("[Cycle Worker] Background rollover worker stopped")
+        print("[Agent Worker] Background agent worker stopped")
     _stop_event = None
+

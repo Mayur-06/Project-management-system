@@ -13,8 +13,6 @@ from app.schemas.phase4 import (
     AttachmentResponse,
     DuplicateCheckRequest,
     DuplicateCheckResponse,
-    TriageClassifyRequest,
-    TriageClassifyResponse,
     BreakdownStartRequest,
     BreakdownStartResponse,
     BreakdownResumeRequest,
@@ -90,24 +88,7 @@ async def check_duplicates(
 
 
 # ==============================================================================
-# 3. AI Triage & Workload Balancing
-# ==============================================================================
-
-@router.post(
-    "/ai/triage/classify",
-    response_model=TriageClassifyResponse,
-    summary="Workload-aware triage classification (Priority, Points, Labels, Assignee recommendation)",
-)
-async def classify_issue(
-    payload: TriageClassifyRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase4Service.classify_issue(payload, current_user.id, db)
-
-
-# ==============================================================================
-# 4. AI Technical Breakdown (HITL Interruption)
+# 3. AI Technical Breakdown (HITL Interruption)
 # ==============================================================================
 
 @router.post(
@@ -137,7 +118,7 @@ async def resume_breakdown(
 
 
 # ==============================================================================
-# 5. Linear Ask: ReAct Workspace Assistant (SSE Stream)
+# 4. Linear Ask: ReAct Workspace Assistant (SSE Stream)
 # ==============================================================================
 
 from app.agents.react_agent import LinearAskAgent

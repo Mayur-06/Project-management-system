@@ -30,8 +30,6 @@ The AI architecture comprises four specialized agents and pipelines:
 * **Fibonacci Story Point Estimation:** Analyzes technical complexity to suggest realistic point estimates using standard Fibonacci sequences (1, 2, 3, 5, 8).
 * **Taxonomy Label Recommendation:** Automatically assigns relevant tags (e.g., `bug`, `performance`, `security`, `frontend`, `auth`) based on semantic topic extraction.
 * **Workload-Aware Assignee Recommendation:** Inspects active sprint commitments, open issue counts, and historical domain ownership of recipient team members to suggest assignees with available bandwidth rather than overloading individual contributors.
-
-### C. Interactive Spec Writer & Subtask Breakdown
 * **Automated Requirements Expansion:** Expands brief issue summaries into comprehensive technical specifications, outlining prerequisites, architectural considerations, and acceptance criteria.
 * **Granular Subtask Decomposition:** Breaks down broad initiatives into discrete, independently executable child tasks with suggested sizing.
 * **Interactive Human-in-the-Loop Review Gate:** Rather than directly writing to the database, the agent suspends execution and delivers proposed tasks to a review modal where engineers can rename, reorder, delete, or add tasks before finalizing.
@@ -59,33 +57,7 @@ LangGraph relies on persistent checkpointers to store thread states, node execut
 * **Asynchronous Connection Pool Management:** An asynchronous connection pool is initialized during FastAPI application startup. The pool manages dedicated connections, runs idempotent schema migrations to create checkpoint tables, and closes gracefully during application shutdown.
 * **Checkpointer Lifecycle:** The persistent checkpointer is injected into compiled agent graphs at runtime, providing durable persistence across restarts.
 
-### B. Triage Agent State Machine Specification
-The triage workflow operates as a directed acyclic state graph consisting of four sequential phases:
-
-> **Workflow Sequence:**
-> 1. Inbound Issue Payload →
-> 2. Phase 1: Fetch Team Capacity & Active Workloads →
-> 3. Phase 2: LLM Classification & Parameter Sizing →
-> 4. Phase 3: Workload-Aware Assignee Matching →
-> 5. Phase 4: Structured Result Persistence & Return
-
-#### Detailed Phase Mechanics:
-1. **Phase 1: Fetch Team Capacity & Active Workloads:**
-   * Receives issue attributes (title, description, team ID, organization ID).
-   * Queries the database to retrieve active team members, their current open issue counts, and total committed story points in the active cycle.
-   * Compiles team capacity into a contextual workload summary dictionary.
-2. **Phase 2: LLM Classification & Sizing:**
-   * Formulates a structured prompt containing the issue content and taxonomy definitions.
-   * Invokes the language model using structured schema outputs to predict team key, priority level, Fibonacci point estimate, and label identifiers.
-   * Generates a concise diagnostic rationale explaining the classifications.
-3. **Phase 3: Assignee Matching:**
-   * Cross-references the predicted domain (e.g., auth, frontend) with team member historical issue resolution data.
-   * Selects candidate members possessing relevant domain experience who are currently under their maximum sprint capacity threshold.
-4. **Phase 4: Structured Output Delivery:**
-   * Bundles all predictions and assignee recommendations into a verified response payload.
-   * Stores suggestions in the issue record or returns them directly to the triage inbox client.
-
-### C. Technical Breakdown Agent State Machine Specification
+### B. Interactive Spec Writer & Subtask Breakdown
 The specification decomposition agent uses a three-node pipeline designed to cleanly support Human-in-the-Loop interruptions:
 
 > **Execution Pipeline & Interruption Boundary:**

@@ -235,7 +235,7 @@ def test_breakdown_start_and_resume_flow(client, mock_db):
 def test_chat_sse_stream(client):
     payload = {
         "organization_id": MOCK_ORG_ID,
-        "messages": [{"role": "user", "content": "What is the status of active cycle?"}],
+        "messages": [{"role": "user", "content": "What is the status of active issues?"}],
     }
     response = client.post("/api/v1/ai/chat/stream", json=payload)
     assert response.status_code == status.HTTP_200_OK

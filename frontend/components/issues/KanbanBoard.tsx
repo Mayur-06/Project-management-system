@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { Plus, Trash2, CornerDownRight } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { Plus, Trash2, CornerDownRight, Repeat } from 'lucide-react';
 import { Issue, WorkflowState } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
@@ -14,6 +14,7 @@ interface KanbanBoardProps {
   onOpenNewIssueWithState: (stateId: string) => void;
   onMoveIssueState: (issueId: string, newStateId: string, prevRank?: string, nextRank?: string) => void;
   onDeleteIssue?: (issueId: string) => void;
+  onDragStateChange?: (isDragging: boolean) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -24,13 +25,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onOpenNewIssueWithState,
   onMoveIssueState,
   onDeleteIssue,
+  onDragStateChange,
 }) => {
-  // Exclude triage from main active board columns
-  const activeStates = states.filter((s) => s.category !== 'triage');
+  // All workflow states now displayed on board (no triage exclusion)
+  const activeStates = states;
 
   const handleDragStart = (e: React.DragEvent, issueId: string) => {
     e.dataTransfer.setData('text/plain', issueId);
     e.dataTransfer.effectAllowed = 'move';
+    onDragStateChange?.(true);
+  };
+
+  const handleDragEnd = () => {
+    onDragStateChange?.(false);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -40,6 +47,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   const handleDropOnColumn = (e: React.DragEvent, stateId: string) => {
     e.preventDefault();
+    onDragStateChange?.(false);
     const issueId = e.dataTransfer.getData('text/plain');
     if (!issueId) return;
 
@@ -51,6 +59,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const handleDropOnCard = (e: React.DragEvent, targetIssue: Issue, stateId: string) => {
     e.preventDefault();
     e.stopPropagation();
+    onDragStateChange?.(false);
     const draggedId = e.dataTransfer.getData('text/plain');
     if (!draggedId || draggedId === targetIssue.id) return;
 
@@ -99,6 +108,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   key={issue.id}
                   draggable
                   onDragStart={(e) => handleDragStart(e, issue.id)}
+                  onDragEnd={handleDragEnd}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDropOnCard(e, issue, state.id)}
                   onClick={() => onSelectIssue(issue)}

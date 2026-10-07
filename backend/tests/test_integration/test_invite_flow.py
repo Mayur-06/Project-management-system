@@ -53,7 +53,6 @@ def test_supabase_invite_flow():
     res_tm = requests.post(f"{BASE_URL}/workspaces/{org_slug}/teams", headers=admin_headers, json={
         "name": "Frontend Guild",
         "key": "FE",
-        "cycle_duration_weeks": 2,
     })
     assert res_tm.status_code == 201
     print(f"[2] Team created: Frontend Guild [FE]")

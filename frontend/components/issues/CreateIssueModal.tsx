@@ -5,7 +5,7 @@ import {
   X,
   AlertCircle,
 } from 'lucide-react';
-import { IssuePriority, Issue, WorkflowState, User, Label, Project, Cycle } from '@/types';
+import { IssuePriority, Issue, WorkflowState, User, Label } from '@/types';
 import { api } from '@/lib/api';
 
 interface CreateIssueModalProps {
@@ -16,8 +16,6 @@ interface CreateIssueModalProps {
   states?: WorkflowState[];
   users?: User[];
   labels?: Label[];
-  projects?: Project[];
-  cycles?: Cycle[];
   teamKey?: string;
   teamId?: string;
   teams?: { id: string; name: string; key: string }[];
@@ -31,8 +29,6 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   states = [],
   users = [],
   labels = [],
-  projects = [],
-  cycles = [],
   teamKey = '',
   teamId,
   teams = [],
@@ -46,8 +42,6 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState<string>('');
   const [estimate, setEstimate] = useState<number>(2);
-  const [projectId, setProjectId] = useState<string>('');
-  const [cycleId, setCycleId] = useState<string>('');
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [modalUsers, setModalUsers] = useState<User[]>(users);
 
@@ -71,6 +65,10 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     api.getWorkflowStates(selectedTeamId).then((res) => {
       if (isMounted && res && res.length > 0) {
         setTeamWorkflowStates(res);
+        const defaultSt = res.find((s) => s.is_default) || res[0];
+        if (defaultSt) {
+          setStateId((prev) => prev || defaultSt.id);
+        }
       }
     }).catch(() => {});
 
@@ -92,10 +90,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   }, [selectedTeamId, teamId, isOpen, states]);
 
   const isCrossTeam = Boolean(teamId && selectedTeamId && teamId !== selectedTeamId);
-  const targetTriageState = teamWorkflowStates.find((s) => s.category === 'triage');
-  const activeStates = isCrossTeam && targetTriageState
-    ? [targetTriageState]
-    : teamWorkflowStates.filter((s) => s.category !== 'triage');
+  const activeStates = teamWorkflowStates;
 
   useEffect(() => {
     if (users && users.length > 0 && selectedTeamId === teamId) {
@@ -103,15 +98,18 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     }
   }, [users, selectedTeamId, teamId]);
 
-  // Auto-route to triage state if cross-team; otherwise to default active state
+  // All issues route to default active state (no triage routing)
   useEffect(() => {
-    if (isCrossTeam && targetTriageState) {
-      setStateId(targetTriageState.id);
-    } else if (activeStates.length > 0) {
-      const defaultState = activeStates.find((s) => s.is_default) || activeStates[0];
-      setStateId(defaultState.id);
+    if (activeStates.length > 0) {
+      const isCurrentValid = activeStates.some((s) => s.id === stateId);
+      if (!isCurrentValid || !stateId) {
+        const defaultState = activeStates.find((s) => s.is_default) || activeStates[0];
+        if (defaultState) {
+          setStateId(defaultState.id);
+        }
+      }
     }
-  }, [isCrossTeam, targetTriageState, selectedTeamId]);
+  }, [selectedTeamId, activeStates, stateId]);
 
   // Real-time debounced duplicate check
   const [duplicateMatches, setDuplicateMatches] = useState<
@@ -146,7 +144,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     setSubmitError(null);
     try {
       const resolvedTeamId = selectedTeamId || teamId || states[0]?.team_id;
-      const targetState = isCrossTeam && targetTriageState ? targetTriageState.id : (stateId || activeStates[0]?.id);
+      const targetState = stateId || activeStates[0]?.id;
       if (!targetState) {
         throw new Error('No workflow state available for selected team.');
       }
@@ -157,10 +155,8 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
         description_text: description,
         priority,
         state_id: targetState,
-        assignee_id: isCrossTeam ? undefined : (assigneeId || undefined),
+        assignee_id: assigneeId || undefined,
         estimate,
-        project_id: projectId || undefined,
-        cycle_id: isCrossTeam ? undefined : (cycleId || undefined),
         labels: labels.filter((l) => selectedLabels.includes(l.id)),
       });
       if (created) {
@@ -210,12 +206,6 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
             )}
             <span className="text-zinc-600">•</span>
             <span className="text-xs text-zinc-400 font-medium">New Issue</span>
-
-            {isCrossTeam && (
-              <span className="text-[10px] bg-amber-950/60 text-amber-300 border border-amber-800/80 px-2 py-0.5 rounded font-medium ml-1">
-                Cross-team → Triage
-              </span>
-            )}
           </div>
           <button onClick={onClose} className="text-zinc-400 hover:text-white p-1 cursor-pointer">
             <X className="w-4 h-4" />
@@ -349,7 +339,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
           </div>
 
           {/* Footer Controls */}
-          <div className="pt-4 border-t border-zinc-800 flex items-center justify-end gap-2">
+           <div className="pt-4 border-t border-zinc-800 flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}

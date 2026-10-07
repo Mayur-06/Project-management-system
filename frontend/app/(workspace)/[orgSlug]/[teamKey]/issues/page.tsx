@@ -1,63 +1,65 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import { Issue, WorkflowState, Team, User } from '@/types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { Issue, WorkflowState, User } from '@/types';
 import { api } from '@/lib/api';
+import { useWorkspace } from '@/lib/WorkspaceContext';
 import { useRealtimeBoard } from '@/hooks/useRealtime';
 import { TopNav } from '@/components/navigation/TopNav';
 import { KanbanBoard } from '@/components/issues/KanbanBoard';
 import { IssueListView } from '@/components/issues/IssueListView';
-import { IssueDetailDrawer } from '@/components/issues/IssueDetailDrawer';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 
 export default function IssuesPage() {
   const params = useParams();
+  const router = useRouter();
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
-  const [currentTeam, setCurrentTeam] = useState<Team | null>(null);
+  // ─── Workspace data from layout context — no extra API calls needed ───
+  const { currentTeam, workspaceUsers, teams: workspaceTeams } = useWorkspace();
+
+  // Map WorkspaceMember[] to User[] for CreateIssueModal
+  const modalUsers = useMemo(() => 
+    workspaceUsers.map(m => m.user).filter((u): u is User => u !== undefined),
+    [workspaceUsers]
+  );
+
   const [issues, setIssues] = useState<Issue[]>([]);
   const [states, setStates] = useState<WorkflowState[]>([]);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-  const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
+  // Start false — only flip true inside loadData so the spinner
+  // doesn't show before we even know which team to load for.
+  const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    api.getWorkspaceMembers(orgSlug).then((members) => {
-      const active = (members || [])
-        .filter((m) => m.status !== 'invited' && m.user)
-        .map((m) => ({
-          id: m.user_id,
-          name: m.user?.name || m.user?.email || 'Member',
-          email: m.user?.email || '',
-        }));
-      setWorkspaceUsers(active);
-    }).catch(() => {});
-  }, [orgSlug]);
+  // ─── Active Drag Interruption Guard ──────────────────────────────────────
+  // Prevents incoming CDC/Broadcast events from mutating the board while user
+  // is actively dragging a card, avoiding DOM detachment or cursor snatching.
+  const isDraggingRef = useRef(false);
+  const pendingUpdatesRef = useRef<(() => void)[]>([]);
 
-  const [workspaceTeams, setWorkspaceTeams] = useState<any[]>([]);
+  const queueOrExecute = (updateFn: () => void) => {
+    if (isDraggingRef.current) {
+      pendingUpdatesRef.current.push(updateFn);
+    } else {
+      updateFn();
+    }
+  };
 
-  // 1. Resolve active team dynamically
-  useEffect(() => {
-    let isMounted = true;
-    api.getTeams(orgSlug).then((teams) => {
-      if (!isMounted) return;
-      setWorkspaceTeams(teams);
-      const matched = teams.find((t) => t.key.toUpperCase() === teamKey);
-      const team = matched || teams[0] || null;
-      setCurrentTeam(team);
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, [orgSlug, teamKey]);
+  const handleDragStateChange = (isDragging: boolean) => {
+    isDraggingRef.current = isDragging;
+    if (!isDragging && pendingUpdatesRef.current.length > 0) {
+      const updates = [...pendingUpdatesRef.current];
+      pendingUpdatesRef.current = [];
+      updates.forEach((fn) => fn());
+    }
+  };
 
-  // 2. Load issues and workflow states for resolved team
+  // ─── Load issues and workflow states once team is known ───────
   const loadData = async (teamId: string) => {
     setIsLoading(true);
     const [fetchedIssues, fetchedStates] = await Promise.all([
@@ -79,34 +81,42 @@ export default function IssuesPage() {
     }
   }, [currentTeam?.id]);
 
-  // 3. Supabase Realtime Subscription with Self-Echo Suppression
+  // ─── Supabase Realtime Subscription with Self-Echo Suppression ─────────
   useRealtimeBoard({
     teamId: currentTeam?.id,
     onIssueCreated: (newIssue) => {
-      setIssues((prev) => {
-        if (prev.some((i) => i.id === newIssue.id)) return prev;
-        return [newIssue, ...prev];
+      queueOrExecute(() => {
+        setIssues((prev) => {
+          if (prev.some((i) => i.id === newIssue.id)) return prev;
+          return [newIssue, ...prev];
+        });
       });
     },
     onIssueUpdated: (updatedIssue) => {
-      setIssues((prev) => prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i)));
-      setSelectedIssue((prev) => (prev?.id === updatedIssue.id ? { ...prev, ...updatedIssue } : prev));
+      queueOrExecute(() => {
+        setIssues((prev) => prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i)));
+      });
     },
     onIssueMoved: ({ id, state_id, sort_order }) => {
-      setIssues((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, state_id, sort_order } : i))
-      );
+      queueOrExecute(() => {
+        setIssues((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, state_id, sort_order } : i))
+        );
+      });
     },
     onIssueDeleted: (deletedId) => {
-      setIssues((prev) => prev.filter((i) => i.id !== deletedId));
-      setSelectedIssue((prev) => (prev?.id === deletedId ? null : prev));
+      queueOrExecute(() => {
+        setIssues((prev) => prev.filter((i) => i.id !== deletedId));
+      });
     },
     onReloadRequested: () => {
-      if (currentTeam?.id) loadData(currentTeam.id);
+      queueOrExecute(() => {
+        if (currentTeam?.id) loadData(currentTeam.id);
+      });
     },
   });
 
-  // Local window event listeners for synchronous immediate feedback
+  // ─── Local window events for immediate optimistic feedback ─────────────
   useEffect(() => {
     const handleCreated = (e: any) => {
       setIssues((prev) => {
@@ -120,7 +130,6 @@ export default function IssuesPage() {
     const handleDeleted = (e: any) => {
       const deletedId = typeof e.detail === 'string' ? e.detail : e.detail?.id;
       setIssues((prev) => prev.filter((i) => i.id !== deletedId));
-      setSelectedIssue((prev) => (prev?.id === deletedId ? null : prev));
     };
 
     window.addEventListener('issueCreated', handleCreated);
@@ -134,12 +143,18 @@ export default function IssuesPage() {
     };
   }, []);
 
-  const filteredIssues = issues.filter(
-    (i) =>
-      i.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      i.identifier.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // ─── Memoized filtering — recomputes only when inputs change ──────────
+  const filteredIssues = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    return issues.filter((i) => {
+      const matchesSearch =
+        i.title.toLowerCase().includes(q) ||
+        i.identifier.toLowerCase().includes(q);
+      return matchesSearch;
+    });
+  }, [issues, searchQuery]);
 
+  // ─── Issue actions ─────────────────────────────────────────────────────
   const handleMoveIssueState = async (
     issueId: string,
     newStateId: string,
@@ -164,7 +179,7 @@ export default function IssuesPage() {
       prev.map((i) => (i.id === issueId ? { ...i, state_id: newStateId, sort_order: optimisticRank } : i))
     );
 
-    // Call server to persist and calculate accurate midpoint rank
+    // Persist to server and reconcile accurate rank
     const updated = await api.reorderIssue(issueId, newStateId, prevRank, nextRank);
     if (updated) {
       setIssues((prev) =>
@@ -175,7 +190,6 @@ export default function IssuesPage() {
 
   const handleDeleteIssue = async (issueId: string) => {
     setIssues((prev) => prev.filter((i) => i.id !== issueId));
-    if (selectedIssue?.id === issueId) setSelectedIssue(null);
     await api.deleteIssue(issueId, true);
   };
 
@@ -208,47 +222,34 @@ export default function IssuesPage() {
             states={states}
             issues={filteredIssues}
             users={workspaceUsers}
-            onSelectIssue={setSelectedIssue}
+            onSelectIssue={(issue) => {
+              router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
+            }}
             onOpenNewIssueWithState={(stateId) => {
               setInitialStateId(stateId);
               setIsNewIssueOpen(true);
             }}
             onMoveIssueState={handleMoveIssueState}
             onDeleteIssue={handleDeleteIssue}
+            onDragStateChange={handleDragStateChange}
           />
         ) : (
-          <IssueListView issues={filteredIssues} users={workspaceUsers} onSelectIssue={setSelectedIssue} />
+          <IssueListView
+            issues={filteredIssues}
+            users={workspaceUsers}
+            onSelectIssue={(issue) => {
+              router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
+            }}
+          />
         )}
       </div>
-
-      {/* Issue Detail Drawer */}
-      <IssueDetailDrawer
-        issue={selectedIssue}
-        states={states}
-        users={workspaceUsers}
-        onClose={() => setSelectedIssue(null)}
-        onUpdateIssue={(updated) => {
-          setSelectedIssue(updated);
-          setIssues((prev) => {
-            let next = prev.map((i) => (i.id === updated.id ? updated : i));
-            if (updated.subtasks && updated.subtasks.length > 0) {
-              const existingIds = new Set(next.map((i) => i.id));
-              const newSubs = updated.subtasks.filter((s) => !existingIds.has(s.id));
-              if (newSubs.length > 0) {
-                next = [...newSubs, ...next];
-              }
-            }
-            return next;
-          });
-        }}
-      />
 
       {/* Create Modal */}
       <CreateIssueModal
         isOpen={isNewIssueOpen}
         initialStateId={initialStateId}
         states={states}
-        users={workspaceUsers}
+        users={modalUsers}
         teamKey={teamKey}
         teamId={currentTeam?.id}
         teams={workspaceTeams}

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { Repeat } from 'lucide-react';
 import { Issue } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
@@ -11,7 +12,11 @@ interface IssueListViewProps {
   onSelectIssue: (issue: Issue) => void;
 }
 
-export const IssueListView: React.FC<IssueListViewProps> = ({ issues, users = [], onSelectIssue }) => {
+export const IssueListView: React.FC<IssueListViewProps> = ({
+  issues,
+  users = [],
+  onSelectIssue,
+}) => {
   return (
     <div className="flex-1 p-6 select-none overflow-x-auto font-sans">
       <div className="w-full bg-black border border-zinc-800 rounded-xl overflow-hidden shadow-xs">
@@ -33,7 +38,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({ issues, users = []
               onClick={() => onSelectIssue(issue)}
               className="grid grid-cols-12 gap-4 px-4 py-3 items-center hover:bg-zinc-900 transition-colors cursor-pointer text-xs text-zinc-300"
             >
-              <div className="col-span-2 font-mono font-medium text-white flex items-center gap-2">
+              <div className="col-span-2 font-mono font-medium text-white flex items-center gap-1.5 flex-wrap">
                 <span>{issue.identifier}</span>
               </div>
               <div className="col-span-5 font-medium text-white truncate pr-4">{issue.title}</div>

@@ -1,11 +1,8 @@
 import {
   Issue,
   WorkflowState,
-  Cycle,
-  Project,
   IssueComment,
   ActivityLog,
-  TriageOutput,
   Team,
   Organization,
   WorkspaceMember,
@@ -90,6 +87,24 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
     if (!response.ok) {
       if (response.status === 401) {
         if (typeof window !== 'undefined') {
+          try {
+            const { data } = await supabase.auth.refreshSession();
+            if (data?.session?.access_token) {
+              const newToken = data.session.access_token;
+              localStorage.setItem('supabase_access_token', newToken);
+              document.cookie = `sb-access-token=${newToken}; path=/; max-age=604800; SameSite=Lax`;
+              const retryResponse = await fetch(`${getApiBase()}${endpoint}`, {
+                ...options,
+                headers: {
+                  ...headers,
+                  Authorization: `Bearer ${newToken}`,
+                },
+              });
+              if (retryResponse.ok) {
+                return (await retryResponse.json()) as T;
+              }
+            }
+          } catch {}
           localStorage.removeItem('supabase_access_token');
           document.cookie = 'sb-access-token=; path=/; max-age=0';
         }
@@ -171,7 +186,7 @@ export const api = {
 
   async createTeam(
     orgSlug: string,
-    teamData: { name: string; key: string; cycle_duration_weeks?: number }
+    teamData: { name: string; key: string }
   ): Promise<Team | null> {
     return await fetchWithAuth<Team>(`/workspaces/${orgSlug}/teams`, {
       method: 'POST',
@@ -201,6 +216,34 @@ export const api = {
     role: string = 'member'
   ): Promise<WorkspaceMember | null> {
     return await fetchWithAuth<WorkspaceMember>(`/workspaces/${orgSlug}/members/invite`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
+    });
+  },
+
+  // Settings
+  async getUserProfile(): Promise<any | null> {
+    return await fetchWithAuth<any>(`/users/me/profile`);
+  },
+
+  async getWorkspaceSettings(orgSlug: string): Promise<Organization | null> {
+    return await fetchWithAuth<Organization>(`/organizations/${orgSlug}/settings/workspace`);
+  },
+
+  async updateWorkspaceSettings(orgSlug: string, updates: Partial<Organization>): Promise<Organization | null> {
+    return await fetchWithAuth<Organization>(`/organizations/${orgSlug}/settings/workspace`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  },
+
+  async getWorkspaceMembersSettings(orgSlug: string): Promise<WorkspaceMember[]> {
+    const data = await fetchWithAuth<WorkspaceMember[]>(`/organizations/${orgSlug}/settings/members`);
+    return data || [];
+  },
+
+  async inviteWorkspaceMember(orgSlug: string, email: string, role: string = 'member'): Promise<WorkspaceMember | null> {
+    return await fetchWithAuth<WorkspaceMember>(`/organizations/${orgSlug}/settings/members/invite`, {
       method: 'POST',
       body: JSON.stringify({ email, role }),
     });
@@ -246,15 +289,18 @@ export const api = {
   },
 
   // Issues
-  async getIssues(params?: { teamId?: string; stateId?: string; cycleId?: string }): Promise<Issue[]> {
+  async getIssues(params?: { teamId?: string; stateId?: string }): Promise<Issue[]> {
     const query = new URLSearchParams();
     if (params?.teamId) query.append('team_id', params.teamId);
     if (params?.stateId) query.append('state_id', params.stateId);
-    if (params?.cycleId) query.append('cycle_id', params.cycleId);
 
     const qs = query.toString();
     const data = await fetchWithAuth<Issue[]>(`/issues${qs ? `?${qs}` : ''}`);
     return data || [];
+  },
+
+  async getInbox(orgSlug: string): Promise<Issue[] | null> {
+    return await fetchWithAuth<Issue[]>(`/organizations/${orgSlug}/inbox`);
   },
 
   async getIssue(idOrKey: string): Promise<Issue | null> {
@@ -346,18 +392,6 @@ export const api = {
     return data || [];
   },
 
-  // Cycles
-  async getCycles(teamId: string): Promise<Cycle[]> {
-    const data = await fetchWithAuth<Cycle[]>(`/teams/${teamId}/cycles`);
-    return data || [];
-  },
-
-  // Projects
-  async getProjects(orgSlug: string): Promise<Project[]> {
-    const data = await fetchWithAuth<Project[]>(`/organizations/${orgSlug}/projects`);
-    return data || [];
-  },
-
   // AI Duplicates Check
   async checkDuplicates(
     title: string,
@@ -382,75 +416,6 @@ export const api = {
         similarity: m.similarity,
       })),
     };
-  },
-
-  // AI Auto-Triage
-  async autoTriage(
-    title: string,
-    description: string,
-    teamId?: string,
-    organizationId?: string
-  ): Promise<TriageOutput | null> {
-    const data = await fetchWithAuth<any>(`/ai/triage/classify`, {
-      method: 'POST',
-      body: JSON.stringify({
-        title,
-        description,
-        ...(teamId ? { team_id: teamId } : {}),
-        ...(organizationId ? { organization_id: organizationId } : {}),
-      }),
-    });
-    if (!data) return null;
-    return {
-      suggested_team_key: data.suggested_team_key || 'ENG',
-      suggested_priority: data.suggested_priority || 'medium',
-      suggested_estimate: data.suggested_estimate ?? 3,
-      suggested_labels: data.suggested_labels || [],
-      suggested_assignee_id: data.suggested_assignee_id,
-      reasoning: data.reasoning || data.rationale || '',
-    };
-  },
-
-  // Triage Actions
-  async getTriageIssues(teamId: string): Promise<Issue[]> {
-    const data = await fetchWithAuth<Issue[]>(`/teams/${teamId}/triage`);
-    return data || [];
-  },
-
-  async acceptTriage(
-    issueId: string,
-    targetStateId: string,
-    assigneeId?: string,
-    cycleId?: string,
-    priority?: string,
-    estimate?: number
-  ): Promise<Issue | null> {
-    return await fetchWithAuth<Issue>(`/triage/${issueId}/accept`, {
-      method: 'POST',
-      body: JSON.stringify({
-        target_state_id: targetStateId,
-        assignee_id: assigneeId,
-        cycle_id: cycleId,
-        priority: priority,
-        estimate: estimate,
-      }),
-    });
-  },
-
-  async snoozeTriage(issueId: string, snoozedUntil: string): Promise<boolean> {
-    const res = await fetchWithAuth<any>(`/triage/${issueId}/snooze`, {
-      method: 'POST',
-      body: JSON.stringify({ snoozed_until: snoozedUntil }),
-    });
-    return !!res;
-  },
-
-  async declineTriage(issueId: string, reason: string): Promise<boolean> {
-    const res = await fetchWithAuth<any>(`/triage/${issueId}/decline`, {
-      method: 'POST',
-      body: JSON.stringify({ reason }),
-    });
-    return !!res;
   },
 
   // AI Sub-task Breakdown
