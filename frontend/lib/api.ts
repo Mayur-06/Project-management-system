@@ -14,29 +14,35 @@ import {
 import { getClientSessionId, supabase } from '@/lib/supabase/client';
 
 function getApiBase(): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
-  if (typeof window !== 'undefined') {
-    if (window.location.hostname === 'localhost' && envUrl.includes('127.0.0.1')) {
-      return envUrl.replace('127.0.0.1', 'localhost');
-    }
-    if (window.location.hostname === '127.0.0.1' && envUrl.includes('localhost')) {
-      return envUrl.replace('localhost', '127.0.0.1');
-    }
-  }
-  return envUrl;
+  return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 
 async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
-  let token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
-  // If token is missing from localStorage, check cookie
+  let token: string | null = null;
+
+  // 1. Primary: Get fresh token from active Supabase session (handles auto-refresh)
+  if (typeof window !== 'undefined') {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) {
+        token = data.session.access_token;
+        localStorage.setItem('supabase_access_token', token);
+      }
+    } catch {}
+  }
+
+  // 2. Secondary fallback: localStorage or cookie
+  if (!token && typeof window !== 'undefined') {
+    token = localStorage.getItem('supabase_access_token');
+  }
   if (!token && typeof document !== 'undefined') {
     const match = document.cookie.match(/(?:^|;\s*)sb-access-token=([^;]+)/);
     if (match) token = match[1];
   }
 
-  // Check if token was provided in custom headers
+  // 3. Fallback: custom headers
   if (!token && options.headers) {
     let authHeader = '';
     if (options.headers instanceof Headers) {
@@ -47,17 +53,6 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.replace('Bearer ', '').trim();
     }
-  }
-
-  // Fall back to active Supabase session if still missing
-  if (!token && typeof window !== 'undefined') {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.access_token) {
-        token = data.session.access_token;
-        localStorage.setItem('supabase_access_token', token);
-      }
-    } catch {}
   }
 
   // If token is the old placeholder dev token, clear it

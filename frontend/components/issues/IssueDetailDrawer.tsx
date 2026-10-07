@@ -24,6 +24,7 @@ import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAt
 import { api } from '@/lib/api';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
+import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
 
 interface ProposedSubtaskItem {
   title: string;
@@ -123,11 +124,22 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
         assignee_id: newSubtaskAssigneeId || undefined,
       });
       if (created) {
-        const updated = {
-          ...issue,
-          subtasks: [...(issue.subtasks || []), created],
-        };
-        onUpdateIssue(updated);
+        try {
+          const fullIssue = await api.getIssue(issue.id);
+          if (fullIssue) {
+            onUpdateIssue(fullIssue);
+          } else {
+            onUpdateIssue({
+              ...issue,
+              subtasks: [...(issue.subtasks || []), created],
+            });
+          }
+        } catch {
+          onUpdateIssue({
+            ...issue,
+            subtasks: [...(issue.subtasks || []), created],
+          });
+        }
         window.dispatchEvent(new CustomEvent('issueCreated', { detail: created }));
         setNewSubtaskTitle('');
         setNewSubtaskPriority('none');
@@ -572,58 +584,21 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               </form>
 
               {issue.subtasks && issue.subtasks.length > 0 ? (
-                <div className="space-y-1.5">
-                  {issue.subtasks.map((sub, idx) => (
-                    <div
-                      key={sub.id}
-                      className="p-2.5 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 flex items-center justify-between text-xs transition-colors"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1 mr-3">
-                        <CornerDownRight className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                        <span className="font-mono text-zinc-400 text-[11px] shrink-0 bg-zinc-900 px-1 rounded border border-zinc-800">
-                          {issue.identifier}-sub{idx + 1}
-                        </span>
-                        <span className="text-zinc-200 truncate">{sub.title}</span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {(() => {
-                          const resolvedSubAssignee = sub.assignee || (sub.assignee_id ? users.find((u) => u.id === sub.assignee_id) : null);
-                          if (!resolvedSubAssignee) {
-                            return <span className="text-[10px] text-zinc-500 font-mono">Unassigned</span>;
-                          }
-                          const name = resolvedSubAssignee.name || resolvedSubAssignee.email || 'Member';
-                          const initials = name
-                            .split(' ')
-                            .filter(Boolean)
-                            .map((n: string) => n[0])
-                            .slice(0, 2)
-                            .join('')
-                            .toUpperCase() || 'M';
-
-                          if (resolvedSubAssignee.avatar_url) {
-                            return (
-                              <img
-                                src={resolvedSubAssignee.avatar_url}
-                                alt={name}
-                                className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
-                                title={name}
-                              />
-                            );
-                          }
-
-                          return (
-                            <div
-                              className="w-4 h-4 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[8px] font-bold"
-                              title={name}
-                            >
-                              {initials}
-                            </div>
-                          );
-                        })()}
-                        <StateBadge state={sub.state} />
-                      </div>
-                    </div>
-                  ))}
+                <div className="p-2.5 rounded-lg bg-black border border-zinc-900/80">
+                  <IssueSubtasksTree
+                    rootIssue={issue}
+                    subtasks={issue.subtasks}
+                    orgSlug={issue.organization_id || ''}
+                    teamKey={issue.identifier?.split('-')[0] || ''}
+                    users={assignableUsers}
+                    onSelectIssue={(sub) => {
+                      onUpdateIssue(sub);
+                    }}
+                    onAddSubtaskToParent={() => {
+                      const input = document.querySelector('input[placeholder*="Add sub-task"]') as HTMLInputElement | null;
+                      if (input) input.focus();
+                    }}
+                  />
                 </div>
               ) : (
                 <div className="py-3 text-center rounded border border-dashed border-zinc-900 text-xs text-zinc-500">

@@ -161,8 +161,6 @@ class IssueService:
             query = query.eq("state_id", state_id)
         if assignee_id:
             query = query.eq("assignee_id", assignee_id)
-        if cycle_id:
-            query = query.eq("cycle_id", cycle_id)
         if project_id:
             query = query.eq("project_id", project_id)
         if priority:
@@ -305,7 +303,6 @@ class IssueService:
             "assigned_by_id": data.assigned_by_id or (user_id if data.assignee_id else None),
             "creator_id": user_id,
             "project_id": data.project_id,
-            "cycle_id": data.cycle_id,
             "parent_id": data.parent_id,
             "sort_order": sort_order,
             "version": 1,
@@ -355,18 +352,56 @@ class IssueService:
         )
         labels = [item["labels"] for item in (labels_res.data or []) if item.get("labels")]
 
-        # Subtasks
-        subtasks_res = (
-            db.table("issues")
-            .select("*")
-            .eq("parent_id", issue["id"])
-            .is_("deleted_at", "null")
-            .order("sort_order")
-            .execute()
-        )
+        # Recursively fetch all descendants (children, grandchildren, etc.)
+        all_descendants = []
+        current_parent_ids = [issue["id"]]
+        visited_parents = set(current_parent_ids)
+        while current_parent_ids:
+            sub_res = (
+                db.table("issues")
+                .select("*")
+                .in_("parent_id", current_parent_ids)
+                .is_("deleted_at", "null")
+                .order("sort_order")
+                .execute()
+            )
+            if not sub_res.data:
+                break
+            new_items = [r for r in sub_res.data if r["id"] not in visited_parents]
+            if not new_items:
+                break
+            for r in new_items:
+                visited_parents.add(r["id"])
+            all_descendants.extend(new_items)
+            current_parent_ids = [r["id"] for r in new_items]
+
+        # Workflow states cache for team
+        state_cache = {}
+        try:
+            st_res = db.table("workflow_states").select("id, name, color, category, position, is_default, team_id, created_at").eq("team_id", issue["team_id"]).execute()
+            if st_res.data:
+                state_cache = {s["id"]: s for s in st_res.data}
+        except Exception:
+            pass
+
         cache: dict = {}
-        subtasks = [IssueResponse(**cls._enrich_issue_assignee(st, db, cache)) for st in (subtasks_res.data or [])]
-        enriched_issue = cls._enrich_issue_assignee(issue, db, cache)
+        enriched_descendants = [cls._enrich_issue_users(d, db, cache, state_cache) for d in all_descendants]
+
+        # Group descendants by parent_id
+        children_by_parent: Dict[str, list] = {}
+        for d in enriched_descendants:
+            pid = d.get("parent_id")
+            if pid:
+                children_by_parent.setdefault(pid, []).append(d)
+
+        def attach_children(parent_id: str) -> list:
+            children = children_by_parent.get(parent_id, [])
+            for child in children:
+                child["subtasks"] = attach_children(child["id"])
+            return children
+
+        subtasks = attach_children(issue["id"])
+        enriched_issue = cls._enrich_issue_users(issue, db, cache, state_cache)
 
         return IssueDetailResponse(**enriched_issue, labels=labels, subtasks=subtasks)
 
@@ -568,8 +603,6 @@ class IssueService:
                 updates_dict["assignee_id"] = item.assignee_id
             if item.priority is not None:
                 updates_dict["priority"] = item.priority.value
-            if item.cycle_id is not None:
-                updates_dict["cycle_id"] = item.cycle_id
             
             if updates_dict:
                 updates_dict["version"] = current_issue.get("version", 1) + 1
@@ -621,7 +654,7 @@ class IssueService:
         last_sub = (
             db.table("issues")
             .select("sort_order")
-            .eq("parent_id", parent_issue_id)
+            .eq("parent_id", parent["id"])
             .is_("deleted_at", "null")
             .order("sort_order", desc=True)
             .limit(1)
@@ -642,8 +675,7 @@ class IssueService:
             "assignee_id": data.assignee_id,
             "creator_id": user_id,
             "project_id": parent.get("project_id"),
-            "cycle_id": parent.get("cycle_id"),
-            "parent_id": parent_issue_id,
+            "parent_id": parent["id"],
             "sort_order": sort_order,
             "version": 1,
         }
@@ -655,7 +687,7 @@ class IssueService:
 
         db.table("activity_logs").insert({
             "organization_id": parent["organization_id"],
-            "issue_id": parent_issue_id,
+            "issue_id": parent["id"],
             "actor_id": user_id,
             "action": "subtask_created",
             "changes": {"subtask_identifier": identifier, "title": data.title},

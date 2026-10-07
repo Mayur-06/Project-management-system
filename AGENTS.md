@@ -21,6 +21,7 @@ This document serves as the global fallback system prompt, execution rubric, and
   - Thoroughly inspect relevant codebase schemas, types, APIs, and existing implementations.
   - Formulate and validate a concrete architectural plan, establishing verification criteria before making modifications.
   - Prevent regressions across frontend components, database schemas, and FastAPI endpoints by aligning on design decisions upfront.
+- **Plan Check Before Implementation:** Always inspect the latest implementation status, decisions, and completed phases from the active updated plan file (e.g., `.kilo/plans/`, `.kilo/plan2/`, `plan/`, or active plan artifact) before writing or implementing new changes. Ensure code stays in lockstep with established technical decisions and completed milestones.
 - **Context Exclusion:** Never read, scan, index, or modify files inside `.next/`, `node_modules/`, `out/`, `build/`, or `.git/`.
   - Treat all build outputs, packaged artifacts, and version control internals as strictly out-of-scope for agent context and tool inspection.
   - Filter directory listing and grep routines to bypass these directories to protect token budgets and prevent context pollution.

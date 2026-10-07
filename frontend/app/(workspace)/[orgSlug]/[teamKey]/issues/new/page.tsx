@@ -36,10 +36,12 @@ function CreateIssueForm() {
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
   const queryStateId = searchParams.get('stateId') || '';
+  const queryParentId = searchParams.get('parentId') || '';
 
   const { teams: workspaceTeams, currentTeam, workspaceUsers } = useWorkspace();
 
   const [selectedTeamId, setSelectedTeamId] = useState<string>(currentTeam?.id || '');
+  const [parentId, setParentId] = useState<string>(queryParentId);
   const [teamWorkflowStates, setTeamWorkflowStates] = useState<WorkflowState[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -150,6 +152,7 @@ function CreateIssueForm() {
       const created = await api.createIssue({
         team_id: resolvedTeamId,
         source_team_id: currentTeam?.id || undefined,
+        parent_id: parentId || undefined,
         title: title.trim(),
         description_text: description.trim(),
         priority,

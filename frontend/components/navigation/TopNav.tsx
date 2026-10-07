@@ -11,6 +11,7 @@ import {
   Plus,
   ChevronRight,
   Bell,
+  Layers,
 } from 'lucide-react';
 
 interface TopNavProps {
@@ -19,6 +20,8 @@ interface TopNavProps {
   breadcrumbs?: string[];
   viewMode?: 'board' | 'list';
   onToggleViewMode?: (mode: 'board' | 'list') => void;
+  groupBy?: 'parent' | 'none';
+  onToggleGroupBy?: (group: 'parent' | 'none') => void;
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
   onOpenNewIssue?: () => void;
@@ -31,6 +34,8 @@ export const TopNav: React.FC<TopNavProps> = ({
   breadcrumbs = [],
   viewMode = 'board',
   onToggleViewMode,
+  groupBy = 'parent',
+  onToggleGroupBy,
   searchQuery = '',
   onSearchChange,
   onOpenNewIssue,
@@ -91,6 +96,34 @@ export const TopNav: React.FC<TopNavProps> = ({
               title="List View"
             >
               <List className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Group By Switcher (Only visible in Board view) */}
+        {viewMode === 'board' && onToggleGroupBy && (
+          <div className="flex items-center bg-[#121417] border border-[#23262d] rounded-md p-0.5 text-zinc-400 text-xs">
+            <button
+              type="button"
+              onClick={() => onToggleGroupBy('parent')}
+              className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
+                groupBy === 'parent' ? 'bg-[#20232b] text-zinc-100 font-medium shadow-xs' : 'hover:text-zinc-200'
+              }`}
+              title="Group by Parent Issue (Horizontal Kanban)"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Parent</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleGroupBy('none')}
+              className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
+                groupBy === 'none' ? 'bg-[#20232b] text-zinc-100 font-medium shadow-xs' : 'hover:text-zinc-200'
+              }`}
+              title="No Grouping (Vertical Kanban)"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Flat</span>
             </button>
           </div>
         )}

@@ -255,11 +255,16 @@ export default function MyIssuesPage() {
             states={states}
             issues={filteredIssues}
             users={modalUsers}
+            groupBy="none"
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
             onOpenNewIssueWithState={(stateId) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new?stateId=${stateId}`);
+            }}
+            onAddSubtask={(parentId, stateId) => {
+              const query = stateId ? `&stateId=${stateId}` : '';
+              router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new?parentId=${parentId}${query}`);
             }}
             onMoveIssueState={handleMoveIssueState}
             onDeleteIssue={handleDeleteIssue}

@@ -24,6 +24,7 @@ import { api } from '@/lib/api';
 import { TopNav } from '@/components/navigation/TopNav';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
+import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
 
 interface ProposedSubtaskItem {
   title: string;
@@ -220,11 +221,7 @@ export default function IssueDetailPage() {
         assignee_id: newSubtaskAssigneeId || undefined,
       });
       if (created) {
-        const updated = {
-          ...issue,
-          subtasks: [...(issue.subtasks || []), created],
-        };
-        setIssue(updated);
+        await loadIssue();
         window.dispatchEvent(new CustomEvent('issueCreated', { detail: created }));
         setNewSubtaskTitle('');
         setNewSubtaskPriority('none');
@@ -585,29 +582,20 @@ export default function IssueDetailPage() {
             </form>
 
             {issue.subtasks && issue.subtasks.length > 0 ? (
-              <div className="space-y-1.5">
-                {issue.subtasks.map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="p-2.5 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 flex items-center justify-between text-xs transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <CornerDownRight className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                      <Link
-                        href={`/${orgSlug}/${teamKey.toLowerCase()}/issues/${sub.identifier}`}
-                        className="font-mono font-medium text-zinc-400 hover:text-white hover:underline shrink-0"
-                      >
-                        {sub.identifier}
-                      </Link>
-                      <span className="text-zinc-200">{sub.title}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <StateBadge state={sub.state} />
-                      <PriorityBadge priority={sub.priority} showLabel={false} />
-                    </div>
-                  </div>
-                ))}
+              <div className="p-2.5 rounded-lg bg-black border border-zinc-900/80">
+                <IssueSubtasksTree
+                  rootIssue={issue}
+                  subtasks={issue.subtasks}
+                  orgSlug={orgSlug}
+                  teamKey={teamKey}
+                  users={assignableUsers}
+                  onSelectIssue={(sub) => {
+                    router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${sub.identifier}`);
+                  }}
+                  onAddSubtaskToParent={(parentId) => {
+                    router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new?parentId=${parentId}`);
+                  }}
+                />
               </div>
             ) : (
               <div className="p-3 text-center rounded border border-dashed border-zinc-900 text-xs text-zinc-500">

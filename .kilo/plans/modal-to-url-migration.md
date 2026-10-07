@@ -152,28 +152,25 @@ Following the user alignment session, the implementation adheres to the followin
 // Has its own close mechanism (navigation away)
 ```
 
-#### Settings (`/workspace/settings/{orgSlug?}`)
+#### Settings (`/[orgSlug]/settings/*`)
 ```typescript
-// Combines org-level and team-level settings access
-// Persistent across sessions via API calls
-// Modal becomes internal detail
+// Full-screen dedicated settings environment with TopNav-style header,
+// interactive breadcrumbs, and "← Back to Workspace" / ESC escape hatches.
+// Hydrated at workspace root via app/(workspace)/[orgSlug]/layout.tsx.
 ```
 
 **Enhanced Settings Implementation:**
-* **Three-section sidebar navigation:**
-  * **Workspace:** Organization-level settings (name, slug, logo, company branding)
-  * **Members:** Team member management (roles, invitations, permissions)
-  * **Profile:** User profile and preferences (avatar, name, theme, notifications)
-* **URL Pattern:** `/workspace/{orgSlug}/settings/{section}`
-  * `/workspace/{orgSlug}/settings/workspace` (Organization settings)
-  * `/workspace/{orgSlug}/settings/members` (Team members)
-  * `/workspace/{orgSlug}/settings/profile` (User profile)
-* **Team-specific settings:** `/workspace/{orgSlug}/{teamKey}/settings/` for team-level access
-* **Sidebar navigation:** Left sidebar with active states for each section
-* **Full page experience:** Settings rendered as dedicated pages with navigation sidebar
-* **State preservation:** Form data saved on unmount/URL changes
-* **Access control:** Proper authorization checks for each section
-* **Modal replaced:** No longer a modal overlay, now a full page route
+* **Dedicated Navigation Sidebar:**
+  * **Workspace:** `/[orgSlug]/settings/workspace` — Organization Name and URL Slug (company branding/logo removed)
+  * **Members:** `/[orgSlug]/settings/members` — Table with `Name`, `Email`, `Status (Membership type)`, `Teams (count)`, `Joined Date`
+  * **Teams Overview:** `/[orgSlug]/settings/teams` — Table of workspace teams + "+ Create Team"
+  * **Team Settings:** `/[orgSlug]/settings/teams/[teamKey]` — General Info (Name, Key Prefix) & assigned Team Members (Workflow states removed)
+  * **Profile:** `/[orgSlug]/settings/profile` — Inline editable Name, optional Job Description, Account info (Theme and Security removed)
+* **RBAC Enforcement**:
+  * **Admin:** Edit access on workspace name, invite member form, create team action, team info editing, and adding/removing team members.
+  * **Member:** View-only access with disabled inputs, hidden invite/create buttons, and view-only badges.
+* **Keyboard Navigation:** `Cmd+,` toggles Settings, and `Escape` returns to the active workspace board.
+* **Context Hydration:** Root `WorkspaceContext.Provider` hoisted to `app/(workspace)/[orgSlug]/layout.tsx`.
 
 ## Migration Strategy
 

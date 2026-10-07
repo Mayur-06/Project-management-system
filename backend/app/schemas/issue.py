@@ -127,11 +127,12 @@ class IssueResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None
+    subtasks: Optional[List[Dict[str, Any]]] = None
 
 
 class IssueDetailResponse(IssueResponse):
     labels: List[Dict[str, Any]] = []
-    subtasks: List[IssueResponse] = []
+    subtasks: List[Dict[str, Any]] = []
 
 
 class ActivityLogResponse(BaseModel):
