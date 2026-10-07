@@ -28,9 +28,14 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
 
   const handleOpenNewIssue = () => {
-    const targetTeam = (teamKey || teams[0]?.key || 'eng').toLowerCase();
-    router.push(`/${orgSlug}/${targetTeam}/issues/new`);
+    setIsNewIssueOpen(true);
   };
+
+  useEffect(() => {
+    const handleOpen = () => setIsNewIssueOpen(true);
+    window.addEventListener('openCreateIssue', handleOpen);
+    return () => window.removeEventListener('openCreateIssue', handleOpen);
+  }, []);
 
   const handleOpenAIAsk = () => {
     const targetTeam = (teamKey || teams[0]?.key || 'eng').toLowerCase();

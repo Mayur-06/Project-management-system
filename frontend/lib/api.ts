@@ -10,6 +10,7 @@ import {
   UserWorkspaceItem,
   UserWorkspacesResponse,
   InboxItem,
+  Label,
 } from '@/types';
 import { getClientSessionId, supabase } from '@/lib/supabase/client';
 
@@ -315,7 +316,7 @@ export const api = {
     return await fetchWithAuth<Issue>(`/issues/${idOrKey}`);
   },
 
-  async createIssue(issue: Partial<Issue>): Promise<Issue | null> {
+  async createIssue(issue: Partial<Issue> & { label_ids?: string[] }): Promise<Issue | null> {
     const sessionId = getClientSessionId();
     return await fetchWithAuth<Issue>(`/issues`, {
       method: 'POST',
@@ -323,7 +324,7 @@ export const api = {
     });
   },
 
-  async updateIssue(id: string, updates: Partial<Issue> & { expected_version?: number }): Promise<Issue | null> {
+  async updateIssue(id: string, updates: Partial<Issue> & { expected_version?: number; label_ids?: string[] }): Promise<Issue | null> {
     const sessionId = getClientSessionId();
     return await fetchWithAuth<Issue>(`/issues/${id}`, {
       method: 'PATCH',
@@ -351,7 +352,7 @@ export const api = {
 
   async createSubtask(
     issueId: string,
-    subtask: { title: string; assignee_id?: string; estimate?: number; priority?: string }
+    subtask: { title: string; assignee_id?: string; priority?: string }
   ): Promise<Issue | null> {
     return await fetchWithAuth<Issue>(`/issues/${issueId}/subtasks`, {
       method: 'POST',
@@ -447,11 +448,11 @@ export const api = {
 
   async resumeBreakdown(
     threadId: string,
-    approvedTasks: (string | { title: string; description?: string; estimate?: number; priority?: string })[]
+    approvedTasks: (string | { title: string; description?: string; priority?: string })[]
   ): Promise<Issue[] | null> {
     const formatted = approvedTasks.map((t) =>
       typeof t === 'string'
-        ? { title: t, description: '', estimate: 2, priority: 'medium' }
+        ? { title: t, description: '', priority: 'medium' }
         : t
     );
     return await fetchWithAuth(`/ai/breakdown/resume`, {
@@ -461,6 +462,24 @@ export const api = {
         approved_subtasks: formatted,
         approved_tasks: formatted,
       }),
+    });
+  },
+
+  // Labels
+  async getLabels(organizationId: string): Promise<Label[]> {
+    const data = await fetchWithAuth<Label[]>(`/labels?organization_id=${encodeURIComponent(organizationId)}`);
+    return data || [];
+  },
+
+  async attachLabel(issueId: string, labelId: string): Promise<any> {
+    return await fetchWithAuth(`/issues/${issueId}/labels/${labelId}`, {
+      method: 'POST',
+    });
+  },
+
+  async detachLabel(issueId: string, labelId: string): Promise<any> {
+    return await fetchWithAuth(`/issues/${issueId}/labels/${labelId}`, {
+      method: 'DELETE',
     });
   },
 

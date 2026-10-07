@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   AlertCircle,
+  Tag,
 } from 'lucide-react';
 import { IssuePriority, Issue, WorkflowState, User, Label } from '@/types';
 import { api } from '@/lib/api';
+import { useWorkspace } from '@/lib/WorkspaceContext';
 
 interface CreateIssueModalProps {
   isOpen: boolean;
@@ -33,6 +35,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   teamId,
   teams = [],
 }) => {
+  const { organization } = useWorkspace();
   const [selectedTeamId, setSelectedTeamId] = useState<string>(teamId || '');
   const [teamWorkflowStates, setTeamWorkflowStates] = useState<WorkflowState[]>(states);
   const [title, setTitle] = useState('');
@@ -41,9 +44,20 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   const [stateId, setStateId] = useState(initialStateId);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState<string>('');
-  const [estimate, setEstimate] = useState<number>(2);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [availableLabels, setAvailableLabels] = useState<Label[]>(labels);
   const [modalUsers, setModalUsers] = useState<User[]>(users);
+
+  // Sync available labels when org changes or opens
+  useEffect(() => {
+    if (isOpen && organization?.id) {
+      api.getLabels(organization.id).then((res) => {
+        if (res && res.length > 0) {
+          setAvailableLabels(res);
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen, organization?.id]);
 
   // Sync initial team
   useEffect(() => {
@@ -155,8 +169,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
         priority,
         state_id: targetState,
         assignee_id: assigneeId || undefined,
-        estimate,
-        labels: labels.filter((l) => selectedLabels.includes(l.id)),
+        label_ids: selectedLabels,
       });
       if (created) {
         onCreated(created);
@@ -164,6 +177,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
       onClose();
       setTitle('');
       setDescription('');
+      setSelectedLabels([]);
     } catch (err: any) {
       console.error('Failed to create issue', err);
       setSubmitError(err?.message || 'Failed to create issue. Please check fields.');
@@ -320,20 +334,49 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               </select>
             </div>
 
-            {/* Estimate */}
-            <div>
-              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Estimate (pts)</label>
-              <select
-                value={estimate}
-                onChange={(e) => setEstimate(Number(e.target.value))}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-              >
-                <option value={1}>1 pt</option>
-                <option value={2}>2 pts</option>
-                <option value={3}>3 pts</option>
-                <option value={5}>5 pts</option>
-                <option value={8}>8 pts</option>
-              </select>
+            {/* Labels Multi-Select */}
+            <div className="col-span-2">
+              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Labels</label>
+              <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-900 border border-zinc-800 rounded min-h-[38px] items-center">
+                {availableLabels.length === 0 ? (
+                  <span className="text-zinc-600 text-xs">No labels configured</span>
+                ) : (
+                  availableLabels.map((lbl) => {
+                    const isSelected = selectedLabels.includes(lbl.id);
+                    return (
+                      <button
+                        key={lbl.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedLabels((prev) =>
+                            isSelected ? prev.filter((id) => id !== lbl.id) : [...prev, lbl.id]
+                          );
+                        }}
+                        className={`text-[11px] px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 cursor-pointer select-none ${
+                          isSelected
+                            ? 'font-medium shadow-xs'
+                            : 'opacity-40 hover:opacity-80 border-transparent bg-zinc-800/60 text-zinc-400'
+                        }`}
+                        style={
+                          isSelected
+                            ? {
+                                backgroundColor: `${lbl.color}25`,
+                                borderColor: lbl.color,
+                                color: lbl.color,
+                              }
+                            : {}
+                        }
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: lbl.color }}
+                        />
+                        <span>{lbl.name}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
 

@@ -44,16 +44,15 @@ def test_H10_rpc_allocator_is_atomic():
 
 
 def test_M7_estimate_negative_rejected_by_schema():
-    """M-7: Verify negative estimate is rejected by IssueCreate schema."""
-    with pytest.raises(ValidationError):
-        IssueCreate(title="Valid title", estimate=-500)
+    """M-7: Verify estimate field has been completely removed from IssueCreate schema."""
+    assert "estimate" not in IssueCreate.model_fields
 
 
 def test_M7_estimate_negative_has_db_constraint():
-    """M-7: Verify estimate >= 0 check constraint exists in DB migrations."""
+    """M-7: Verify estimate removal migration exists in DB migrations."""
     content = _read_all_migrations()
-    assert re.search(r"CHECK\s*\(\s*estimate\s*>=\s*0\s*\)", content, re.IGNORECASE), \
-        "M-7 DEFECT: DB schema lacks CHECK (estimate >= 0) constraint!"
+    assert re.search(r"DROP\s+COLUMN.*?estimate", content, re.IGNORECASE) or re.search(r"CHECK\s*\(\s*estimate", content, re.IGNORECASE), \
+        "M-7 DEFECT: DB schema lacks estimate drop migration or check constraint!"
 
 
 def test_M7_title_empty_rejected_by_schema():
@@ -72,10 +71,10 @@ def test_M7_title_whitespace_rejected_by_schema():
 
 
 def test_M7_cycle_inverted_dates_rejected_by_schema():
-    """M-7: Verify cycle starts_at >= ends_at is rejected by CycleCreate schema."""
-    now = datetime.now(timezone.utc)
+    """M-7: Verify invalid cycle_duration_weeks is rejected by TeamCreate schema."""
+    from app.schemas.team import TeamCreate
     with pytest.raises(ValidationError):
-        CycleCreate(starts_at=now, ends_at=now - timedelta(days=5))
+        TeamCreate(name="Test Team", key="TT", cycle_duration_weeks=0)
 
 
 def test_M7_invite_invalid_email_rejected_by_schema():

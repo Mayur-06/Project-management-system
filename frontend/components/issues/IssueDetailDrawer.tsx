@@ -29,7 +29,6 @@ import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
 interface ProposedSubtaskItem {
   title: string;
   description?: string;
-  estimate?: number;
   priority?: IssuePriority;
 }
 
@@ -70,7 +69,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   // Manual subtask creation state
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newSubtaskPriority, setNewSubtaskPriority] = useState<IssuePriority>('none');
-  const [newSubtaskEstimate, setNewSubtaskEstimate] = useState<number | undefined>(undefined);
   const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState<string>('');
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
@@ -105,7 +103,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       setUploadError(null);
       setNewSubtaskTitle('');
       setNewSubtaskPriority('none');
-      setNewSubtaskEstimate(undefined);
       setNewSubtaskAssigneeId('');
     }
   }, [issue]);
@@ -120,7 +117,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       const created = await api.createSubtask(issue.id, {
         title: newSubtaskTitle.trim(),
         priority: newSubtaskPriority,
-        estimate: newSubtaskEstimate ? Number(newSubtaskEstimate) : undefined,
         assignee_id: newSubtaskAssigneeId || undefined,
       });
       if (created) {
@@ -143,7 +139,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
         window.dispatchEvent(new CustomEvent('issueCreated', { detail: created }));
         setNewSubtaskTitle('');
         setNewSubtaskPriority('none');
-        setNewSubtaskEstimate(undefined);
         setNewSubtaskAssigneeId('');
       }
     } catch (err) {
@@ -247,19 +242,16 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
           {
             title: `Configure backend endpoints for ${issue.identifier}`,
             description: 'Set up routes, validation schemas, and database queries.',
-            estimate: 3,
             priority: 'high',
           },
           {
             title: `Implement automated integration tests`,
             description: 'Write test cases verifying positive and error conditions.',
-            estimate: 2,
             priority: 'medium',
           },
           {
             title: `Add client UI updates and error boundaries`,
             description: 'Wire frontend forms, optimistic mutations, and alert toasts.',
-            estimate: 3,
             priority: 'medium',
           },
         ]);
@@ -268,7 +260,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       setProposedSubtasks([
         {
           title: `Technical implementation for ${issue.identifier}`,
-          estimate: 3,
           priority: 'medium',
         },
       ]);
@@ -280,12 +271,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   const updateSubtaskTitle = (index: number, title: string) => {
     setProposedSubtasks((prev) =>
       prev.map((t, i) => (i === index ? { ...t, title } : t))
-    );
-  };
-
-  const updateSubtaskEstimate = (index: number, estimate: number) => {
-    setProposedSubtasks((prev) =>
-      prev.map((t, i) => (i === index ? { ...t, estimate } : t))
     );
   };
 
@@ -305,7 +290,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       ...prev,
       {
         title: customDraftTitle.trim(),
-        estimate: 3,
         priority: 'medium',
       },
     ]);
@@ -322,7 +306,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
     const formattedPayload = proposedSubtasks.map((p) => ({
       title: p.title,
       description: p.description || '',
-      estimate: p.estimate || 3,
       priority: p.priority || 'medium',
     }));
 
@@ -344,7 +327,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
           identifier: `${issue.identifier}-sub${subIndex}`,
           title: task.title,
           priority: task.priority || 'medium',
-          estimate: task.estimate,
           state_id: activeStates[0]?.id || issue.state_id,
           state: activeStates[0] || issue.state,
           creator_id: issue.creator_id,
@@ -372,7 +354,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
           identifier: `${issue.identifier}-sub${subIndex}`,
           title: task.title,
           priority: task.priority || 'medium',
-          estimate: task.estimate,
           state_id: activeStates[0]?.id || issue.state_id,
           state: activeStates[0] || issue.state,
           creator_id: issue.creator_id,
@@ -565,20 +546,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                     <option value="medium">Priority: Medium</option>
                     <option value="high">Priority: High</option>
                     <option value="urgent">Priority: Urgent</option>
-                  </select>
-
-                  {/* Points / Estimate Selector */}
-                  <select
-                    value={newSubtaskEstimate !== undefined ? String(newSubtaskEstimate) : ''}
-                    onChange={(e) => setNewSubtaskEstimate(e.target.value ? Number(e.target.value) : undefined)}
-                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
-                  >
-                    <option value="">Estimate: None</option>
-                    <option value="1">1 pt</option>
-                    <option value="2">2 pts</option>
-                    <option value="3">3 pts</option>
-                    <option value="5">5 pts</option>
-                    <option value="8">8 pts</option>
                   </select>
                 </div>
               </form>
@@ -785,18 +752,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto pl-6 sm:pl-0">
-                              {/* Estimate selector */}
-                              <select
-                                value={task.estimate ?? 3}
-                                onChange={(e) => updateSubtaskEstimate(idx, Number(e.target.value))}
-                                className="bg-zinc-800 text-[11px] text-zinc-300 rounded px-2 py-1 border border-zinc-700 focus:outline-none cursor-pointer"
-                              >
-                                <option value={1}>1 pt</option>
-                                <option value={2}>2 pts</option>
-                                <option value={3}>3 pts</option>
-                                <option value={5}>5 pts</option>
-                                <option value={8}>8 pts</option>
-                              </select>
 
                               {/* Priority selector */}
                               <select
@@ -1054,14 +1009,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                 <span className="text-zinc-300 font-medium truncate max-w-[120px]">
                   {issue.creator?.name || '—'}
                 </span>
-              </div>
-            </div>
-
-            {/* Estimate Points */}
-            <div>
-              <label className="text-[11px] text-zinc-400 block mb-1">Estimate Points</label>
-              <div className="p-2 rounded bg-zinc-900 border border-zinc-800 font-mono text-white">
-                {issue.estimate || 1} points
               </div>
             </div>
           </div>

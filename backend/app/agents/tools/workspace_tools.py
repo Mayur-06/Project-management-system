@@ -23,17 +23,20 @@ def search_issues_tool(query: str, organization_id: str, user_jwt: str) -> List[
     Search issues within the user's organization using keyword matching and state filters.
     Respects Row-Level Security via user_jwt.
     """
-    db = get_user_scoped_client(user_jwt)
-    res = (
-        db.table("issues")
-        .select("id, identifier, title, priority, estimate, state_id, workflow_states(name, category)")
-        .eq("organization_id", organization_id)
-        .is_("deleted_at", "null")
-        .ilike("title", f"%{query}%")
-        .limit(10)
-        .execute()
-    )
-    return res.data or []
+    try:
+        db = get_user_scoped_client(user_jwt)
+        res = (
+            db.table("issues")
+            .select("id, identifier, title, priority, state_id, workflow_states(name, category)")
+            .eq("organization_id", organization_id)
+            .is_("deleted_at", "null")
+            .ilike("title", f"%{query}%")
+            .limit(10)
+            .execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
 
 
 @tool
@@ -69,7 +72,7 @@ def get_issue_details_tool(identifier_or_id: str, user_jwt: str) -> Dict[str, An
 @tool
 def get_cycle_velocity_tool(cycle_id: str, user_jwt: str) -> Dict[str, Any]:
     """
-    Retrieve sprint cycle velocity metrics (completed vs planned points).
+    Retrieve sprint cycle velocity metrics (completed vs planned issues).
     Respects Row-Level Security via user_jwt.
     """
     db = get_user_scoped_client(user_jwt)
@@ -79,25 +82,25 @@ def get_cycle_velocity_tool(cycle_id: str, user_jwt: str) -> Dict[str, Any]:
     
     issues_res = (
         db.table("issues")
-        .select("estimate, completed_at, workflow_states(category)")
+        .select("id, completed_at, workflow_states(category)")
         .eq("cycle_id", cycle_id)
         .is_("deleted_at", "null")
         .execute()
     )
     issues = issues_res.data or []
-    total_points = sum(iss.get("estimate") or 0 for iss in issues)
-    completed_points = sum(
-        iss.get("estimate") or 0
+    total_issues = len(issues)
+    completed_issues = sum(
+        1
         for iss in issues
         if (iss.get("workflow_states") or {}).get("category") == "completed" or iss.get("completed_at") is not None
     )
 
     return {
-        "cycle_name": c_res.data[0].get("name"),
-        "total_issues": len(issues),
-        "total_points": total_points,
-        "completed_points": completed_points,
-        "completion_rate": f"{round((completed_points / total_points) * 100, 1)}%" if total_points else "0%",
+        "cycle_id": cycle_id,
+        "name": c_res.data[0].get("name"),
+        "total_issues": total_issues,
+        "completed_issues": completed_issues,
+        "completion_rate": (completed_issues / total_issues * 100) if total_issues > 0 else 0,
     }
 
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Issue, WorkflowState, User } from '@/types';
+import { Issue, WorkflowState, User, Label } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
 import { useRealtimeBoard } from '@/hooks/useRealtime';
@@ -18,7 +18,7 @@ export default function MyIssuesPage() {
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
-  const { currentTeam, workspaceUsers, currentUser, teams: workspaceTeams } = useWorkspace();
+  const { organization, currentTeam, workspaceUsers, currentUser, teams: workspaceTeams } = useWorkspace();
 
   const modalUsers = useMemo(
     () => workspaceUsers.map((m) => m.user).filter((u): u is User => u !== undefined),
@@ -27,7 +27,9 @@ export default function MyIssuesPage() {
 
   const [issues, setIssues] = useState<Issue[]>([]);
   const [states, setStates] = useState<WorkflowState[]>([]);
+  const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState('');
@@ -56,12 +58,14 @@ export default function MyIssuesPage() {
   const loadData = async (teamId: string) => {
     setIsLoading(true);
     try {
-      const [fetchedIssues, fetchedStates] = await Promise.all([
+      const [fetchedIssues, fetchedStates, fetchedLabels] = await Promise.all([
         api.getIssues({ teamId }),
         api.getWorkflowStates(teamId),
+        organization?.id ? api.getLabels(organization.id) : Promise.resolve([]),
       ]);
       setIssues(fetchedIssues);
       setStates(fetchedStates);
+      setAvailableLabels(fetchedLabels || []);
       if (fetchedStates.length > 0) {
         const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
         setInitialStateId(defaultState.id);
@@ -209,8 +213,8 @@ export default function MyIssuesPage() {
         onSearchChange={setSearchQuery}
         onOpenNewIssue={() => {
           const defaultState = states.find((s) => s.is_default) || states[0];
-          const query = defaultState?.id ? `?stateId=${defaultState.id}` : '';
-          router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new${query}`);
+          setInitialStateId(defaultState?.id || '');
+          setIsNewIssueOpen(true);
         }}
       />
 
@@ -260,11 +264,12 @@ export default function MyIssuesPage() {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
             onOpenNewIssueWithState={(stateId) => {
-              router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new?stateId=${stateId}`);
+              setInitialStateId(stateId);
+              setIsNewIssueOpen(true);
             }}
-            onAddSubtask={(parentId, stateId) => {
-              const query = stateId ? `&stateId=${stateId}` : '';
-              router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new?parentId=${parentId}${query}`);
+            onAddSubtask={(_parentId, stateId) => {
+              if (stateId) setInitialStateId(stateId);
+              setIsNewIssueOpen(true);
             }}
             onMoveIssueState={handleMoveIssueState}
             onDeleteIssue={handleDeleteIssue}
@@ -275,8 +280,25 @@ export default function MyIssuesPage() {
             issues={filteredIssues}
             states={states}
             users={modalUsers}
+            availableLabels={availableLabels}
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
+            }}
+            onUpdateIssue={async (issueId, updates) => {
+              setIssues((prev) =>
+                prev.map((i) => {
+                  if (i.id !== issueId) return i;
+                  const patched = { ...i, ...updates };
+                  if (updates.state_id) {
+                    patched.state = states.find((s) => s.id === updates.state_id) || i.state;
+                  }
+                  if (updates.label_ids && availableLabels.length > 0) {
+                    patched.labels = availableLabels.filter((l) => updates.label_ids!.includes(l.id));
+                  }
+                  return patched;
+                })
+              );
+              await api.updateIssue(issueId, updates);
             }}
           />
         )}
@@ -288,6 +310,7 @@ export default function MyIssuesPage() {
         initialStateId={initialStateId}
         states={states}
         users={modalUsers}
+        labels={availableLabels}
         teamKey={teamKey}
         teamId={currentTeam?.id}
         teams={workspaceTeams}

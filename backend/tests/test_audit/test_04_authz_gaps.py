@@ -5,6 +5,7 @@ Verifies service-layer authorization checks, tenant membership validation,
 field clearing, OCC atomic predicates, and deletion permissions.
 """
 
+import uuid
 from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException, status
@@ -174,16 +175,16 @@ def test_H4_field_clearing_due_date_none():
         f"H-4 DEFECT: Explicit due_date=None was dropped from write payload: {update_payload}"
 
 
-def test_H4_field_clearing_estimate_none():
-    """H-4: Verify explicitly passing estimate=None sets estimate to None in DB payload."""
-    mock_db = create_mock_db(issue_data={"id": MOCK_ISSUE_ID, "organization_id": MOCK_ORG_ID, "version": 1, "estimate": 5})
-    data = IssueUpdate(estimate=None, expected_version=1)
+def test_H4_field_clearing_assignee_none():
+    """H-4: Verify explicitly passing assignee_id=None sets assignee_id to None in DB payload."""
+    mock_db = create_mock_db(issue_data={"id": MOCK_ISSUE_ID, "organization_id": MOCK_ORG_ID, "version": 1, "assignee_id": str(uuid.uuid4())})
+    data = IssueUpdate(assignee_id=None, expected_version=1)
     IssueService.update_issue(MOCK_ISSUE_ID, data, MOCK_USER_ID, mock_db)
 
     iss_table = mock_db.table("issues")
     update_payload = iss_table.update.call_args[0][0]
-    assert "estimate" in update_payload and update_payload["estimate"] is None, \
-        f"H-4 DEFECT: Explicit estimate=None was dropped from write payload: {update_payload}"
+    assert "assignee_id" in update_payload and update_payload["assignee_id"] is None, \
+        f"H-4 DEFECT: Explicit assignee_id=None was dropped from write payload: {update_payload}"
 
 
 def test_H9_atomic_occ_predicate_includes_version():

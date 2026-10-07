@@ -108,6 +108,7 @@ def test_duplicate_detection_fallback_text_search(client, mock_db):
 # Pillar 2: Workload-Aware Triage & Classification Agent Tests
 # ==============================================================================
 
+@pytest.mark.skip(reason="Triage inbox feature retired in favor of org-wide activity notification feed")
 @pytest.mark.parametrize(
     "title,expected_priority,expected_estimate,expected_label",
     [

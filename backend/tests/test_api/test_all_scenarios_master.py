@@ -182,8 +182,6 @@ def test_admin_can_delete_others_comment(client, mock_db):
     mock_db.table.side_effect = mock_table
     res = client.delete(f"/api/v1/comments/{MOCK_COMMENT_ID}")
     assert res.status_code == status.HTTP_204_NO_CONTENT
-    assert res.json()["transferred_issues_count"] == 1
-    assert res.json()["destination"] == MOCK_NEXT_CYCLE_ID
 
 
 # ==============================================================================

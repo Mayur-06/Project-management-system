@@ -98,7 +98,7 @@ class LinearAskAgent:
                 is_issue_search = True
             elif key_match and any(w in q_lower for w in ("what is", "details", "info", "show", "get", "explain", "about")):
                 is_issue_search = True
-            elif any(w in q_lower for w in ("issue", "issues", "ticket", "tickets")) and any(w in q_lower for w in ("find", "search", "list", "filter", "lookup", "look up", "any")):
+            elif any(w in q_lower for w in ("issue", "issues", "ticket", "tickets")) and any(w in q_lower for w in ("find", "search", "list", "filter", "lookup", "look up", "any", "status", "active")):
                 is_issue_search = True
 
         # Scenario A: Velocity or Sprint metrics query

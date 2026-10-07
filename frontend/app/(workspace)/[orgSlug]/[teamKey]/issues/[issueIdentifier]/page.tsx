@@ -19,7 +19,7 @@ import {
   ArrowLeft,
   ChevronDown,
 } from 'lucide-react';
-import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User } from '@/types';
+import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User, Label } from '@/types';
 import { api } from '@/lib/api';
 import { TopNav } from '@/components/navigation/TopNav';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
@@ -29,7 +29,6 @@ import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
 interface ProposedSubtaskItem {
   title: string;
   description?: string;
-  estimate?: number;
   priority?: IssuePriority;
 }
 
@@ -67,10 +66,10 @@ export default function IssueDetailPage() {
   // Manual subtask creation state
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newSubtaskPriority, setNewSubtaskPriority] = useState<IssuePriority>('none');
-  const [newSubtaskEstimate, setNewSubtaskEstimate] = useState<number | undefined>(undefined);
   const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState<string>('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
 
   // Load team, states, workspace users
   useEffect(() => {
@@ -113,6 +112,9 @@ export default function IssueDetailPage() {
       const data = await api.getIssue(issueIdentifier);
       if (data) {
         setIssue(data);
+        if (data.organization_id) {
+          api.getLabels(data.organization_id).then((lbls) => setAvailableLabels(lbls || [])).catch(() => {});
+        }
         api.getComments(data.id).then(setComments);
         api.getActivityLogs(data.id).then(setActivityLogs);
         api.getAttachments(data.id).then(setAttachments);
@@ -192,23 +194,6 @@ export default function IssueDetailPage() {
     }
   };
 
-  const handleEstimateChange = async (estimateStr: string) => {
-    if (!issue) return;
-    const est = estimateStr ? Number(estimateStr) : undefined;
-    try {
-      const updated = await api.updateIssue(issue.id, {
-        estimate: est,
-        expected_version: issue.version,
-      });
-      if (updated) {
-        setIssue(updated);
-        window.dispatchEvent(new CustomEvent('issueUpdated', { detail: updated }));
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const handleCreateSubtask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!issue || !newSubtaskTitle.trim() || isAddingSubtask) return;
@@ -217,7 +202,6 @@ export default function IssueDetailPage() {
       const created = await api.createSubtask(issue.id, {
         title: newSubtaskTitle.trim(),
         priority: newSubtaskPriority,
-        estimate: newSubtaskEstimate ? Number(newSubtaskEstimate) : undefined,
         assignee_id: newSubtaskAssigneeId || undefined,
       });
       if (created) {
@@ -225,7 +209,6 @@ export default function IssueDetailPage() {
         window.dispatchEvent(new CustomEvent('issueCreated', { detail: created }));
         setNewSubtaskTitle('');
         setNewSubtaskPriority('none');
-        setNewSubtaskEstimate(undefined);
         setNewSubtaskAssigneeId('');
       }
     } catch (err) {
@@ -284,7 +267,6 @@ export default function IssueDetailPage() {
           (res.proposed_subtasks || []).map((t) => ({
             title: t.title,
             description: t.description || '',
-            estimate: t.estimate || 3,
             priority: (t.priority as IssuePriority) || 'medium',
           }))
         );
@@ -303,7 +285,6 @@ export default function IssueDetailPage() {
       ...prev,
       {
         title: customDraftTitle.trim(),
-        estimate: 3,
         priority: 'medium',
       },
     ]);
@@ -320,7 +301,6 @@ export default function IssueDetailPage() {
     const formattedPayload = proposedSubtasks.map((p) => ({
       title: p.title,
       description: p.description || '',
-      estimate: p.estimate || 3,
       priority: p.priority || 'medium',
     }));
 
@@ -340,7 +320,6 @@ export default function IssueDetailPage() {
           identifier: `${issue.identifier}-sub${subIndex}`,
           title: task.title,
           priority: task.priority || 'medium',
-          estimate: task.estimate,
           state_id: activeStates[0]?.id || issue.state_id,
           state: activeStates[0] || issue.state,
           creator_id: issue.creator_id,
@@ -565,19 +544,6 @@ export default function IssueDetailPage() {
                   <option value="high">Priority: High</option>
                   <option value="urgent">Priority: Urgent</option>
                 </select>
-
-                <select
-                  value={newSubtaskEstimate !== undefined ? String(newSubtaskEstimate) : ''}
-                  onChange={(e) => setNewSubtaskEstimate(e.target.value ? Number(e.target.value) : undefined)}
-                  className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
-                >
-                  <option value="">Estimate: None</option>
-                  <option value="1">1 pt</option>
-                  <option value="2">2 pts</option>
-                  <option value="3">3 pts</option>
-                  <option value="5">5 pts</option>
-                  <option value="8">8 pts</option>
-                </select>
               </div>
             </form>
 
@@ -753,9 +719,6 @@ export default function IssueDetailPage() {
                           >
                             <span className="font-medium text-white">{task.title}</span>
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700">
-                                {task.estimate} pts
-                              </span>
                               <PriorityBadge priority={task.priority || 'medium'} showLabel={false} />
                             </div>
                           </div>
@@ -946,22 +909,55 @@ export default function IssueDetailPage() {
             </div>
           </div>
 
-          {/* Story Points */}
+          {/* Labels Manager */}
           <div>
-            <label className="text-[11px] text-zinc-400 block mb-1">Story Points</label>
-            <select
-              value={issue.estimate !== undefined && issue.estimate !== null ? String(issue.estimate) : ''}
-              onChange={(e) => handleEstimateChange(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-            >
-              <option value="">No estimate</option>
-              <option value="1">1 pt</option>
-              <option value="2">2 pts</option>
-              <option value="3">3 pts</option>
-              <option value="5">5 pts</option>
-              <option value="8">8 pts</option>
-              <option value="13">13 pts</option>
-            </select>
+            <label className="text-[11px] text-zinc-400 block mb-1">Labels</label>
+            <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-900 border border-zinc-800 rounded min-h-[36px] items-center">
+              {availableLabels.length === 0 ? (
+                <span className="text-zinc-600 text-xs">No labels configured</span>
+              ) : (
+                availableLabels.map((lbl) => {
+                  const currentLabelIds = (issue.labels || []).map((l) => l.id);
+                  const isAttached = currentLabelIds.includes(lbl.id);
+                  return (
+                    <button
+                      key={lbl.id}
+                      type="button"
+                      onClick={async () => {
+                        const newIds = isAttached
+                          ? currentLabelIds.filter((id) => id !== lbl.id)
+                          : [...currentLabelIds, lbl.id];
+                        const updated = await api.updateIssue(issue.id, {
+                          label_ids: newIds,
+                          expected_version: issue.version,
+                        });
+                        if (updated) {
+                          setIssue(updated);
+                          window.dispatchEvent(new CustomEvent('issueUpdated', { detail: updated }));
+                        }
+                      }}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 cursor-pointer ${
+                        isAttached
+                          ? 'font-medium shadow-xs'
+                          : 'opacity-40 hover:opacity-80 border-transparent bg-zinc-800/60 text-zinc-400'
+                      }`}
+                      style={
+                        isAttached
+                          ? {
+                              backgroundColor: `${lbl.color}25`,
+                              borderColor: lbl.color,
+                              color: lbl.color,
+                            }
+                          : {}
+                      }
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lbl.color }} />
+                      <span>{lbl.name}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>

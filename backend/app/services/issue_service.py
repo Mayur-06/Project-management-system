@@ -182,6 +182,27 @@ class IssueService:
 
         user_cache: dict = {}
         enriched = [cls._enrich_issue_users(item, db, user_cache, state_cache) for item in (res.data or [])]
+
+        # Batch load labels for issues
+        issue_ids = [item["id"] for item in enriched]
+        labels_by_issue: Dict[str, list] = {iid: [] for iid in issue_ids}
+        if issue_ids:
+            try:
+                lbl_res = (
+                    db.table("issue_labels")
+                    .select("issue_id, label_id, labels(id, name, color, description)")
+                    .in_("issue_id", issue_ids)
+                    .execute()
+                )
+                for row in (lbl_res.data or []):
+                    if row.get("labels"):
+                        labels_by_issue.setdefault(row["issue_id"], []).append(row["labels"])
+            except Exception:
+                pass
+
+        for item in enriched:
+            item["labels"] = labels_by_issue.get(item["id"], [])
+
         return [IssueResponse(**item) for item in enriched]
 
     @classmethod
@@ -297,7 +318,6 @@ class IssueService:
             "description_json": data.description_json,
             "description_text": data.description_text,
             "priority": data.priority.value,
-            "estimate": data.estimate,
             "state_id": target_state_id,
             "assignee_id": data.assignee_id,
             "assigned_by_id": data.assigned_by_id or (user_id if data.assignee_id else None),
@@ -314,6 +334,20 @@ class IssueService:
         if not res.data:
             raise HTTPException(status_code=500, detail="Failed to create issue")
         created = res.data[0]
+
+        # Attach labels if provided
+        created_labels = []
+        if data.label_ids:
+            for lid in data.label_ids:
+                try:
+                    db.table("issue_labels").insert({"issue_id": created["id"], "label_id": lid}).execute()
+                except Exception:
+                    pass
+            try:
+                l_res = db.table("issue_labels").select("label_id, labels(id, name, color, description)").eq("issue_id", created["id"]).execute()
+                created_labels = [x["labels"] for x in (l_res.data or []) if x.get("labels")]
+            except Exception:
+                pass
 
         # Audit log
         db.table("activity_logs").insert({
@@ -337,7 +371,9 @@ class IssueService:
         except Exception:
             pass
 
-        return IssueResponse(**cls._enrich_issue_assignee(created, db))
+        created_enriched = cls._enrich_issue_assignee(created, db)
+        created_enriched["labels"] = created_labels
+        return IssueResponse(**created_enriched)
 
     @classmethod
     def get_issue(cls, issue_id_or_identifier: str, user_id: str, db: Client) -> IssueDetailResponse:
@@ -423,8 +459,19 @@ class IssueService:
         update_dict = {}
         changes = {}
         dumped = data.model_dump(exclude_unset=True)
+
+        if "label_ids" in dumped:
+            new_label_ids = dumped["label_ids"] or []
+            try:
+                db.table("issue_labels").delete().eq("issue_id", issue_id).execute()
+                for lid in new_label_ids:
+                    db.table("issue_labels").insert({"issue_id": issue_id, "label_id": lid}).execute()
+            except Exception:
+                pass
+            changes["labels"] = {"updated": new_label_ids}
+
         for field, val in dumped.items():
-            if field in ("expected_version", "client_session_id"):
+            if field in ("expected_version", "client_session_id", "label_ids"):
                 continue
             if val is None:
                 update_dict[field] = None
@@ -495,7 +542,17 @@ class IssueService:
                 except Exception:
                     pass
 
-        return IssueResponse(**cls._enrich_issue_assignee(updated, db))
+        # Load labels for updated issue
+        lbls = []
+        try:
+            l_res = db.table("issue_labels").select("label_id, labels(id, name, color, description)").eq("issue_id", issue_id).execute()
+            lbls = [x["labels"] for x in (l_res.data or []) if x.get("labels")]
+        except Exception:
+            pass
+
+        updated_dict = cls._enrich_issue_assignee(updated, db)
+        updated_dict["labels"] = lbls
+        return IssueResponse(**updated_dict)
 
     @classmethod
     def delete_issue(cls, issue_id: str, user_id: str, db: Client, client_session_id: Optional[str] = None, hard: bool = False) -> None:
@@ -670,7 +727,6 @@ class IssueService:
             "identifier": identifier,
             "title": data.title,
             "priority": data.priority.value,
-            "estimate": data.estimate,
             "state_id": parent["state_id"],
             "assignee_id": data.assignee_id,
             "creator_id": user_id,

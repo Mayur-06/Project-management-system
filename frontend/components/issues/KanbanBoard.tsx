@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Plus, Trash2, CornerDownRight, ChevronDown, ChevronRight, Layers, FolderGit2 } from 'lucide-react';
+import { Plus, Trash2, CornerDownRight, ChevronDown, ChevronRight, Layers, FolderGit2, Calendar } from 'lucide-react';
 import { Issue, WorkflowState, User } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
@@ -301,15 +301,21 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             {issue.labels.map((lbl) => (
               <span
                 key={lbl.id}
-                className="text-[10px] px-1.5 py-0.5 rounded border border-zinc-800 bg-zinc-900 text-zinc-300 font-medium"
+                className="text-[10px] px-1.5 py-0.5 rounded border font-medium flex items-center gap-1"
+                style={{
+                  backgroundColor: `${lbl.color}15`,
+                  borderColor: `${lbl.color}35`,
+                  color: lbl.color,
+                }}
               >
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lbl.color }} />
                 {lbl.name}
               </span>
             ))}
           </div>
         )}
 
-        {/* Card Footer: Assignee & Estimate */}
+        {/* Card Footer: Assignee & Date Created */}
         <div className="flex items-center justify-between pt-1 border-t border-zinc-800/80 text-[11px] text-zinc-400">
           <div className="flex items-center gap-1.5">
             {renderAssigneeAvatar(issue)}
@@ -321,9 +327,21 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             )}
           </div>
 
-          {issue.estimate && (
-            <span className="text-[10px] font-mono bg-zinc-900 px-1.5 py-0.5 rounded text-white border border-zinc-800">
-              {issue.estimate}p
+          {issue.created_at && (
+            <span
+              className="text-[10px] text-zinc-400 flex items-center gap-1 font-sans"
+              title={`Created: ${new Date(issue.created_at).toLocaleString()}`}
+            >
+              <Calendar className="w-3 h-3 text-zinc-500" />
+              <span>
+                {new Date(issue.created_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  ...(new Date(issue.created_at).getFullYear() !== new Date().getFullYear()
+                    ? { year: 'numeric' }
+                    : {}),
+                })}
+              </span>
             </span>
           )}
         </div>

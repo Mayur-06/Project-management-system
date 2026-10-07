@@ -20,7 +20,7 @@ class IssueCreate(BaseModel):
     description_json: Optional[Dict[str, Any]] = None
     description_text: Optional[str] = None
     priority: IssuePriority = IssuePriority.NONE
-    estimate: Optional[int] = Field(None, ge=0)
+    label_ids: Optional[List[str]] = None
     state_id: Optional[str] = None
     assignee_id: Optional[str] = None
     assigned_by_id: Optional[str] = None
@@ -36,7 +36,7 @@ class IssueUpdate(BaseModel):
     description_json: Optional[Dict[str, Any]] = None
     description_text: Optional[str] = None
     priority: Optional[IssuePriority] = None
-    estimate: Optional[int] = Field(None, ge=0)
+    label_ids: Optional[List[str]] = None
     state_id: Optional[str] = None
     assignee_id: Optional[str] = None
     assigned_by_id: Optional[str] = None
@@ -85,7 +85,6 @@ class BatchUpdateRequest(BaseModel):
 class SubtaskCreate(BaseModel):
     title: str = Field(..., max_length=500)
     assignee_id: Optional[str] = None
-    estimate: Optional[int] = None
     priority: IssuePriority = IssuePriority.NONE
 
 
@@ -106,7 +105,6 @@ class IssueResponse(BaseModel):
     description_json: Optional[Dict[str, Any]] = None
     description_text: Optional[str] = None
     priority: str
-    estimate: Optional[int] = None
     state_id: str
     state: Optional[Dict[str, Any]] = None
     assignee_id: Optional[str] = None
@@ -118,6 +116,7 @@ class IssueResponse(BaseModel):
     project_id: Optional[str] = None
     cycle_id: Optional[str] = None
     parent_id: Optional[str] = None
+    labels: List[Dict[str, Any]] = []
     sort_order: str
     version: int
     due_date: Optional[date] = None

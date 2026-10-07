@@ -72,7 +72,6 @@ export interface Issue {
   description_json?: any;
   description_text?: string;
   priority: IssuePriority;
-  estimate?: number;
   state_id: string;
   state?: WorkflowState;
   assignee_id?: string;

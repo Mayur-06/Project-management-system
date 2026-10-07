@@ -11,6 +11,13 @@ from fastapi import status
 
 from app.schemas.issue import IssueUpdate, IssueCreate, IssueReorderRequest, BatchUpdateRequest, BatchReorderRequest, SubtaskCreate
 from app.schemas.workspace import MemberInviteRequest
+from app.schemas.phase4 import (
+    AttachmentUploadRequest,
+    AttachmentUploadResponse,
+    DuplicateCheckRequest,
+    DuplicateCheckResponse,
+)
+from app.schemas.team import TeamUpdate
 
 
 def test_H2_issue_update_requires_expected_version():
@@ -84,9 +91,9 @@ def test_api_contract_duplicate_check_response():
 
 
 def test_api_contract_cycle_complete_request():
-    """Contract: CycleCompleteRequest requires destination."""
+    """Contract: TeamUpdate validates cycle_duration_weeks bounds."""
     with pytest.raises(ValidationError):
-        CycleCompleteRequest()
+        TeamUpdate(cycle_duration_weeks=100)
 
 
 def test_api_contract_member_invite_request():

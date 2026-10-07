@@ -19,7 +19,6 @@ from supabase import Client
 class ProposedSubtaskDict(TypedDict):
     title: str
     description: Optional[str]
-    estimate: Optional[int]
     priority: str
 
 
@@ -61,7 +60,6 @@ def generate_proposal_node(state: BreakdownAgentState) -> Dict[str, Any]:
         f"- subtasks: array of objects with keys:\n"
         f"    - title: concise task title\n"
         f"    - description: task implementation details\n"
-        f"    - estimate: integer Fibonacci points (1, 2, 3, 5, 8)\n"
         f"    - priority: one of ['urgent', 'high', 'medium', 'low', 'none']\n"
         f"Return ONLY valid JSON."
     )
@@ -85,7 +83,6 @@ def generate_proposal_node(state: BreakdownAgentState) -> Dict[str, Any]:
                         {
                             "title": st.get("title", "Subtask"),
                             "description": st.get("description", ""),
-                            "estimate": int(st.get("estimate", 3)),
                             "priority": st.get("priority", "medium").lower(),
                         }
                         for st in subtasks
@@ -105,19 +102,16 @@ def generate_proposal_node(state: BreakdownAgentState) -> Dict[str, Any]:
         {
             "title": f"Phase 1: Database Migration & Schema Design for {parent_title}",
             "description": "Initialize database tables, foreign keys, and indexes.",
-            "estimate": 3,
             "priority": "high",
         },
         {
             "title": f"Phase 2: Service Layer & Mutation Handlers",
             "description": "Implement business logic, OCC versioning, and validation.",
-            "estimate": 5,
             "priority": "medium",
         },
         {
             "title": f"Phase 3: Integration Tests & Quality Verification",
             "description": "Write end-to-end tests for positive and failure branches.",
-            "estimate": 2,
             "priority": "low",
         },
     ]
@@ -200,7 +194,6 @@ def batch_persist_node(state: BreakdownAgentState, config: Optional[RunnableConf
                 "title": clean_title,
                 "description_text": item.get("description"),
                 "priority": item.get("priority", "none"),
-                "estimate": item.get("estimate"),
                 "state_id": default_state_id,
                 "creator_id": user_id,
                 "parent_id": parent_id,
