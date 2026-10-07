@@ -20,6 +20,7 @@ import {
 import { Issue, WorkflowState, User, Label, IssuePriority } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
+import { StatusPicker } from '@/components/ui/StatusPicker';
 import { buildIssueTree } from '@/lib/issueTree';
 
 interface IssueListViewProps {
@@ -194,55 +195,20 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
 
                 {/* Column 3: Status (Interactive Dropdown) */}
                 <div className="col-span-2 relative" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setActiveDropdown(isStatusOpen ? null : { issueId: issue.id, type: 'status' })
-                    }
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition-colors text-left group/btn cursor-pointer"
-                  >
-                    <StateBadge state={resolvedState} />
-                    <ChevronDown className="w-3 h-3 text-zinc-600 group-hover/btn:text-zinc-300 transition-colors ml-0.5 shrink-0" />
-                  </button>
-
-                  {isStatusOpen && (
-                    <div
-                      className={`absolute ${
-                        isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                      } left-0 w-44 bg-surface-elevated border border-border-standard rounded-md shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100`}
-                    >
-                      <div className="px-2.5 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-                        Set Status
-                      </div>
-                      {states.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={async () => {
-                            setActiveDropdown(null);
-                            if (onUpdateIssue && s.id !== issue.state_id) {
-                              await onUpdateIssue(issue.id, {
-                                state_id: s.id,
-                                expected_version: issue.version,
-                              });
-                            }
-                          }}
-                          className={`w-full px-2.5 py-1.5 flex items-center justify-between text-xs hover:bg-zinc-800 transition-colors text-left cursor-pointer ${
-                            s.id === issue.state_id ? 'text-white bg-zinc-800/40' : 'text-zinc-400'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            <span
-                              className="w-2 h-2 rounded-full shrink-0"
-                              style={{ backgroundColor: s.color || '#a1a1aa' }}
-                            />
-                            <span className="truncate">{s.name}</span>
-                          </div>
-                          {s.id === issue.state_id && <Check className="w-3.5 h-3.5 text-zinc-300 shrink-0" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <StatusPicker
+                    states={states}
+                    currentStateId={issue.state_id}
+                    currentState={resolvedState}
+                    onSelectState={async (newId) => {
+                      if (onUpdateIssue && newId !== issue.state_id) {
+                        await onUpdateIssue(issue.id, {
+                          state_id: newId,
+                          expected_version: issue.version,
+                        });
+                      }
+                    }}
+                    triggerClassName="px-1.5 py-0.5 bg-transparent border-transparent hover:bg-white/[0.04] hover:border-border-subtle"
+                  />
                 </div>
 
                 {/* Column 4: Priority (Interactive Dropdown) */}

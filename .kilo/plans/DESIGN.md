@@ -55,14 +55,23 @@ Our workspace is an engineering-first, dark-mode-native product designed for ext
 | **Low** | Blue | `#3b82f6` | 1-bar signal icon / pill |
 | **None** | Muted Gray | `#737373` | Dotted signal icon / subdued chip |
 
-### Domain Tokens: Workflow State Categories
-| Category | Color | Hex | Default State Name |
-|---|---|---|---|
-| **Backlog** | Zinc Gray | `#737373` | Backlog |
-| **Unstarted** | Slate | `#94a3b8` | Todo |
-| **Started** | Yellow / Blue | `#eab308` / `#3b82f6` | In Progress |
-| **Completed** | Emerald Green | `#10b981` | Done |
-| **Canceled** | Slate Muted | `#64748b` | Canceled |
+### Domain Tokens: Workflow State Categories & Linear Status Icons
+| Category / State | Icon Glyph | Color | Hex | Visual Spec |
+|---|---|---|---|---|
+| **Backlog** | Dotted Circle (`CircleDashed`) | Zinc Gray | `#8a8f98` | 14px circle with 8-dash stroke pattern |
+| **Todo** (Unstarted) | Hollow Ring (`Circle`) | Slate / White | `#e2e8f0` | 14px circular outline with 1.5px stroke |
+| **In Progress** (Started) | Amber Progress Pie | Amber / Yellow | `#f59e0b` | 14px circle with 25%-33% angular slice |
+| **In Review** (Started) | Half-Filled Circle | Emerald / Green | `#22c55e` | 14px circle with 50% vertical half-fill |
+| **Done** (Completed) | Solid Circle with Check | Linear Indigo | `#5e6ad2` | 14px solid filled circle with centered white checkmark |
+| **Canceled** | Circle with X | Slate Muted | `#71717a` | 14px circle with centered 45° X cross |
+| **Duplicate** | Circle with Slash | Slate Muted | `#71717a` | 14px circle with diagonal strike-through |
+
+#### Linear StatusPicker Component Specification:
+- **Popover Trigger:** Compact button or badge displaying the current `StatusIcon` + State name + chevron down.
+- **Search & Filter:** "Change status..." header input with keyboard shortcut indicator (`S`).
+- **Keyboard Shortcuts:** Direct number keys (`1` through `9`) to instantly select corresponding workflow states.
+- **Selection State:** Active state denoted with a right-aligned checkmark (`✓`).
+- **Theme Surface:** Floating elevated panel (`#141517`) with whisper border (`rgba(255, 255, 255, 0.08)`), subtle item hover (`rgba(255, 255, 255, 0.04)`), and 0-lag selection.
 
 ### Borders & Dividers (Whisper Borders)
 | Token | Value | Role |

@@ -24,6 +24,7 @@ import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAt
 import { api } from '@/lib/api';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
+import { StatusPicker } from '@/components/ui/StatusPicker';
 import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
 import { IssueTitleEditor } from '@/components/issues/IssueTitleEditor';
 import { IssueDescriptionEditor } from '@/components/editor/IssueDescriptionEditor';
@@ -976,21 +977,13 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
             {/* Status */}
             <div>
               <label className="text-[11px] text-zinc-400 block mb-1">Status</label>
-              <select
-                value={issue.state_id}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-              >
-                {activeStates.length > 0 ? (
-                  activeStates.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))
-                ) : (
-                  <option value={issue.state_id}>{issue.state?.name || 'Current Status'}</option>
-                )}
-              </select>
+              <StatusPicker
+                states={activeStates}
+                currentStateId={issue.state_id}
+                currentState={issue.state}
+                onSelectState={handleStatusChange}
+                triggerClassName="w-full justify-between h-8 bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+              />
             </div>
 
             {/* Priority */}

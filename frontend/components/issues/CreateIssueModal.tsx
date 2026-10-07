@@ -10,6 +10,7 @@ import { IssuePriority, Issue, WorkflowState, User, Label } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
 import { Button } from '@/components/ui/button';
+import { StatusPicker } from '@/components/ui/StatusPicker';
 import { toast } from 'sonner';
 
 interface CreateIssueModalProps {
@@ -291,17 +292,12 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
             {/* Status */}
             <div>
               <label className="text-[11px] font-medium text-zinc-400 block mb-1">Status</label>
-              <select
-                value={stateId}
-                onChange={(e) => setStateId(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-              >
-                {activeStates.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <StatusPicker
+                states={activeStates}
+                currentStateId={stateId}
+                onSelectState={(newId) => setStateId(newId)}
+                triggerClassName="w-full justify-between h-[34px] bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+              />
             </div>
 
             {/* Priority */}
