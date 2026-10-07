@@ -167,10 +167,10 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 h-screen bg-black border-r border-zinc-800 flex flex-col justify-between select-none text-sm z-20 font-sans">
+    <aside className="w-64 h-screen bg-panel-dark border-r border-border-subtle flex flex-col justify-between select-none text-sm z-20 font-sans">
       {/* Workspace Header */}
       <div className="flex flex-col relative">
-        <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="p-3 border-b border-border-subtle flex items-center justify-between">
           <button
             onClick={() => setIsWorkspaceDropdownOpen((prev) => !prev)}
             className="flex items-center gap-2.5 w-full hover:bg-zinc-900/60 p-1 rounded-md transition-colors text-left cursor-pointer"
@@ -243,32 +243,32 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         <div className="p-2 space-y-1">
           <button
             onClick={onOpenCommandPalette}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors group cursor-pointer"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-white/[0.04] border border-transparent transition-colors group cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <Command className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white" />
+              <Command className="w-3.5 h-3.5 text-text-tertiary group-hover:text-text-primary" />
               <span>Search & Command</span>
             </div>
-            <kbd className="text-[10px] bg-zinc-900 text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-800">
+            <kbd className="text-[10px] bg-white/[0.05] text-text-tertiary px-1.5 py-0.5 rounded border border-border-subtle">
               ⌘K
             </kbd>
           </button>
 
           <button
             onClick={onOpenAIAsk}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs text-zinc-200 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-colors group cursor-pointer"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs text-text-secondary hover:text-text-primary bg-surface-elevated/70 hover:bg-surface-elevated border border-border-subtle hover:border-border-standard transition-colors group cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-zinc-300" />
-              <span className="font-medium">AI Assistant</span>
+              <Sparkles className="w-3.5 h-3.5 text-accent-violet" />
+              <span className="font-medium text-text-primary">AI Assistant</span>
             </div>
-            <span className="text-[10px] text-zinc-400 bg-zinc-800 px-1 rounded border border-zinc-700">Agent</span>
+            <span className="text-[10px] text-text-tertiary bg-white/[0.05] px-1 rounded border border-border-subtle">Agent</span>
           </button>
         </div>
 
         {/* Primary Views */}
         <div className="px-2 py-2 space-y-0.5">
-          <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+          <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
             Workspace Views
           </div>
           {navItems.map((item) => {
@@ -279,10 +279,10 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <Link
                 key={item.label}
                 href={item.href}
-                className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   isActive
-                    ? 'bg-zinc-900 text-white border border-zinc-700'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                    ? 'bg-white/[0.08] text-text-primary border border-border-subtle shadow-xs'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.04]'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
@@ -290,7 +290,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   <span>{item.label}</span>
                 </div>
                 {item.badge && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-zinc-800 text-white border border-zinc-700 font-bold">
+                  <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-white/[0.08] text-text-primary border border-border-subtle font-bold">
                     {item.badge}
                   </span>
                 )}
@@ -301,7 +301,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
         {/* Teams Section */}
         {teams.length > 0 && (
-          <div className="px-2 py-3 space-y-0.5 border-t border-zinc-800">
+          <div className="px-2 py-3 space-y-0.5 border-t border-border-subtle">
             <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center justify-between">
               <span>Teams</span>
               <button

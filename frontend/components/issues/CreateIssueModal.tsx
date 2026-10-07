@@ -9,6 +9,8 @@ import {
 import { IssuePriority, Issue, WorkflowState, User, Label } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 interface CreateIssueModalProps {
   isOpen: boolean;
@@ -172,6 +174,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
         label_ids: selectedLabels,
       });
       if (created) {
+        toast.success(`Created ${created.identifier || 'issue'}: ${created.title}`);
         onCreated(created);
       }
       onClose();
@@ -190,9 +193,9 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fade-in font-sans">
-      <div className="w-full max-w-2xl bg-black border border-zinc-800 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+      <div className="w-full max-w-2xl bg-panel-dark border border-border-standard rounded-lg shadow-2xl flex flex-col overflow-hidden animate-fade-in">
         {/* Modal Header */}
-        <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
+        <div className="px-5 py-3 border-b border-border-subtle flex items-center justify-between bg-panel-dark">
           <div className="flex items-center gap-2">
             {/* Destination Team Selector */}
             {teams.length > 1 ? (
@@ -279,7 +282,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add description..."
-              className="w-full bg-zinc-900 text-xs text-zinc-200 placeholder-zinc-500 p-3 rounded border border-zinc-800 focus:border-white focus:outline-none resize-none leading-relaxed"
+              className="w-full bg-surface-elevated/40 text-xs text-text-secondary placeholder:text-text-quaternary p-3 rounded-md border border-border-subtle focus:border-accent-violet/60 focus:outline-none resize-none leading-relaxed"
             />
           </div>
 
@@ -381,21 +384,25 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
           </div>
 
           {/* Footer Controls */}
-           <div className="pt-4 border-t border-zinc-800 flex items-center justify-end gap-2">
-            <button
+          <div className="pt-4 border-t border-border-subtle flex items-center justify-end gap-2">
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded text-xs text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
+              className="text-text-secondary hover:text-text-primary"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              variant="default"
+              size="sm"
               disabled={!title.trim() || isSubmitting}
-              className="px-4 py-1.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 disabled:opacity-30 transition-colors shadow-xs active:scale-95 cursor-pointer"
+              className="bg-brand-primary hover:bg-accent-hover text-white font-medium"
             >
               {isSubmitting ? 'Creating...' : 'Create Issue'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

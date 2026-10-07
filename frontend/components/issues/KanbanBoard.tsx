@@ -227,7 +227,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         onDragOver={handleDragOver}
         onDrop={(e) => onDropCard(e, issue, issue.state_id)}
         onClick={() => onSelectIssue(issue)}
-        className="p-3 rounded-lg bg-black hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition-all duration-150 shadow-xs cursor-grab active:cursor-grabbing group flex flex-col gap-2"
+        className="p-3 rounded-md bg-surface-elevated/70 hover:bg-surface-elevated border border-border-subtle hover:border-white/[0.12] transition-all duration-150 shadow-xs cursor-grab active:cursor-grabbing group flex flex-col gap-2"
       >
         {/* Card Header: Hierarchy Slug Track & Actions */}
         <div className="flex items-start justify-between gap-1">
@@ -291,7 +291,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         </div>
 
         {/* Title */}
-        <p className="text-xs font-medium text-zinc-100 line-clamp-2 leading-relaxed">
+        <p className="text-xs font-medium text-text-primary line-clamp-2 leading-relaxed">
           {issue.title}
         </p>
 
@@ -316,11 +316,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         )}
 
         {/* Card Footer: Assignee & Date Created */}
-        <div className="flex items-center justify-between pt-1 border-t border-zinc-800/80 text-[11px] text-zinc-400">
+        <div className="flex items-center justify-between pt-1 border-t border-border-divider text-[11px] text-text-tertiary">
           <div className="flex items-center gap-1.5">
             {renderAssigneeAvatar(issue)}
             {issue.subtasks && issue.subtasks.length > 0 && (
-              <span className="text-[10px] text-zinc-400 font-mono">
+              <span className="text-[10px] text-text-tertiary font-mono">
                 {issue.subtasks.filter((s) => s.state?.category === 'completed').length}/
                 {issue.subtasks.length}
               </span>
@@ -363,19 +363,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               key={state.id}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDropOnFlatColumn(e, state.id)}
-              className="w-80 shrink-0 flex flex-col bg-zinc-950 rounded-xl border border-zinc-800 overflow-hidden"
+              className="w-80 shrink-0 flex flex-col bg-panel-dark/95 rounded-lg border border-border-subtle overflow-hidden"
             >
               {/* Column Header */}
-              <div className="p-3 border-b border-zinc-800 flex items-center justify-between bg-black">
+              <div className="p-3 border-b border-border-subtle flex items-center justify-between bg-panel-dark">
                 <div className="flex items-center gap-2">
                   <StateBadge state={state} />
-                  <span className="text-xs font-mono text-zinc-400">{stateIssues.length}</span>
+                  <span className="text-xs font-mono text-text-tertiary">{stateIssues.length}</span>
                 </div>
 
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => onOpenNewIssueWithState(state.id)}
-                    className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
+                    className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-white/[0.06] transition-colors cursor-pointer"
                     title="Add Issue to State"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -392,7 +392,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 )}
 
                 {stateIssues.length === 0 && (
-                  <div className="py-6 text-center text-xs text-zinc-500 border border-dashed border-zinc-800 rounded-lg">
+                  <div className="py-6 text-center text-xs text-text-quaternary border border-dashed border-border-subtle rounded-md">
                     No issues
                   </div>
                 )}
@@ -410,7 +410,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   return (
     <div className="flex-1 overflow-x-auto p-6 select-none min-h-[calc(100vh-3.5rem)] font-sans flex flex-col gap-6">
       {/* ─── Sticky Master Column Header Row ─── */}
-      <div className="sticky top-0 z-20 bg-zinc-950/95 backdrop-blur-md pb-3 border-b border-zinc-800 flex gap-4 min-w-max">
+      <div className="sticky top-0 z-20 bg-canvas-workspace/90 backdrop-blur-md pb-3 border-b border-border-subtle flex gap-4 min-w-max">
         {activeStates.map((state) => {
           // Total issues across all swimlanes in this state
           const count = issues.filter((i) => i.state_id === state.id).length;
@@ -418,15 +418,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           return (
             <div
               key={state.id}
-              className="w-80 shrink-0 px-3 py-2 bg-black border border-zinc-800 rounded-lg flex items-center justify-between"
+              className="w-80 shrink-0 px-3 py-2 bg-panel-dark border border-border-subtle rounded-md flex items-center justify-between"
             >
               <div className="flex items-center gap-2">
                 <StateBadge state={state} />
-                <span className="text-xs font-mono text-zinc-400">{count}</span>
+                <span className="text-xs font-mono text-text-tertiary">{count}</span>
               </div>
               <button
                 onClick={() => onOpenNewIssueWithState(state.id)}
-                className="p-1 rounded text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
+                className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-white/[0.06] transition-colors cursor-pointer"
                 title={`Add Issue in ${state.name}`}
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -444,10 +444,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           return (
             <div
               key={swimlane.id}
-              className="flex flex-col rounded-xl border border-zinc-800/80 bg-zinc-950/70 overflow-hidden shadow-xs"
+              className="flex flex-col rounded-lg border border-border-subtle bg-panel-dark/50 overflow-hidden shadow-xs"
             >
               {/* ─── Swimlane Row Header ─── */}
-              <div className="p-3 bg-black/90 border-b border-zinc-800/80 flex items-center justify-between gap-4">
+              <div className="p-3 bg-panel-dark/90 border-b border-border-subtle flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   {/* Collapse Toggle */}
                   <button

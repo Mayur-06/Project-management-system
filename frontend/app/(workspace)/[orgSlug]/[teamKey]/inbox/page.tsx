@@ -30,6 +30,8 @@ import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { supabase } from '@/lib/supabase/client';
 import { useWorkspace } from '@/lib/WorkspaceContext';
 
+import { Button } from '@/components/ui/button';
+
 function formatRelativeTime(dateString: string): string {
   try {
     const date = new Date(dateString);
@@ -205,7 +207,7 @@ export default function InboxPage() {
   const renderActorAvatar = (actor?: InboxItem['actor']) => {
     if (!actor) {
       return (
-        <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[10px] text-zinc-400 font-bold shrink-0">
+        <div className="w-6 h-6 rounded-full bg-surface-elevated border border-border-subtle flex items-center justify-center text-[10px] text-text-muted font-bold shrink-0">
           ?
         </div>
       );
@@ -216,7 +218,7 @@ export default function InboxPage() {
         <img
           src={actor.avatar_url}
           alt={actor.name || 'Member'}
-          className="w-6 h-6 rounded-full object-cover ring-1 ring-zinc-700 shrink-0"
+          className="w-6 h-6 rounded-full object-cover ring-1 ring-border-subtle shrink-0"
         />
       );
     }
@@ -231,7 +233,7 @@ export default function InboxPage() {
 
     return (
       <div
-        className="w-6 h-6 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[10px] font-bold shrink-0"
+        className="w-6 h-6 rounded-full bg-brand-primary/20 border border-brand-primary/40 text-brand-primary flex items-center justify-center text-[10px] font-bold shrink-0"
         title={actor.name || actor.email}
       >
         {initials}
@@ -251,17 +253,17 @@ export default function InboxPage() {
       <div
         className={`p-3.5 rounded-xl border transition-all duration-150 ${
           item.is_deleted
-            ? 'bg-zinc-950/40 border-zinc-900 opacity-75 cursor-not-allowed select-none'
-            : 'bg-zinc-950/80 hover:bg-zinc-900/60 border-zinc-800 hover:border-zinc-700 cursor-pointer shadow-xs'
+            ? 'bg-panel-dark/40 border-border-subtle opacity-70 cursor-not-allowed select-none'
+            : 'bg-panel-dark hover:bg-surface-elevated border-border-subtle hover:border-border-hover cursor-pointer shadow-xs'
         }`}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-2.5 min-w-0">
             {renderActorAvatar(item.actor)}
             <div className="flex items-center gap-1.5 text-xs truncate">
-              <span className="font-medium text-zinc-200">{actorName}</span>
-              <span className="text-zinc-500">{label}</span>
-              <span className="flex items-center gap-1 font-mono text-[11px] text-zinc-400 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
+              <span className="font-medium text-text-primary">{actorName}</span>
+              <span className="text-text-muted">{label}</span>
+              <span className="flex items-center gap-1 font-mono text-[11px] text-text-secondary bg-surface-elevated/70 px-1.5 py-0.5 rounded border border-border-subtle">
                 {icon}
                 {displayIdentifier}
               </span>
@@ -275,7 +277,7 @@ export default function InboxPage() {
                 Deleted
               </span>
             ) : null}
-            <span className="text-[11px] text-zinc-500 font-mono">
+            <span className="text-[11px] text-text-muted font-mono">
               {formatRelativeTime(item.created_at)}
             </span>
           </div>
@@ -286,7 +288,7 @@ export default function InboxPage() {
           <div className="flex items-center gap-2 min-w-0">
             <h4
               className={`text-xs font-medium truncate ${
-                item.is_deleted ? 'line-through text-zinc-500' : 'text-zinc-100'
+                item.is_deleted ? 'line-through text-text-muted' : 'text-text-primary'
               }`}
             >
               {displayTitle}
@@ -325,7 +327,7 @@ export default function InboxPage() {
   };
 
   return (
-    <div className="flex flex-col flex-1 h-full overflow-hidden bg-black font-sans">
+    <div className="flex flex-col flex-1 h-full overflow-hidden bg-canvas-workspace font-sans">
       <TopNav
         title="Inbox"
         subtitle="Activity Feed"
@@ -334,15 +336,15 @@ export default function InboxPage() {
 
       <div className="flex-1 overflow-y-auto px-6 py-5 max-w-4xl w-full mx-auto space-y-3">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 text-zinc-500 gap-2">
-            <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
+          <div className="flex flex-col items-center justify-center py-24 text-text-muted gap-2">
+            <Loader2 className="w-6 h-6 animate-spin text-text-secondary" />
             <span className="text-xs font-mono">Loading activity feed...</span>
           </div>
         ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 border border-dashed border-zinc-800 rounded-xl bg-zinc-950/40 text-center px-4">
-            <Inbox className="w-10 h-10 text-zinc-600 mb-3" />
-            <h3 className="text-sm font-medium text-zinc-200">No activity yet</h3>
-            <p className="text-xs text-zinc-500 mt-1 max-w-sm">
+          <div className="flex flex-col items-center justify-center py-24 border border-dashed border-border-subtle rounded-xl bg-panel-dark/40 text-center px-4">
+            <Inbox className="w-10 h-10 text-text-muted mb-3" />
+            <h3 className="text-sm font-medium text-text-primary">No activity yet</h3>
+            <p className="text-xs text-text-muted mt-1 max-w-sm">
               When issues are created, modified, commented on, or deleted across teams, notification events will appear here in real-time.
             </p>
           </div>
@@ -352,21 +354,21 @@ export default function InboxPage() {
 
             {hasMore && (
               <div className="pt-3 pb-6 flex justify-center">
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
                   onClick={handleLoadMore}
                   disabled={loadingMore}
-                  className="w-full max-w-xs py-2 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-xs font-medium text-zinc-300 hover:text-white transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="w-full max-w-xs h-9 text-xs bg-panel-dark hover:bg-surface-elevated border-border-subtle hover:border-border-hover text-text-secondary hover:text-text-primary"
                 >
                   {loadingMore ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
                       <span>Loading older activity...</span>
                     </>
                   ) : (
                     <span>Load older activity</span>
                   )}
-                </button>
+                </Button>
               </div>
             )}
           </>

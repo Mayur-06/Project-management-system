@@ -120,9 +120,9 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
 
   return (
     <div className="flex-1 p-6 select-none overflow-x-auto font-sans pb-40" ref={dropdownRef}>
-      <div className="w-full min-w-[900px] bg-black border border-zinc-800 rounded-xl overflow-visible shadow-xs">
+      <div className="w-full min-w-[900px] bg-panel-dark/95 border border-border-subtle rounded-lg overflow-visible shadow-xs">
         {/* Table Header */}
-        <div className="grid grid-cols-12 gap-3 px-4 py-2.5 bg-zinc-950 border-b border-zinc-800 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 items-center rounded-t-xl">
+        <div className="grid grid-cols-12 gap-3 px-4 py-2.5 bg-panel-dark border-b border-border-subtle text-[11px] font-medium text-text-tertiary items-center rounded-t-lg">
           <div className="col-span-2">Identifier</div>
           <div className="col-span-3">Title</div>
           <div className="col-span-2">Status</div>
@@ -133,7 +133,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
         </div>
 
         {/* Rows */}
-        <div className="divide-y divide-zinc-800/80">
+        <div className="divide-y divide-border-divider">
           {flattenedIssues.map((row, idx) => {
             const { issue, depth, isLastChild, childrenCount, completedChildrenCount, ancestorGuides } = row;
             const resolvedState = issue.state || states.find((s) => s.id === issue.state_id);
@@ -157,9 +157,9 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
               <div
                 key={issue.id}
                 onClick={() => onSelectIssue(issue)}
-                className={`grid grid-cols-12 gap-3 px-4 py-2.5 items-center hover:bg-zinc-900/60 transition-colors cursor-pointer text-xs text-zinc-300 relative group ${
+                className={`grid grid-cols-12 gap-3 px-4 py-2 items-center hover:bg-white/[0.04] transition-colors cursor-pointer text-xs text-text-secondary relative group ${
                   isAnyDropdownOpen ? 'z-40' : 'z-0'
-                } ${idx === flattenedIssues.length - 1 ? 'rounded-b-xl' : ''}`}
+                } ${idx === flattenedIssues.length - 1 ? 'rounded-b-lg' : ''}`}
               >
                 {/* Column 1: Tree connectors + Identifier */}
                 <div className="col-span-2 font-mono font-medium text-white flex items-center min-w-0">
@@ -209,7 +209,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
                     <div
                       className={`absolute ${
                         isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                      } left-0 w-44 bg-[#121417] border border-zinc-800 rounded-lg shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100`}
+                      } left-0 w-44 bg-surface-elevated border border-border-standard rounded-md shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100`}
                     >
                       <div className="px-2.5 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
                         Set Status
@@ -262,7 +262,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
                     <div
                       className={`absolute ${
                         isNearBottom ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                      } left-0 w-36 bg-[#121417] border border-zinc-800 rounded-lg shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100`}
+                      } left-0 w-36 bg-surface-elevated border border-border-standard rounded-md shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 duration-100`}
                     >
                       <div className="px-2.5 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
                         Set Priority

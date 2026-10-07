@@ -97,14 +97,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/60 backdrop-blur-xs animate-fade-in p-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/80 backdrop-blur-xs animate-fade-in p-4 font-sans">
       <div
-        className="w-full max-w-xl bg-[#0f1013] border border-[#23262d] rounded-xl shadow-2xl overflow-hidden flex flex-col animate-fade-in"
+        className="w-full max-w-xl bg-panel-dark border border-border-standard rounded-lg shadow-2xl overflow-hidden flex flex-col animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header */}
-        <div className="flex items-center px-4 py-3 border-b border-[#1c1f26] gap-3">
-          <Search className="w-4 h-4 text-zinc-400" />
+        <div className="flex items-center px-4 py-3 border-b border-border-subtle gap-3">
+          <Search className="w-4 h-4 text-text-tertiary" />
           <input
             autoFocus
             type="text"
@@ -126,17 +126,17 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
               }
             }}
             placeholder="Type a command or search..."
-            className="w-full bg-transparent text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none"
+            className="w-full bg-transparent text-xs text-text-primary placeholder:text-text-quaternary focus:outline-none"
           />
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300">
+          <button onClick={onClose} className="text-text-tertiary hover:text-text-primary cursor-pointer p-0.5">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Results List */}
-        <div className="max-h-80 overflow-y-auto p-2 space-y-1">
+        <div className="max-h-80 overflow-y-auto p-1.5 space-y-0.5">
           {filtered.length === 0 ? (
-            <div className="py-8 text-center text-xs text-zinc-500">No matching commands found.</div>
+            <div className="py-8 text-center text-xs text-text-quaternary">No matching commands found.</div>
           ) : (
             filtered.map((action, idx) => {
               const isSelected = idx === selectedIndex;
@@ -145,8 +145,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                   key={action.id}
                   onClick={() => handleSelect(idx)}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`flex items-center justify-between px-3 py-2 rounded text-xs cursor-pointer transition-colors ${
-                    isSelected ? 'bg-white text-black font-semibold' : 'text-zinc-300 hover:bg-zinc-900'
+                  className={`flex items-center justify-between px-3 py-2 rounded-md text-xs cursor-pointer transition-colors ${
+                    isSelected
+                      ? 'bg-brand-primary text-white font-medium'
+                      : 'text-text-secondary hover:bg-white/[0.04] hover:text-text-primary'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -154,9 +156,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                     <span>{action.title}</span>
                   </div>
                   {action.shortcut && (
-                    <kbd className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                      isSelected ? 'bg-black text-white' : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
-                    }`}>
+                    <kbd
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                        isSelected
+                          ? 'bg-white/20 text-white'
+                          : 'bg-white/[0.06] text-text-tertiary border border-border-subtle'
+                      }`}
+                    >
                       {action.shortcut}
                     </kbd>
                   )}
@@ -167,12 +173,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2 border-t border-[#1a1c22] bg-[#0c0d10] flex items-center justify-between text-[11px] text-zinc-500">
+        <div className="px-4 py-2 border-t border-border-subtle bg-panel-dark flex items-center justify-between text-[11px] text-text-tertiary">
           <div className="flex items-center gap-2">
             <span>Navigation:</span>
-            <kbd className="bg-[#181a20] px-1 py-0.5 rounded border border-[#242730]">↑</kbd>
-            <kbd className="bg-[#181a20] px-1 py-0.5 rounded border border-[#242730]">↓</kbd>
-            <kbd className="bg-[#181a20] px-1.5 py-0.5 rounded border border-[#242730]">↵</kbd>
+            <kbd className="bg-white/[0.05] px-1 py-0.5 rounded border border-border-subtle">↑</kbd>
+            <kbd className="bg-white/[0.05] px-1 py-0.5 rounded border border-border-subtle">↓</kbd>
+            <kbd className="bg-white/[0.05] px-1.5 py-0.5 rounded border border-border-subtle">↵</kbd>
           </div>
           <span>Commands</span>
         </div>

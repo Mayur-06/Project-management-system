@@ -10,6 +10,7 @@ import { TopNav } from '@/components/navigation/TopNav';
 import { KanbanBoard } from '@/components/issues/KanbanBoard';
 import { IssueListView } from '@/components/issues/IssueListView';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
+import { Button } from '@/components/ui/button';
 import { UserCheck, Plus, Layers } from 'lucide-react';
 
 export default function MyIssuesPage() {
@@ -234,24 +235,27 @@ export default function MyIssuesPage() {
               You are all caught up! When issues are assigned to you by teammates or created for you, they will appear right here.
             </p>
             <div className="flex items-center gap-3">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues`)}
-                className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors cursor-pointer"
+                className="gap-2 text-xs bg-panel-dark hover:bg-surface-elevated border-border-subtle hover:border-border-hover text-text-secondary hover:text-text-primary"
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>View Team Issues</span>
-              </button>
-              <button
+              </Button>
+              <Button
+                size="sm"
                 onClick={() => {
                   const defaultState = states.find((s) => s.is_default) || states[0];
                   const query = defaultState?.id ? `?stateId=${defaultState.id}` : '';
                   router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new${query}`);
                 }}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors cursor-pointer shadow-xs"
+                className="gap-1.5 text-xs font-medium bg-brand-primary hover:bg-brand-hover text-white shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Create New Issue</span>
-              </button>
+              </Button>
             </div>
           </div>
         ) : viewMode === 'board' ? (
