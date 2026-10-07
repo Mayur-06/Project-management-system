@@ -161,7 +161,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     },
     {
       label: 'Settings',
-      href: effectiveTeamKey ? `/${currentOrgSlug}/settings/workspace` : `/${currentOrgSlug}/settings/workspace`,
+      href: `/${currentOrgSlug}/settings/workspace`,
       icon: <Settings className="w-4 h-4 text-zinc-300" />,
     },
   ];
@@ -272,7 +272,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             Workspace Views
           </div>
           {navItems.map((item) => {
-            const isActive = pathname?.startsWith(item.href);
+            const isActive = item.label === 'Settings'
+              ? pathname?.includes('/settings')
+              : pathname?.startsWith(item.href);
             return (
               <Link
                 key={item.label}
@@ -403,7 +405,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             <LogOut className="w-3.5 h-3.5" />
           </button>
           <Link
-            href={effectiveTeamKey ? `/${currentOrgSlug}/settings/workspace` : `/${currentOrgSlug}/settings/workspace`}
+            href={`/${currentOrgSlug}/settings/workspace`}
             className="p-1.5 rounded-md hover:bg-[#1a1d22] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
             title="Settings (Cmd+,)"
           >

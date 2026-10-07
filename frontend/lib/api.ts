@@ -224,27 +224,39 @@ export const api = {
 
   // Settings
   async getUserProfile(): Promise<any | null> {
-    return await fetchWithAuth<any>(`/users/me/profile`);
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.user || null;
+  },
+
+  async updateCurrentUserProfile(name?: string, jobDescription?: string): Promise<boolean> {
+    const dataToUpdate: Record<string, any> = {};
+    if (name !== undefined) dataToUpdate.full_name = name;
+    if (jobDescription !== undefined) dataToUpdate.job_description = jobDescription;
+
+    const { error } = await supabase.auth.updateUser({
+      data: dataToUpdate,
+    });
+    return !error;
   },
 
   async getWorkspaceSettings(orgSlug: string): Promise<Organization | null> {
-    return await fetchWithAuth<Organization>(`/organizations/${orgSlug}/settings/workspace`);
+    return await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`);
   },
 
   async updateWorkspaceSettings(orgSlug: string, updates: Partial<Organization>): Promise<Organization | null> {
-    return await fetchWithAuth<Organization>(`/organizations/${orgSlug}/settings/workspace`, {
+    return await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
   },
 
   async getWorkspaceMembersSettings(orgSlug: string): Promise<WorkspaceMember[]> {
-    const data = await fetchWithAuth<WorkspaceMember[]>(`/organizations/${orgSlug}/settings/members`);
+    const data = await fetchWithAuth<WorkspaceMember[]>(`/workspaces/${orgSlug}/members`);
     return data || [];
   },
 
   async inviteWorkspaceMember(orgSlug: string, email: string, role: string = 'member'): Promise<WorkspaceMember | null> {
-    return await fetchWithAuth<WorkspaceMember>(`/organizations/${orgSlug}/settings/members/invite`, {
+    return await fetchWithAuth<WorkspaceMember>(`/workspaces/${orgSlug}/members/invite`, {
       method: 'POST',
       body: JSON.stringify({ email, role }),
     });

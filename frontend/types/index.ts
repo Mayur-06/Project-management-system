@@ -11,6 +11,7 @@ export interface User {
   email: string;
   name: string;
   avatar_url?: string;
+  job_description?: string;
 }
 
 export interface Organization {

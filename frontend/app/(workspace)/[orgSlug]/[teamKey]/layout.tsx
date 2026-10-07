@@ -8,7 +8,7 @@ import { AIAssistantModal } from '@/components/ai/AIAssistantModal';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 import { Issue, Organization, Team, User, WorkspaceMember, WorkflowState } from '@/types';
 import { api } from '@/lib/api';
-import { WorkspaceContext } from '@/lib/WorkspaceContext';
+import { WorkspaceContext, useWorkspace } from '@/lib/WorkspaceContext';
 import { supabase } from '@/lib/supabase/client';
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
@@ -17,55 +17,20 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string) || '';
 
-  const [organization, setOrganization] = useState<Organization | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const parentContext = useWorkspace();
+  const organization = parentContext.organization;
+  const teams: Team[] = parentContext.teams || [];
+  const currentUser = parentContext.currentUser;
+  const workspaceUsers: WorkspaceMember[] = parentContext.workspaceUsers || [];
 
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isAIAskOpen, setIsAIAskOpen] = useState(false);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
-  const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceMember[]>([]);
 
   const handleOpenNewIssue = () => {
     const targetTeam = (teamKey || teams[0]?.key || 'eng').toLowerCase();
     router.push(`/${orgSlug}/${targetTeam}/issues/new`);
   };
-
-  useEffect(() => {
-    // Resolve auth token first so all downstream API calls can proceed immediately
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const user = session?.user;
-      if (user) {
-        if (session.access_token && typeof window !== 'undefined') {
-          localStorage.setItem('supabase_access_token', session.access_token);
-        }
-        setCurrentUser({
-          id: user.id,
-          email: user.email || 'user@example.com',
-          name: (user.user_metadata?.full_name as string) || user.email?.split('@')[0] || 'Workspace User',
-          avatar_url: (user.user_metadata?.avatar_url as string) || undefined,
-        });
-      } else {
-        setCurrentUser({
-          id: 'anonymous-user',
-          email: 'member@workspace.com',
-          name: 'Workspace Member',
-        });
-      }
-    }).then(() => {
-      // Fire all workspace-level fetches in parallel AFTER token is available
-      Promise.all([
-        api.getWorkspace(orgSlug),
-        api.getTeams(orgSlug),
-        api.getWorkspaceMembers(orgSlug),
-      ]).then(([org, fetchedTeams, members]) => {
-        if (org) setOrganization(org);
-        if (fetchedTeams) setTeams(fetchedTeams);
-        const active = (members || []).filter((m) => m.status !== 'invited' && m.user);
-        setWorkspaceUsers(active);
-      }).catch(() => {});
-    });
-  }, [orgSlug]);
 
   const handleOpenAIAsk = () => {
     const targetTeam = (teamKey || teams[0]?.key || 'eng').toLowerCase();
