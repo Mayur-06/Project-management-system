@@ -23,6 +23,7 @@ class IssueCreate(BaseModel):
     estimate: Optional[int] = Field(None, ge=0)
     state_id: Optional[str] = None
     assignee_id: Optional[str] = None
+    assigned_by_id: Optional[str] = None
     project_id: Optional[str] = None
     cycle_id: Optional[str] = None
     parent_id: Optional[str] = None
@@ -38,6 +39,7 @@ class IssueUpdate(BaseModel):
     estimate: Optional[int] = Field(None, ge=0)
     state_id: Optional[str] = None
     assignee_id: Optional[str] = None
+    assigned_by_id: Optional[str] = None
     project_id: Optional[str] = None
     cycle_id: Optional[str] = None
     parent_id: Optional[str] = None
@@ -109,7 +111,10 @@ class IssueResponse(BaseModel):
     state: Optional[Dict[str, Any]] = None
     assignee_id: Optional[str] = None
     assignee: Optional[IssueAssigneeUser] = None
+    assigned_by_id: Optional[str] = None
+    assigned_by: Optional[IssueAssigneeUser] = None
     creator_id: str
+    creator: Optional[IssueAssigneeUser] = None
     project_id: Optional[str] = None
     cycle_id: Optional[str] = None
     parent_id: Optional[str] = None

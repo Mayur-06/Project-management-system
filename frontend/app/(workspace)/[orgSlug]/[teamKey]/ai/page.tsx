@@ -67,9 +67,15 @@ export default function AIPage() {
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
   const conversationId = searchParams.get('conversationId') || '';
 
-  const [activeThreadId, setActiveThreadId] = useState<string>(
-    conversationId || `conv_${Date.now()}`
-  );
+  const [activeThreadId, setActiveThreadId] = useState<string>(conversationId || '');
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    if (!activeThreadId) {
+      setActiveThreadId(conversationId || `conv_${Date.now()}`);
+    }
+  }, [conversationId, activeThreadId]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [organizationId, setOrganizationId] = useState<string>('');
 
@@ -379,8 +385,11 @@ export default function AIPage() {
       <div className="px-6 py-2 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-[11px] text-zinc-500 font-mono">Thread:</span>
-          <span className="text-[11px] font-mono text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
-            {activeThreadId}
+          <span
+            suppressHydrationWarning
+            className="text-[11px] font-mono text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800"
+          >
+            {isMounted ? (activeThreadId || conversationId) : conversationId}
           </span>
         </div>
 
@@ -549,7 +558,7 @@ export default function AIPage() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask agent to triage, plan, search issues, or execute actions..."
+            placeholder="Ask agent to plan, search issues, or execute actions..."
             disabled={isStreaming}
             className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-700 rounded-lg pl-3.5 pr-20 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none transition-colors"
           />

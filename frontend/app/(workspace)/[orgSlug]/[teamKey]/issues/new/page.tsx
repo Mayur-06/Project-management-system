@@ -314,10 +314,10 @@ function CreateIssueForm() {
               </select>
             </div>
 
-            {/* Assignee Selector */}
+            {/* Assigned to Selector */}
             <div className="space-y-1.5">
               <label className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
-                Assignee
+                Assigned to
               </label>
               <select
                 value={assigneeId}

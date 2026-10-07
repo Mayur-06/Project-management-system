@@ -101,24 +101,45 @@ class IssueService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to issue")
         return issue
 
-    @classmethod
-    def _enrich_issue_assignee(cls, item: dict, db: Client, cache: Optional[dict] = None) -> dict:
-        assignee_id = item.get("assignee_id")
-        if not assignee_id:
-            return item
-        if cache is not None and assignee_id in cache:
-            item["assignee"] = cache[assignee_id]
-            return item
-        email, name = WorkspaceService.resolve_user_info(assignee_id, db)
-        assignee_meta = {
-            "id": assignee_id,
+    @staticmethod
+    def _resolve_user_meta(uid: Optional[str], db: Client, cache: Optional[dict] = None) -> Optional[dict]:
+        if not uid:
+            return None
+        if cache is not None and uid in cache:
+            return cache[uid]
+        email, name = WorkspaceService.resolve_user_info(uid, db)
+        meta = {
+            "id": uid,
             "email": email,
             "name": name,
         }
         if cache is not None:
-            cache[assignee_id] = assignee_meta
-        item["assignee"] = assignee_meta
+            cache[uid] = meta
+        return meta
+
+    @classmethod
+    def _enrich_issue_users(
+        cls,
+        item: dict,
+        db: Client,
+        user_cache: Optional[dict] = None,
+        state_cache: Optional[dict] = None,
+    ) -> dict:
+        item["assignee"] = cls._resolve_user_meta(item.get("assignee_id"), db, user_cache)
+        
+        assigned_by_id = item.get("assigned_by_id")
+        if not assigned_by_id and item.get("assignee_id"):
+            assigned_by_id = item.get("creator_id")
+        item["assigned_by"] = cls._resolve_user_meta(assigned_by_id, db, user_cache)
+        item["creator"] = cls._resolve_user_meta(item.get("creator_id"), db, user_cache)
+
+        if state_cache and item.get("state_id") in state_cache:
+            item["state"] = state_cache[item.get("state_id")]
         return item
+
+    @classmethod
+    def _enrich_issue_assignee(cls, item: dict, db: Client, cache: Optional[dict] = None) -> dict:
+        return cls._enrich_issue_users(item, db, cache)
 
     @classmethod
     def list_issues(
@@ -151,8 +172,18 @@ class IssueService:
 
         query = query.order("sort_order")
         res = query.execute()
+
+        # Cache workflow states for the team to enrich issue.state
+        state_cache = {}
+        try:
+            st_res = db.table("workflow_states").select("id, name, color, category, position, is_default, team_id, created_at").eq("team_id", team_id).execute()
+            if st_res.data:
+                state_cache = {s["id"]: s for s in st_res.data}
+        except Exception:
+            pass
+
         user_cache: dict = {}
-        enriched = [cls._enrich_issue_assignee(item, db, user_cache) for item in (res.data or [])]
+        enriched = [cls._enrich_issue_users(item, db, user_cache, state_cache) for item in (res.data or [])]
         return [IssueResponse(**item) for item in enriched]
 
     @classmethod
@@ -176,7 +207,7 @@ class IssueService:
 
         team = cls._verify_team_member(resolved_team_id, user_id, db)
 
-        # 1. State resolution (Strict Cross-Team Triage Invariant)
+        # 1. State resolution
         target_state_id = data.state_id
 
         # Determine if creator is a member of the target destination team
@@ -200,7 +231,7 @@ class IssueService:
             is_team_member = False
 
         # Determine target workflow state
-        # All issues route directly to default active state (no triage routing)
+        # All issues route directly to default active state
         if target_state_id:
             try:
                 chk_state = (
@@ -271,6 +302,7 @@ class IssueService:
             "estimate": data.estimate,
             "state_id": target_state_id,
             "assignee_id": data.assignee_id,
+            "assigned_by_id": data.assigned_by_id or (user_id if data.assignee_id else None),
             "creator_id": user_id,
             "project_id": data.project_id,
             "cycle_id": data.cycle_id,
@@ -374,6 +406,16 @@ class IssueService:
                 if current_issue.get(field) != val_str:
                     changes[field] = {"old": current_issue.get(field), "new": val_str}
 
+        # Dynamically record who assigned the issue whenever assignee_id changes
+        if "assignee_id" in changes:
+            new_assignee = update_dict.get("assignee_id")
+            if new_assignee:
+                update_dict["assigned_by_id"] = user_id
+                changes["assigned_by_id"] = {"old": current_issue.get("assigned_by_id"), "new": user_id}
+            else:
+                update_dict["assigned_by_id"] = None
+                changes["assigned_by_id"] = {"old": current_issue.get("assigned_by_id"), "new": None}
+
         update_dict["version"] = current_issue["version"] + 1
         update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
         if data.client_session_id:
@@ -393,7 +435,7 @@ class IssueService:
                     "current_state": fresh_issue,
                 }
             )
-        updated = res.data[0]
+        updated = {**current_issue, **update_dict, **(res.data[0] if (res.data and isinstance(res.data[0], dict)) else {})}
 
         if changes:
             db.table("activity_logs").insert({

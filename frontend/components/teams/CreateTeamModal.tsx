@@ -147,7 +147,7 @@ export const CreateTeamModal: React.FC<CreateTeamModalProps> = ({
             </div>
             <p className="text-[11px] leading-relaxed text-zinc-400">
               New teams are automatically provisioned with the standard 6 workflow states: 
-              <span className="font-mono text-zinc-300 ml-1">Triage, Backlog, Todo, In Progress, In Review, Done, Canceled</span>.
+              <span className="font-mono text-zinc-300 ml-1">Backlog, Todo, In Progress, In Review, Done, Canceled</span>.
             </p>
           </div>
 

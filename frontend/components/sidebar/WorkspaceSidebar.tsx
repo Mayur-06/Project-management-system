@@ -10,8 +10,10 @@ import {
   Command,
   Plus,
   ChevronDown,
+  ChevronRight,
   Settings,
   User as UserIcon,
+  UserCheck,
   LogOut,
   Inbox,
   List,
@@ -63,6 +65,18 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const orgName = orgState?.name || organization?.name || currentOrgSlug.toUpperCase();
   const activeTeam = teams.find((t) => t.key.toUpperCase() === currentTeamKey.toUpperCase()) || teams[0] || null;
   const effectiveTeamKey = (currentTeamKey || activeTeam?.key || '').toLowerCase();
+
+  const [expandedTeams, setExpandedTeams] = useState<Record<string, boolean>>({});
+
+  const toggleTeamExpanded = (key: string) => {
+    setExpandedTeams((prev) => {
+      const isCurrentlyExpanded = prev[key.toUpperCase()] ?? (currentTeamKey.toUpperCase() === key.toUpperCase());
+      return {
+        ...prev,
+        [key.toUpperCase()]: !isCurrentlyExpanded,
+      };
+    });
+  };
 
   // Load user workspaces for the switcher
   useEffect(() => {
@@ -136,9 +150,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       icon: <Inbox className="w-4 h-4 text-zinc-300" />,
     },
     {
-      label: 'Issues',
-      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/issues` : `/${currentOrgSlug}/issues`,
-      icon: <Layers className="w-4 h-4 text-zinc-300" />,
+      label: 'My Issues',
+      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/my-issues` : `/${currentOrgSlug}/my-issues`,
+      icon: <UserCheck className="w-4 h-4 text-zinc-300" />,
     },
     {
       label: 'AI Assistant',
@@ -300,28 +314,59 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
             {teams.map((team) => {
               const isTeamActive = currentTeamKey.toUpperCase() === team.key.toUpperCase();
+              const isExpanded = !!expandedTeams[team.key.toUpperCase()];
+              const issuesHref = `/${currentOrgSlug}/${team.key.toLowerCase()}/issues`;
+              const isIssuesActive = pathname?.startsWith(issuesHref);
+
               return (
-                <Link
-                  key={team.id}
-                  href={`/${currentOrgSlug}/${team.key.toLowerCase()}/issues`}
-                  className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors ${
-                    isTeamActive
-                      ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-4 h-4 rounded text-[10px] flex items-center justify-center font-bold ${
-                        isTeamActive ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-300'
-                      }`}
-                    >
-                      {team.key.slice(0, 2)}
+                <div key={team.id} className="space-y-0.5">
+                  <div
+                    onClick={() => toggleTeamExpanded(team.key)}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors cursor-pointer group select-none ${
+                      isTeamActive
+                        ? 'text-white font-medium bg-zinc-900/60'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <ChevronRight
+                        className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${
+                          isExpanded ? 'rotate-90 text-zinc-300' : ''
+                        }`}
+                      />
+                      <div
+                        className={`w-4 h-4 rounded text-[10px] flex items-center justify-center font-bold shrink-0 ${
+                          isTeamActive ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-300'
+                        }`}
+                      >
+                        {team.key.slice(0, 2)}
+                      </div>
+                      <span className="truncate">{team.name}</span>
                     </div>
-                    <span>{team.name}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono group-hover:text-zinc-400 shrink-0">
+                      {team.key}
+                    </span>
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-mono">{team.key}</span>
-                </Link>
+
+                  {/* Sub-item: Team > Issues */}
+                  {isExpanded && (
+                    <div className="pl-6 pr-1 py-0.5 space-y-0.5 animate-fade-in">
+                      <Link
+                        href={issuesHref}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors ${
+                          isIssuesActive
+                            ? 'bg-zinc-900 text-white font-medium border border-zinc-700/80'
+                            : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Layers className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Issues</span>
+                        </div>
+                      </Link>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

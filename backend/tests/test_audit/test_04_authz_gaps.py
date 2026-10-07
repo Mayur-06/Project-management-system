@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException, status
 
 from app.schemas.issue import IssueUpdate, BatchUpdateRequest, BatchReorderRequest
-from app.schemas.phase4 import TriageClassifyRequest, BreakdownStartRequest
+from app.schemas.phase4 import BreakdownStartRequest
 from app.services.issue_service import IssueService
 from app.services.phase4_service import Phase4Service
 
@@ -135,19 +135,6 @@ def test_C6_batch_reorder_increments_version():
     assert iss_table.update.called
     update_payload = iss_table.update.call_args[0][0]
     assert update_payload.get("version") == 6, "C-6 DEFECT: batch_reorder failed to increment version!"
-
-
-def test_C7_classify_issue_verifies_membership():
-    """C-7: Verify classify_issue checks caller organization membership."""
-    mock_db = create_mock_db(member_data=[])
-    mock_db.table("teams").select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
-        data=[{"id": MOCK_TEAM_ID, "organization_id": MOCK_ORG_ID, "key": "ENG"}]
-    )
-
-    req = TriageClassifyRequest(team_id=MOCK_TEAM_ID, title="Authentication crash")
-    with pytest.raises(HTTPException) as exc:
-        Phase4Service.classify_issue(req, "non_member_id", mock_db)
-    assert exc.value.status_code == status.HTTP_403_FORBIDDEN
 
 
 def test_C7_start_breakdown_verifies_membership():

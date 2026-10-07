@@ -76,6 +76,8 @@ export interface Issue {
   state?: WorkflowState;
   assignee_id?: string;
   assignee?: User;
+  assigned_by_id?: string;
+  assigned_by?: User;
   creator_id: string;
   creator?: User;
   project_id?: string;

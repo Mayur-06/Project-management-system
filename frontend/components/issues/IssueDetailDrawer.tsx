@@ -1036,9 +1036,9 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               </select>
             </div>
 
-            {/* Assignee */}
+            {/* Assigned to */}
             <div>
-              <label className="text-[11px] text-zinc-400 block mb-1">Assignee</label>
+              <label className="text-[11px] text-zinc-400 block mb-1">Assigned to</label>
               <select
                 value={issue.assignee_id || ''}
                 onChange={async (e) => {
@@ -1064,6 +1064,22 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Assignment provenance */}
+            <div className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Assigned by</span>
+                <span className="text-zinc-300 font-medium truncate max-w-[120px]">
+                  {issue.assigned_by?.name || issue.creator?.name || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-zinc-800/40 pt-1.5">
+                <span className="text-zinc-500">Created by</span>
+                <span className="text-zinc-300 font-medium truncate max-w-[120px]">
+                  {issue.creator?.name || '—'}
+                </span>
+              </div>
             </div>
 
             {/* Estimate Points */}

@@ -2,14 +2,14 @@
 
 import React, { useMemo } from 'react';
 import { Plus, Trash2, CornerDownRight, Repeat } from 'lucide-react';
-import { Issue, WorkflowState } from '@/types';
+import { Issue, WorkflowState, User } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
 
 interface KanbanBoardProps {
   states: WorkflowState[];
   issues: Issue[];
-  users?: { id: string; name?: string; email?: string; avatar_url?: string }[];
+  users?: (User | { id: string; user_id?: string; user?: User; name?: string; email?: string; avatar_url?: string })[];
   onSelectIssue: (issue: Issue) => void;
   onOpenNewIssueWithState: (stateId: string) => void;
   onMoveIssueState: (issueId: string, newStateId: string, prevRank?: string, nextRank?: string) => void;
@@ -27,7 +27,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onDeleteIssue,
   onDragStateChange,
 }) => {
-  // All workflow states now displayed on board (no triage exclusion)
   const activeStates = states;
 
   const handleDragStart = (e: React.DragEvent, issueId: string) => {
@@ -173,26 +172,45 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   <div className="flex items-center justify-between pt-1 border-t border-zinc-800/80 text-[11px] text-zinc-400">
                     <div className="flex items-center gap-1.5">
                       {(() => {
-                        const resolvedAssignee = issue.assignee || (issue.assignee_id ? users.find((u) => u.id === issue.assignee_id) : null);
-                        if (!resolvedAssignee) {
+                        const resolvedAssignee =
+                          issue.assignee ||
+                          (issue.assignee_id
+                            ? (users.find(
+                                (u: any) =>
+                                  u.id === issue.assignee_id ||
+                                  u.user_id === issue.assignee_id ||
+                                  u.user?.id === issue.assignee_id
+                              ) as any)
+                            : null);
+
+                        const assigneeUser = resolvedAssignee?.user || resolvedAssignee;
+                        if (!assigneeUser) {
                           return <span className="text-[10px] text-zinc-500">Unassigned</span>;
                         }
-                        const name = resolvedAssignee.name || resolvedAssignee.email || 'Member';
-                        const initials = name
-                          .split(' ')
-                          .filter(Boolean)
-                          .map((n: string) => n[0])
-                          .slice(0, 2)
-                          .join('')
-                          .toUpperCase() || 'M';
+                        const name = assigneeUser.name || assigneeUser.email || 'Member';
+                        const initials =
+                          name
+                            .split(' ')
+                            .filter(Boolean)
+                            .map((n: string) => n[0])
+                            .slice(0, 2)
+                            .join('')
+                            .toUpperCase() || 'M';
 
-                        if (resolvedAssignee.avatar_url) {
+                        const assignedByName =
+                          issue.assigned_by?.name ||
+                          issue.assigned_by?.email ||
+                          issue.creator?.name ||
+                          issue.creator?.email;
+                        const tooltipText = `Assigned to: ${name}${assignedByName ? ` (by ${assignedByName})` : ''}`;
+
+                        if (assigneeUser.avatar_url) {
                           return (
                             <img
-                              src={resolvedAssignee.avatar_url}
+                              src={assigneeUser.avatar_url}
                               alt={name}
                               className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
-                              title={`Assigned to ${name}`}
+                              title={tooltipText}
                             />
                           );
                         }
@@ -200,7 +218,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         return (
                           <div
                             className="w-4 h-4 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[8px] font-bold"
-                            title={`Assigned to ${name}`}
+                            title={tooltipText}
                           >
                             {initials}
                           </div>

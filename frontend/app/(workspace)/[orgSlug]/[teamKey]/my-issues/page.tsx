@@ -10,19 +10,18 @@ import { TopNav } from '@/components/navigation/TopNav';
 import { KanbanBoard } from '@/components/issues/KanbanBoard';
 import { IssueListView } from '@/components/issues/IssueListView';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
+import { UserCheck, Plus, Layers } from 'lucide-react';
 
-export default function IssuesPage() {
+export default function MyIssuesPage() {
   const params = useParams();
   const router = useRouter();
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
-  // ─── Workspace data from layout context — no extra API calls needed ───
-  const { currentTeam, workspaceUsers, teams: workspaceTeams } = useWorkspace();
+  const { currentTeam, workspaceUsers, currentUser, teams: workspaceTeams } = useWorkspace();
 
-  // Map WorkspaceMember[] to User[] for CreateIssueModal
-  const modalUsers = useMemo(() => 
-    workspaceUsers.map(m => m.user).filter((u): u is User => u !== undefined),
+  const modalUsers = useMemo(
+    () => workspaceUsers.map((m) => m.user).filter((u): u is User => u !== undefined),
     [workspaceUsers]
   );
 
@@ -32,13 +31,8 @@ export default function IssuesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState('');
-  // Start false — only flip true inside loadData so the spinner
-  // doesn't show before we even know which team to load for.
   const [isLoading, setIsLoading] = useState(false);
 
-  // ─── Active Drag Interruption Guard ──────────────────────────────────────
-  // Prevents incoming CDC/Broadcast events from mutating the board while user
-  // is actively dragging a card, avoiding DOM detachment or cursor snatching.
   const isDraggingRef = useRef(false);
   const pendingUpdatesRef = useRef<(() => void)[]>([]);
 
@@ -59,20 +53,24 @@ export default function IssuesPage() {
     }
   };
 
-  // ─── Load issues and workflow states once team is known ───────
   const loadData = async (teamId: string) => {
     setIsLoading(true);
-    const [fetchedIssues, fetchedStates] = await Promise.all([
-      api.getIssues({ teamId }),
-      api.getWorkflowStates(teamId),
-    ]);
-    setIssues(fetchedIssues);
-    setStates(fetchedStates);
-    if (fetchedStates.length > 0) {
-      const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
-      setInitialStateId(defaultState.id);
+    try {
+      const [fetchedIssues, fetchedStates] = await Promise.all([
+        api.getIssues({ teamId }),
+        api.getWorkflowStates(teamId),
+      ]);
+      setIssues(fetchedIssues);
+      setStates(fetchedStates);
+      if (fetchedStates.length > 0) {
+        const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
+        setInitialStateId(defaultState.id);
+      }
+    } catch (err) {
+      console.error('Failed to load my issues data:', err);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -81,7 +79,7 @@ export default function IssuesPage() {
     }
   }, [currentTeam?.id]);
 
-  // ─── Supabase Realtime Subscription with Self-Echo Suppression ─────────
+  // Realtime updates
   useRealtimeBoard({
     teamId: currentTeam?.id,
     onIssueCreated: (newIssue) => {
@@ -94,7 +92,9 @@ export default function IssuesPage() {
     },
     onIssueUpdated: (updatedIssue) => {
       queueOrExecute(() => {
-        setIssues((prev) => prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i)));
+        setIssues((prev) =>
+          prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i))
+        );
       });
     },
     onIssueMoved: ({ id, state_id, sort_order }) => {
@@ -116,7 +116,7 @@ export default function IssuesPage() {
     },
   });
 
-  // ─── Local window events for immediate optimistic feedback ─────────────
+  // Local window events for optimistic updates
   useEffect(() => {
     const handleCreated = (e: any) => {
       setIssues((prev) => {
@@ -143,25 +143,28 @@ export default function IssuesPage() {
     };
   }, []);
 
-  // ─── Memoized filtering — recomputes only when inputs change ──────────
+  // Filter issues strictly assigned to current logged-in user
+  const myAssignedIssues = useMemo(() => {
+    if (!currentUser?.id) return issues;
+    return issues.filter((i) => i.assignee_id === currentUser.id);
+  }, [issues, currentUser?.id]);
+
   const filteredIssues = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return issues.filter((i) => {
-      const matchesSearch =
+    return myAssignedIssues.filter((i) => {
+      return (
         i.title.toLowerCase().includes(q) ||
-        i.identifier.toLowerCase().includes(q);
-      return matchesSearch;
+        i.identifier.toLowerCase().includes(q)
+      );
     });
-  }, [issues, searchQuery]);
+  }, [myAssignedIssues, searchQuery]);
 
-  // ─── Issue actions ─────────────────────────────────────────────────────
   const handleMoveIssueState = async (
     issueId: string,
     newStateId: string,
     prevRank?: string,
     nextRank?: string
   ) => {
-    // Clean rank computation without malformed double ':' terminators (H-1B)
     let optimisticRank = '0|h00000:';
     if (prevRank && nextRank) {
       const pClean = prevRank.replace(/^0\|/, '').replace(/:$/, '');
@@ -174,12 +177,12 @@ export default function IssuesPage() {
       optimisticRank = `0|0${nClean}:`;
     }
 
-    // Optimistic UI update
     setIssues((prev) =>
-      prev.map((i) => (i.id === issueId ? { ...i, state_id: newStateId, sort_order: optimisticRank } : i))
+      prev.map((i) =>
+        i.id === issueId ? { ...i, state_id: newStateId, sort_order: optimisticRank } : i
+      )
     );
 
-    // Persist to server and reconcile accurate rank
     const updated = await api.reorderIssue(issueId, newStateId, prevRank, nextRank);
     if (updated) {
       setIssues((prev) =>
@@ -197,9 +200,9 @@ export default function IssuesPage() {
     <div className="flex flex-col flex-1 h-full overflow-hidden">
       {/* Top Navigation */}
       <TopNav
-        title={`${currentTeam?.key || teamKey || 'Team'} Issues`}
-        subtitle={`${filteredIssues.length} active`}
-        breadcrumbs={[orgSlug || 'Workspace', currentTeam?.key || teamKey || 'Issues', 'Issues']}
+        title="My Issues"
+        subtitle={`${filteredIssues.length} assigned to you`}
+        breadcrumbs={[orgSlug || 'Workspace', 'My Issues']}
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
         searchQuery={searchQuery}
@@ -215,7 +218,37 @@ export default function IssuesPage() {
       <div className="flex-1 overflow-y-auto">
         {isLoading ? (
           <div className="flex items-center justify-center h-64 text-xs text-zinc-500">
-            Loading team board...
+            Loading your assigned issues...
+          </div>
+        ) : filteredIssues.length === 0 && !searchQuery ? (
+          <div className="flex flex-col items-center justify-center h-[calc(100vh-12rem)] text-center px-4">
+            <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-4 text-zinc-400 shadow-inner">
+              <UserCheck className="w-6 h-6 text-zinc-300" />
+            </div>
+            <h3 className="text-sm font-semibold text-white mb-1">No issues assigned to you</h3>
+            <p className="text-xs text-zinc-400 max-w-sm mb-6 leading-relaxed">
+              You are all caught up! When issues are assigned to you by teammates or created for you, they will appear right here.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues`)}
+                className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition-colors cursor-pointer"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>View Team Issues</span>
+              </button>
+              <button
+                onClick={() => {
+                  const defaultState = states.find((s) => s.is_default) || states[0];
+                  const query = defaultState?.id ? `?stateId=${defaultState.id}` : '';
+                  router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new${query}`);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors cursor-pointer shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create New Issue</span>
+              </button>
+            </div>
           </div>
         ) : viewMode === 'board' ? (
           <KanbanBoard

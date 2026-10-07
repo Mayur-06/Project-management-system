@@ -11,7 +11,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.issue import IssueCreate, IssuePriority
-from app.schemas.phase3 import CycleCreate
 from app.schemas.phase4 import ProposedSubtask, BreakdownResumeRequest
 from app.schemas.workspace import MemberInviteRequest
 from app.core.lexorank import calculate_midpoint_rank, _rank_before

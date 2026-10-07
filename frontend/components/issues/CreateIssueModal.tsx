@@ -98,7 +98,6 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     }
   }, [users, selectedTeamId, teamId]);
 
-  // All issues route to default active state (no triage routing)
   useEffect(() => {
     if (activeStates.length > 0) {
       const isCurrentValid = activeStates.some((s) => s.id === stateId);
@@ -304,9 +303,9 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               </select>
             </div>
 
-            {/* Assignee */}
+            {/* Assigned to */}
             <div>
-              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Assignee</label>
+              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Assigned to</label>
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}

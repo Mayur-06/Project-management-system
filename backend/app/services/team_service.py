@@ -8,7 +8,6 @@ from app.services.workspace_service import WorkspaceService
 
 
 DEFAULT_WORKFLOW_STATES = [
-    {"name": "Triage", "color": "#eab308", "category": StateCategory.TRIAGE.value, "position": "0|h00000:", "is_default": False},
     {"name": "Backlog", "color": "#94a3b8", "category": StateCategory.BACKLOG.value, "position": "0|h10000:", "is_default": False},
     {"name": "Todo", "color": "#e2e8f0", "category": StateCategory.UNSTARTED.value, "position": "0|h20000:", "is_default": True},
     {"name": "In Progress", "color": "#f59e0b", "category": StateCategory.STARTED.value, "position": "0|h30000:", "is_default": False},
