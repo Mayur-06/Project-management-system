@@ -1,6 +1,7 @@
 import React from 'react';
 import { IssuePriority } from '@/types';
 import { AlertCircle, ArrowUp, ArrowRight, ArrowDown, Minus } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface PriorityBadgeProps {
   priority: IssuePriority;
@@ -11,34 +12,34 @@ interface PriorityBadgeProps {
 export const PriorityBadge: React.FC<PriorityBadgeProps> = ({ priority, showLabel = false, className = '' }) => {
   const configs: Record<IssuePriority, { icon: React.ReactNode; color: string; label: string; bg: string }> = {
     urgent: {
-      icon: <AlertCircle className="w-3.5 h-3.5 text-white" />,
-      color: 'text-white font-semibold',
+      icon: <AlertCircle className="w-3.5 h-3.5 text-priority-urgent" />,
+      color: 'text-priority-urgent font-medium',
       label: 'Urgent',
-      bg: 'bg-white text-black border-white',
+      bg: 'bg-priority-urgent/10 text-priority-urgent border-priority-urgent/30',
     },
     high: {
-      icon: <ArrowUp className="w-3.5 h-3.5 text-zinc-200" />,
-      color: 'text-zinc-200',
+      icon: <ArrowUp className="w-3.5 h-3.5 text-priority-high" />,
+      color: 'text-priority-high font-medium',
       label: 'High',
-      bg: 'bg-zinc-800 text-zinc-200 border-zinc-700',
+      bg: 'bg-priority-high/10 text-priority-high border-priority-high/30',
     },
     medium: {
-      icon: <ArrowRight className="w-3.5 h-3.5 text-zinc-300" />,
-      color: 'text-zinc-300',
+      icon: <ArrowRight className="w-3.5 h-3.5 text-priority-medium" />,
+      color: 'text-priority-medium',
       label: 'Medium',
-      bg: 'bg-zinc-900 text-zinc-300 border-zinc-800',
+      bg: 'bg-priority-medium/10 text-priority-medium border-priority-medium/25',
     },
     low: {
-      icon: <ArrowDown className="w-3.5 h-3.5 text-zinc-400" />,
-      color: 'text-zinc-400',
+      icon: <ArrowDown className="w-3.5 h-3.5 text-priority-low" />,
+      color: 'text-priority-low',
       label: 'Low',
-      bg: 'bg-zinc-900/60 text-zinc-400 border-zinc-800',
+      bg: 'bg-priority-low/10 text-priority-low border-priority-low/20',
     },
     none: {
-      icon: <Minus className="w-3.5 h-3.5 text-zinc-500" />,
-      color: 'text-zinc-500',
+      icon: <Minus className="w-3.5 h-3.5 text-text-quaternary" />,
+      color: 'text-text-tertiary',
       label: 'None',
-      bg: 'bg-zinc-950 text-zinc-500 border-zinc-900',
+      bg: 'bg-white/[0.02] text-text-tertiary border-border-subtle',
     },
   };
 
@@ -46,7 +47,11 @@ export const PriorityBadge: React.FC<PriorityBadgeProps> = ({ priority, showLabe
 
   return (
     <div
-      className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded border text-xs font-medium ${current.bg} ${className}`}
+      className={cn(
+        'inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded border text-xs font-medium select-none',
+        current.bg,
+        className
+      )}
       title={`Priority: ${current.label}`}
     >
       {current.icon}

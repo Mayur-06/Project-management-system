@@ -24,11 +24,15 @@ import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAt
 import { api } from '@/lib/api';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
+import { StatusPicker } from '@/components/ui/StatusPicker';
+import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
+import { IssueTitleEditor } from '@/components/issues/IssueTitleEditor';
+import { IssueDescriptionEditor } from '@/components/editor/IssueDescriptionEditor';
+import { toast } from 'sonner';
 
 interface ProposedSubtaskItem {
   title: string;
   description?: string;
-  estimate?: number;
   priority?: IssuePriority;
 }
 
@@ -69,7 +73,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   // Manual subtask creation state
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newSubtaskPriority, setNewSubtaskPriority] = useState<IssuePriority>('none');
-  const [newSubtaskEstimate, setNewSubtaskEstimate] = useState<number | undefined>(undefined);
   const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState<string>('');
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
@@ -104,7 +107,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       setUploadError(null);
       setNewSubtaskTitle('');
       setNewSubtaskPriority('none');
-      setNewSubtaskEstimate(undefined);
       setNewSubtaskAssigneeId('');
     }
   }, [issue]);
@@ -119,19 +121,28 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       const created = await api.createSubtask(issue.id, {
         title: newSubtaskTitle.trim(),
         priority: newSubtaskPriority,
-        estimate: newSubtaskEstimate ? Number(newSubtaskEstimate) : undefined,
         assignee_id: newSubtaskAssigneeId || undefined,
       });
       if (created) {
-        const updated = {
-          ...issue,
-          subtasks: [...(issue.subtasks || []), created],
-        };
-        onUpdateIssue(updated);
+        try {
+          const fullIssue = await api.getIssue(issue.id);
+          if (fullIssue) {
+            onUpdateIssue(fullIssue);
+          } else {
+            onUpdateIssue({
+              ...issue,
+              subtasks: [...(issue.subtasks || []), created],
+            });
+          }
+        } catch {
+          onUpdateIssue({
+            ...issue,
+            subtasks: [...(issue.subtasks || []), created],
+          });
+        }
         window.dispatchEvent(new CustomEvent('issueCreated', { detail: created }));
         setNewSubtaskTitle('');
         setNewSubtaskPriority('none');
-        setNewSubtaskEstimate(undefined);
         setNewSubtaskAssigneeId('');
       }
     } catch (err) {
@@ -187,6 +198,38 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
     }
   };
 
+  const handleTitleChange = async (newTitle: string) => {
+    try {
+      const updated = await api.updateIssue(issue.id, {
+        title: newTitle,
+        expected_version: issue.version,
+      });
+      if (updated) {
+        onUpdateIssue(updated);
+        toast.success('Title updated');
+      }
+    } catch (err) {
+      console.error('Failed to update title', err);
+      toast.error('Failed to update title');
+    }
+  };
+
+  const handleDescriptionChange = async (data: { description_text: string; description_json: any }) => {
+    try {
+      const updated = await api.updateIssue(issue.id, {
+        description_text: data.description_text,
+        description_json: data.description_json,
+        expected_version: issue.version,
+      });
+      if (updated) {
+        onUpdateIssue(updated);
+      }
+    } catch (err) {
+      console.error('Failed to update description', err);
+      toast.error('Failed to save description');
+    }
+  };
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim()) return;
@@ -235,19 +278,16 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
           {
             title: `Configure backend endpoints for ${issue.identifier}`,
             description: 'Set up routes, validation schemas, and database queries.',
-            estimate: 3,
             priority: 'high',
           },
           {
             title: `Implement automated integration tests`,
             description: 'Write test cases verifying positive and error conditions.',
-            estimate: 2,
             priority: 'medium',
           },
           {
             title: `Add client UI updates and error boundaries`,
             description: 'Wire frontend forms, optimistic mutations, and alert toasts.',
-            estimate: 3,
             priority: 'medium',
           },
         ]);
@@ -256,7 +296,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       setProposedSubtasks([
         {
           title: `Technical implementation for ${issue.identifier}`,
-          estimate: 3,
           priority: 'medium',
         },
       ]);
@@ -268,12 +307,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   const updateSubtaskTitle = (index: number, title: string) => {
     setProposedSubtasks((prev) =>
       prev.map((t, i) => (i === index ? { ...t, title } : t))
-    );
-  };
-
-  const updateSubtaskEstimate = (index: number, estimate: number) => {
-    setProposedSubtasks((prev) =>
-      prev.map((t, i) => (i === index ? { ...t, estimate } : t))
     );
   };
 
@@ -293,7 +326,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
       ...prev,
       {
         title: customDraftTitle.trim(),
-        estimate: 3,
         priority: 'medium',
       },
     ]);
@@ -310,7 +342,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
     const formattedPayload = proposedSubtasks.map((p) => ({
       title: p.title,
       description: p.description || '',
-      estimate: p.estimate || 3,
       priority: p.priority || 'medium',
     }));
 
@@ -332,7 +363,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
           identifier: `${issue.identifier}-sub${subIndex}`,
           title: task.title,
           priority: task.priority || 'medium',
-          estimate: task.estimate,
           state_id: activeStates[0]?.id || issue.state_id,
           state: activeStates[0] || issue.state,
           creator_id: issue.creator_id,
@@ -360,7 +390,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
           identifier: `${issue.identifier}-sub${subIndex}`,
           title: task.title,
           priority: task.priority || 'medium',
-          estimate: task.estimate,
           state_id: activeStates[0]?.id || issue.state_id,
           state: activeStates[0] || issue.state,
           creator_id: issue.creator_id,
@@ -488,14 +517,22 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
         <div className="flex-1 flex overflow-hidden">
           {/* Main Column */}
           <div className="flex-1 p-6 overflow-y-auto space-y-6">
-            <h2 className="text-lg font-semibold text-white leading-snug">{issue.title}</h2>
+            <IssueTitleEditor
+              initialTitle={issue.title}
+              onSave={handleTitleChange}
+            />
 
             {/* Description */}
-            <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Description</h3>
-              <div className="p-3.5 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">
-                {issue.description_text || 'No description provided.'}
-              </div>
+            <div className="space-y-1.5">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+                Description
+              </h3>
+              <IssueDescriptionEditor
+                issueId={issue.id}
+                initialText={issue.description_text}
+                initialJson={issue.description_json}
+                onSave={handleDescriptionChange}
+              />
             </div>
 
             {/* Sub-tasks Section */}
@@ -554,76 +591,25 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                     <option value="high">Priority: High</option>
                     <option value="urgent">Priority: Urgent</option>
                   </select>
-
-                  {/* Points / Estimate Selector */}
-                  <select
-                    value={newSubtaskEstimate !== undefined ? String(newSubtaskEstimate) : ''}
-                    onChange={(e) => setNewSubtaskEstimate(e.target.value ? Number(e.target.value) : undefined)}
-                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
-                  >
-                    <option value="">Estimate: None</option>
-                    <option value="1">1 pt</option>
-                    <option value="2">2 pts</option>
-                    <option value="3">3 pts</option>
-                    <option value="5">5 pts</option>
-                    <option value="8">8 pts</option>
-                  </select>
                 </div>
               </form>
 
               {issue.subtasks && issue.subtasks.length > 0 ? (
-                <div className="space-y-1.5">
-                  {issue.subtasks.map((sub, idx) => (
-                    <div
-                      key={sub.id}
-                      className="p-2.5 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 flex items-center justify-between text-xs transition-colors"
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1 mr-3">
-                        <CornerDownRight className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                        <span className="font-mono text-zinc-400 text-[11px] shrink-0 bg-zinc-900 px-1 rounded border border-zinc-800">
-                          {issue.identifier}-sub{idx + 1}
-                        </span>
-                        <span className="text-zinc-200 truncate">{sub.title}</span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {(() => {
-                          const resolvedSubAssignee = sub.assignee || (sub.assignee_id ? users.find((u) => u.id === sub.assignee_id) : null);
-                          if (!resolvedSubAssignee) {
-                            return <span className="text-[10px] text-zinc-500 font-mono">Unassigned</span>;
-                          }
-                          const name = resolvedSubAssignee.name || resolvedSubAssignee.email || 'Member';
-                          const initials = name
-                            .split(' ')
-                            .filter(Boolean)
-                            .map((n: string) => n[0])
-                            .slice(0, 2)
-                            .join('')
-                            .toUpperCase() || 'M';
-
-                          if (resolvedSubAssignee.avatar_url) {
-                            return (
-                              <img
-                                src={resolvedSubAssignee.avatar_url}
-                                alt={name}
-                                className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
-                                title={name}
-                              />
-                            );
-                          }
-
-                          return (
-                            <div
-                              className="w-4 h-4 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[8px] font-bold"
-                              title={name}
-                            >
-                              {initials}
-                            </div>
-                          );
-                        })()}
-                        <StateBadge state={sub.state} />
-                      </div>
-                    </div>
-                  ))}
+                <div className="p-2.5 rounded-lg bg-black border border-zinc-900/80">
+                  <IssueSubtasksTree
+                    rootIssue={issue}
+                    subtasks={issue.subtasks}
+                    orgSlug={issue.organization_id || ''}
+                    teamKey={issue.identifier?.split('-')[0] || ''}
+                    users={assignableUsers}
+                    onSelectIssue={(sub) => {
+                      onUpdateIssue(sub);
+                    }}
+                    onAddSubtaskToParent={() => {
+                      const input = document.querySelector('input[placeholder*="Add sub-task"]') as HTMLInputElement | null;
+                      if (input) input.focus();
+                    }}
+                  />
                 </div>
               ) : (
                 <div className="py-3 text-center rounded border border-dashed border-zinc-900 text-xs text-zinc-500">
@@ -810,18 +796,6 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto pl-6 sm:pl-0">
-                              {/* Estimate selector */}
-                              <select
-                                value={task.estimate ?? 3}
-                                onChange={(e) => updateSubtaskEstimate(idx, Number(e.target.value))}
-                                className="bg-zinc-800 text-[11px] text-zinc-300 rounded px-2 py-1 border border-zinc-700 focus:outline-none cursor-pointer"
-                              >
-                                <option value={1}>1 pt</option>
-                                <option value={2}>2 pts</option>
-                                <option value={3}>3 pts</option>
-                                <option value={5}>5 pts</option>
-                                <option value={8}>8 pts</option>
-                              </select>
 
                               {/* Priority selector */}
                               <select
@@ -1003,21 +977,13 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
             {/* Status */}
             <div>
               <label className="text-[11px] text-zinc-400 block mb-1">Status</label>
-              <select
-                value={issue.state_id}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-              >
-                {activeStates.length > 0 ? (
-                  activeStates.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))
-                ) : (
-                  <option value={issue.state_id}>{issue.state?.name || 'Current Status'}</option>
-                )}
-              </select>
+              <StatusPicker
+                states={activeStates}
+                currentStateId={issue.state_id}
+                currentState={issue.state}
+                onSelectState={handleStatusChange}
+                triggerClassName="w-full justify-between h-8 bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+              />
             </div>
 
             {/* Priority */}
@@ -1036,9 +1002,9 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               </select>
             </div>
 
-            {/* Assignee */}
+            {/* Assigned to */}
             <div>
-              <label className="text-[11px] text-zinc-400 block mb-1">Assignee</label>
+              <label className="text-[11px] text-zinc-400 block mb-1">Assigned to</label>
               <select
                 value={issue.assignee_id || ''}
                 onChange={async (e) => {
@@ -1066,11 +1032,19 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
               </select>
             </div>
 
-            {/* Estimate Points */}
-            <div>
-              <label className="text-[11px] text-zinc-400 block mb-1">Estimate Points</label>
-              <div className="p-2 rounded bg-zinc-900 border border-zinc-800 font-mono text-white">
-                {issue.estimate || 1} points
+            {/* Assignment provenance */}
+            <div className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 space-y-1.5 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-500">Assigned by</span>
+                <span className="text-zinc-300 font-medium truncate max-w-[120px]">
+                  {issue.assigned_by?.name || issue.creator?.name || '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-zinc-800/40 pt-1.5">
+                <span className="text-zinc-500">Created by</span>
+                <span className="text-zinc-300 font-medium truncate max-w-[120px]">
+                  {issue.creator?.name || '—'}
+                </span>
               </div>
             </div>
           </div>

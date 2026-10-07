@@ -182,8 +182,6 @@ def test_admin_can_delete_others_comment(client, mock_db):
     mock_db.table.side_effect = mock_table
     res = client.delete(f"/api/v1/comments/{MOCK_COMMENT_ID}")
     assert res.status_code == status.HTTP_204_NO_CONTENT
-    assert res.json()["transferred_issues_count"] == 1
-    assert res.json()["destination"] == MOCK_NEXT_CYCLE_ID
 
 
 # ==============================================================================
@@ -259,52 +257,6 @@ def test_milestone_update_target_date_and_name(client, mock_db):
     assert res.json()["target_date"] == "2026-10-20"
 
 
-# ==============================================================================
-# Domain 6: Triage Routing Scenarios
-# ==============================================================================
-
-def test_triage_empty_when_all_issues_snoozed(client, mock_db):
-    """Triage queue ignores issues whose snooze timestamps are in the future."""
-    def mock_table(table_name):
-        mock_t = MagicMock()
-        if table_name == "teams":
-            mock_t.select().eq().limit().execute.return_value = MagicMock(
-                data=[{"id": MOCK_TEAM_ID, "organization_id": MOCK_ORG_ID}]
-            )
-        elif table_name == "workspace_members":
-            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[{"id": "m1"}])
-        elif table_name == "workflow_states":
-            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(
-                data=[{"id": "state-triage-id"}]
-            )
-        elif table_name == "issues":
-            # Future snoozed issue
-            mock_t.select().eq().eq().is_().order().execute.return_value = MagicMock(
-                data=[
-                    {
-                        "id": MOCK_ISSUE_ID,
-                        "team_id": MOCK_TEAM_ID,
-                        "organization_id": MOCK_ORG_ID,
-                        "number": 99,
-                        "identifier": "ENG-99",
-                        "title": "Future snoozed item",
-                        "priority": "none",
-                        "state_id": "state-triage-id",
-                        "creator_id": MOCK_USER_ID,
-                        "sort_order": "0|h00000:",
-                        "version": 1,
-                        "snoozed_until": "2099-01-01T00:00:00Z",
-                        "created_at": "2026-10-01T00:00:00Z",
-                        "updated_at": "2026-10-01T00:00:00Z",
-                    }
-                ]
-            )
-        return mock_t
-
-    mock_db.table.side_effect = mock_table
-    res = client.get(f"/api/v1/teams/{MOCK_TEAM_ID}/triage")
-    assert res.status_code == status.HTTP_200_OK
-    assert len(res.json()) == 0
 
 
 # ==============================================================================

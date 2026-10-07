@@ -9,33 +9,41 @@ import {
   IssueAttachment,
   UserWorkspaceItem,
   UserWorkspacesResponse,
+  InboxItem,
+  Label,
 } from '@/types';
 import { getClientSessionId, supabase } from '@/lib/supabase/client';
 
 function getApiBase(): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
-  if (typeof window !== 'undefined') {
-    if (window.location.hostname === 'localhost' && envUrl.includes('127.0.0.1')) {
-      return envUrl.replace('127.0.0.1', 'localhost');
-    }
-    if (window.location.hostname === '127.0.0.1' && envUrl.includes('localhost')) {
-      return envUrl.replace('localhost', '127.0.0.1');
-    }
-  }
-  return envUrl;
+  return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 
 async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
-  let token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
-  // If token is missing from localStorage, check cookie
+  let token: string | null = null;
+
+  // 1. Primary: Get fresh token from active Supabase session (handles auto-refresh)
+  if (typeof window !== 'undefined') {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.access_token) {
+        token = data.session.access_token;
+        localStorage.setItem('supabase_access_token', token);
+      }
+    } catch {}
+  }
+
+  // 2. Secondary fallback: localStorage or cookie
+  if (!token && typeof window !== 'undefined') {
+    token = localStorage.getItem('supabase_access_token');
+  }
   if (!token && typeof document !== 'undefined') {
     const match = document.cookie.match(/(?:^|;\s*)sb-access-token=([^;]+)/);
     if (match) token = match[1];
   }
 
-  // Check if token was provided in custom headers
+  // 3. Fallback: custom headers
   if (!token && options.headers) {
     let authHeader = '';
     if (options.headers instanceof Headers) {
@@ -46,17 +54,6 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.replace('Bearer ', '').trim();
     }
-  }
-
-  // Fall back to active Supabase session if still missing
-  if (!token && typeof window !== 'undefined') {
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.access_token) {
-        token = data.session.access_token;
-        localStorage.setItem('supabase_access_token', token);
-      }
-    } catch {}
   }
 
   // If token is the old placeholder dev token, clear it
@@ -223,27 +220,39 @@ export const api = {
 
   // Settings
   async getUserProfile(): Promise<any | null> {
-    return await fetchWithAuth<any>(`/users/me/profile`);
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.user || null;
+  },
+
+  async updateCurrentUserProfile(name?: string, jobDescription?: string): Promise<boolean> {
+    const dataToUpdate: Record<string, any> = {};
+    if (name !== undefined) dataToUpdate.full_name = name;
+    if (jobDescription !== undefined) dataToUpdate.job_description = jobDescription;
+
+    const { error } = await supabase.auth.updateUser({
+      data: dataToUpdate,
+    });
+    return !error;
   },
 
   async getWorkspaceSettings(orgSlug: string): Promise<Organization | null> {
-    return await fetchWithAuth<Organization>(`/organizations/${orgSlug}/settings/workspace`);
+    return await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`);
   },
 
   async updateWorkspaceSettings(orgSlug: string, updates: Partial<Organization>): Promise<Organization | null> {
-    return await fetchWithAuth<Organization>(`/organizations/${orgSlug}/settings/workspace`, {
+    return await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
   },
 
   async getWorkspaceMembersSettings(orgSlug: string): Promise<WorkspaceMember[]> {
-    const data = await fetchWithAuth<WorkspaceMember[]>(`/organizations/${orgSlug}/settings/members`);
+    const data = await fetchWithAuth<WorkspaceMember[]>(`/workspaces/${orgSlug}/members`);
     return data || [];
   },
 
   async inviteWorkspaceMember(orgSlug: string, email: string, role: string = 'member'): Promise<WorkspaceMember | null> {
-    return await fetchWithAuth<WorkspaceMember>(`/organizations/${orgSlug}/settings/members/invite`, {
+    return await fetchWithAuth<WorkspaceMember>(`/workspaces/${orgSlug}/members/invite`, {
       method: 'POST',
       body: JSON.stringify({ email, role }),
     });
@@ -299,15 +308,15 @@ export const api = {
     return data || [];
   },
 
-  async getInbox(orgSlug: string): Promise<Issue[] | null> {
-    return await fetchWithAuth<Issue[]>(`/organizations/${orgSlug}/inbox`);
+  async getInbox(orgSlug: string, offset = 0, limit = 50): Promise<InboxItem[] | null> {
+    return await fetchWithAuth<InboxItem[]>(`/organizations/${orgSlug}/inbox?offset=${offset}&limit=${limit}`);
   },
 
   async getIssue(idOrKey: string): Promise<Issue | null> {
     return await fetchWithAuth<Issue>(`/issues/${idOrKey}`);
   },
 
-  async createIssue(issue: Partial<Issue>): Promise<Issue | null> {
+  async createIssue(issue: Partial<Issue> & { label_ids?: string[] }): Promise<Issue | null> {
     const sessionId = getClientSessionId();
     return await fetchWithAuth<Issue>(`/issues`, {
       method: 'POST',
@@ -315,7 +324,7 @@ export const api = {
     });
   },
 
-  async updateIssue(id: string, updates: Partial<Issue> & { expected_version?: number }): Promise<Issue | null> {
+  async updateIssue(id: string, updates: Partial<Issue> & { expected_version?: number; label_ids?: string[] }): Promise<Issue | null> {
     const sessionId = getClientSessionId();
     return await fetchWithAuth<Issue>(`/issues/${id}`, {
       method: 'PATCH',
@@ -343,7 +352,7 @@ export const api = {
 
   async createSubtask(
     issueId: string,
-    subtask: { title: string; assignee_id?: string; estimate?: number; priority?: string }
+    subtask: { title: string; assignee_id?: string; priority?: string }
   ): Promise<Issue | null> {
     return await fetchWithAuth<Issue>(`/issues/${issueId}/subtasks`, {
       method: 'POST',
@@ -439,11 +448,11 @@ export const api = {
 
   async resumeBreakdown(
     threadId: string,
-    approvedTasks: (string | { title: string; description?: string; estimate?: number; priority?: string })[]
+    approvedTasks: (string | { title: string; description?: string; priority?: string })[]
   ): Promise<Issue[] | null> {
     const formatted = approvedTasks.map((t) =>
       typeof t === 'string'
-        ? { title: t, description: '', estimate: 2, priority: 'medium' }
+        ? { title: t, description: '', priority: 'medium' }
         : t
     );
     return await fetchWithAuth(`/ai/breakdown/resume`, {
@@ -453,6 +462,24 @@ export const api = {
         approved_subtasks: formatted,
         approved_tasks: formatted,
       }),
+    });
+  },
+
+  // Labels
+  async getLabels(organizationId: string): Promise<Label[]> {
+    const data = await fetchWithAuth<Label[]>(`/labels?organization_id=${encodeURIComponent(organizationId)}`);
+    return data || [];
+  },
+
+  async attachLabel(issueId: string, labelId: string): Promise<any> {
+    return await fetchWithAuth(`/issues/${issueId}/labels/${labelId}`, {
+      method: 'POST',
+    });
+  },
+
+  async detachLabel(issueId: string, labelId: string): Promise<any> {
+    return await fetchWithAuth(`/issues/${issueId}/labels/${labelId}`, {
+      method: 'DELETE',
     });
   },
 

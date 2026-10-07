@@ -1,7 +1,15 @@
+/**
+ * @related-files:
+ * - frontend/components/ai/AIAssistantModal.tsx
+ * - frontend/components/navigation/TopNav.tsx
+ * - frontend/lib/api.ts
+ * - backend/app/api/v1/phase4.py
+ */
+
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   Sparkles,
   Send,
@@ -11,6 +19,8 @@ import {
   CheckCircle2,
   ArrowRight,
   StopCircle,
+  Plus,
+  RotateCcw,
 } from 'lucide-react';
 import { User } from '@/types';
 import { api } from '@/lib/api';
@@ -40,24 +50,36 @@ interface Message {
   timestamp: string;
 }
 
+const DEFAULT_WELCOME_MSG: Message = {
+  id: 'msg_welcome',
+  sender: 'agent',
+  content:
+    "I'm your workspace engineering copilot. Ask me anything — architect systems, design APIs, plan sprints, brainstorm features, or inspect workspace velocity and manage issues.",
+  timestamp: 'Just now',
+};
+
 export default function AIPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
+  const conversationId = searchParams.get('conversationId') || '';
 
+  const [activeThreadId, setActiveThreadId] = useState<string>(conversationId || '');
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    if (!activeThreadId) {
+      setActiveThreadId(conversationId || `conv_${Date.now()}`);
+    }
+  }, [conversationId, activeThreadId]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [organizationId, setOrganizationId] = useState<string>('');
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'msg_welcome',
-      sender: 'agent',
-      content:
-        "I'm your workspace engineering copilot. Ask me anything — architect systems, design APIs, plan sprints, brainstorm features, or inspect workspace velocity and manage issues.",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([DEFAULT_WELCOME_MSG]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -82,6 +104,46 @@ export default function AIPage() {
       }
     });
   }, [orgSlug]);
+
+  // Sync activeThreadId from URL query param when changed
+  useEffect(() => {
+    if (conversationId && conversationId !== activeThreadId) {
+      setActiveThreadId(conversationId);
+    }
+  }, [conversationId]);
+
+  // Load conversation history from localStorage for active thread
+  useEffect(() => {
+    if (typeof window === 'undefined' || !activeThreadId) return;
+    try {
+      const stored = localStorage.getItem(`ai_thread_${activeThreadId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+          return;
+        }
+      }
+    } catch {}
+    setMessages([DEFAULT_WELCOME_MSG]);
+  }, [activeThreadId]);
+
+  // Persist messages to localStorage when updated
+  useEffect(() => {
+    if (typeof window === 'undefined' || !activeThreadId) return;
+    if (messages.length > 1 || (messages.length === 1 && messages[0].id !== 'msg_welcome')) {
+      try {
+        localStorage.setItem(`ai_thread_${activeThreadId}`, JSON.stringify(messages));
+      } catch {}
+    }
+  }, [messages, activeThreadId]);
+
+  const handleNewConversation = () => {
+    const newId = `conv_${Date.now()}`;
+    setActiveThreadId(newId);
+    setMessages([DEFAULT_WELCOME_MSG]);
+    router.push(`/${orgSlug}/${teamKey.toLowerCase()}/ai?conversationId=${newId}`);
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -319,6 +381,29 @@ export default function AIPage() {
         breadcrumbs={['Workspace', teamKey || 'Team', 'AI']}
       />
 
+      {/* Conversation Thread Bar */}
+      <div className="px-6 py-2 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-zinc-500 font-mono">Thread:</span>
+          <span
+            suppressHydrationWarning
+            className="text-[11px] font-mono text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800"
+          >
+            {isMounted ? (activeThreadId || conversationId) : conversationId}
+          </span>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleNewConversation}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors cursor-pointer"
+          title="Start fresh conversation"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>New Chat</span>
+        </button>
+      </div>
+
       {/* Messages Canvas */}
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 max-w-4xl w-full mx-auto">
         {messages.map((msg) => {
@@ -473,7 +558,7 @@ export default function AIPage() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask agent to triage, plan, search issues, or execute actions..."
+            placeholder="Ask agent to plan, search issues, or execute actions..."
             disabled={isStreaming}
             className="w-full bg-zinc-900 border border-zinc-800 focus:border-zinc-700 rounded-lg pl-3.5 pr-20 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none transition-colors"
           />

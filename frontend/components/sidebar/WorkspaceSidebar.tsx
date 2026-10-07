@@ -10,8 +10,10 @@ import {
   Command,
   Plus,
   ChevronDown,
+  ChevronRight,
   Settings,
   User as UserIcon,
+  UserCheck,
   LogOut,
   Inbox,
   List,
@@ -63,6 +65,18 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const orgName = orgState?.name || organization?.name || currentOrgSlug.toUpperCase();
   const activeTeam = teams.find((t) => t.key.toUpperCase() === currentTeamKey.toUpperCase()) || teams[0] || null;
   const effectiveTeamKey = (currentTeamKey || activeTeam?.key || '').toLowerCase();
+
+  const [expandedTeams, setExpandedTeams] = useState<Record<string, boolean>>({});
+
+  const toggleTeamExpanded = (key: string) => {
+    setExpandedTeams((prev) => {
+      const isCurrentlyExpanded = prev[key.toUpperCase()] ?? (currentTeamKey.toUpperCase() === key.toUpperCase());
+      return {
+        ...prev,
+        [key.toUpperCase()]: !isCurrentlyExpanded,
+      };
+    });
+  };
 
   // Load user workspaces for the switcher
   useEffect(() => {
@@ -136,9 +150,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       icon: <Inbox className="w-4 h-4 text-zinc-300" />,
     },
     {
-      label: 'Issues',
-      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/issues` : `/${currentOrgSlug}/issues`,
-      icon: <Layers className="w-4 h-4 text-zinc-300" />,
+      label: 'My Issues',
+      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/my-issues` : `/${currentOrgSlug}/my-issues`,
+      icon: <UserCheck className="w-4 h-4 text-zinc-300" />,
     },
     {
       label: 'AI Assistant',
@@ -147,16 +161,16 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     },
     {
       label: 'Settings',
-      href: effectiveTeamKey ? `/${currentOrgSlug}/settings/workspace` : `/${currentOrgSlug}/settings/workspace`,
+      href: `/${currentOrgSlug}/settings/workspace`,
       icon: <Settings className="w-4 h-4 text-zinc-300" />,
     },
   ];
 
   return (
-    <aside className="w-64 h-screen bg-black border-r border-zinc-800 flex flex-col justify-between select-none text-sm z-20 font-sans">
+    <aside className="w-64 h-screen bg-panel-dark border-r border-border-subtle flex flex-col justify-between select-none text-sm z-20 font-sans">
       {/* Workspace Header */}
       <div className="flex flex-col relative">
-        <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
+        <div className="p-3 border-b border-border-subtle flex items-center justify-between">
           <button
             onClick={() => setIsWorkspaceDropdownOpen((prev) => !prev)}
             className="flex items-center gap-2.5 w-full hover:bg-zinc-900/60 p-1 rounded-md transition-colors text-left cursor-pointer"
@@ -214,7 +228,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <button
                 onClick={() => {
                   setIsWorkspaceDropdownOpen(false);
-                  setIsCreateWorkspaceOpen(true);
+                  router.push('/workspaces/new');
                 }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
               >
@@ -229,44 +243,46 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         <div className="p-2 space-y-1">
           <button
             onClick={onOpenCommandPalette}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors group cursor-pointer"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-white/[0.04] border border-transparent transition-colors group cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <Command className="w-3.5 h-3.5 text-zinc-400 group-hover:text-white" />
+              <Command className="w-3.5 h-3.5 text-text-tertiary group-hover:text-text-primary" />
               <span>Search & Command</span>
             </div>
-            <kbd className="text-[10px] bg-zinc-900 text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-800">
+            <kbd className="text-[10px] bg-white/[0.05] text-text-tertiary px-1.5 py-0.5 rounded border border-border-subtle">
               ⌘K
             </kbd>
           </button>
 
           <button
             onClick={onOpenAIAsk}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded text-xs text-zinc-200 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-colors group cursor-pointer"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs text-text-secondary hover:text-text-primary bg-surface-elevated/70 hover:bg-surface-elevated border border-border-subtle hover:border-border-standard transition-colors group cursor-pointer"
           >
             <div className="flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-zinc-300" />
-              <span className="font-medium">AI Assistant</span>
+              <Sparkles className="w-3.5 h-3.5 text-accent-violet" />
+              <span className="font-medium text-text-primary">AI Assistant</span>
             </div>
-            <span className="text-[10px] text-zinc-400 bg-zinc-800 px-1 rounded border border-zinc-700">Agent</span>
+            <span className="text-[10px] text-text-tertiary bg-white/[0.05] px-1 rounded border border-border-subtle">Agent</span>
           </button>
         </div>
 
         {/* Primary Views */}
         <div className="px-2 py-2 space-y-0.5">
-          <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+          <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
             Workspace Views
           </div>
           {navItems.map((item) => {
-            const isActive = pathname?.startsWith(item.href);
+            const isActive = item.label === 'Settings'
+              ? pathname?.includes('/settings')
+              : pathname?.startsWith(item.href);
             return (
               <Link
                 key={item.label}
                 href={item.href}
-                className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs font-medium transition-colors ${
+                className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   isActive
-                    ? 'bg-zinc-900 text-white border border-zinc-700'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                    ? 'bg-white/[0.08] text-text-primary border border-border-subtle shadow-xs'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-white/[0.04]'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
@@ -274,7 +290,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   <span>{item.label}</span>
                 </div>
                 {item.badge && (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-zinc-800 text-white border border-zinc-700 font-bold">
+                  <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-white/[0.08] text-text-primary border border-border-subtle font-bold">
                     {item.badge}
                   </span>
                 )}
@@ -285,12 +301,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
         {/* Teams Section */}
         {teams.length > 0 && (
-          <div className="px-2 py-3 space-y-0.5 border-t border-zinc-800">
+          <div className="px-2 py-3 space-y-0.5 border-t border-border-subtle">
             <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center justify-between">
               <span>Teams</span>
               <button
                 type="button"
-                onClick={() => setIsCreateTeamOpen(true)}
+                onClick={() => router.push(`/${currentOrgSlug}/teams/new`)}
                 className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
                 title="Create New Team"
               >
@@ -300,28 +316,59 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
             {teams.map((team) => {
               const isTeamActive = currentTeamKey.toUpperCase() === team.key.toUpperCase();
+              const isExpanded = !!expandedTeams[team.key.toUpperCase()];
+              const issuesHref = `/${currentOrgSlug}/${team.key.toLowerCase()}/issues`;
+              const isIssuesActive = pathname?.startsWith(issuesHref);
+
               return (
-                <Link
-                  key={team.id}
-                  href={`/${currentOrgSlug}/${team.key.toLowerCase()}/issues`}
-                  className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors ${
-                    isTeamActive
-                      ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
-                      : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-4 h-4 rounded text-[10px] flex items-center justify-center font-bold ${
-                        isTeamActive ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-300'
-                      }`}
-                    >
-                      {team.key.slice(0, 2)}
+                <div key={team.id} className="space-y-0.5">
+                  <div
+                    onClick={() => toggleTeamExpanded(team.key)}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors cursor-pointer group select-none ${
+                      isTeamActive
+                        ? 'text-white font-medium bg-zinc-900/60'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <ChevronRight
+                        className={`w-3.5 h-3.5 text-zinc-500 transition-transform ${
+                          isExpanded ? 'rotate-90 text-zinc-300' : ''
+                        }`}
+                      />
+                      <div
+                        className={`w-4 h-4 rounded text-[10px] flex items-center justify-center font-bold shrink-0 ${
+                          isTeamActive ? 'bg-white text-black' : 'bg-zinc-800 text-zinc-300'
+                        }`}
+                      >
+                        {team.key.slice(0, 2)}
+                      </div>
+                      <span className="truncate">{team.name}</span>
                     </div>
-                    <span>{team.name}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono group-hover:text-zinc-400 shrink-0">
+                      {team.key}
+                    </span>
                   </div>
-                  <span className="text-[10px] text-zinc-400 font-mono">{team.key}</span>
-                </Link>
+
+                  {/* Sub-item: Team > Issues */}
+                  {isExpanded && (
+                    <div className="pl-6 pr-1 py-0.5 space-y-0.5 animate-fade-in">
+                      <Link
+                        href={issuesHref}
+                        className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors ${
+                          isIssuesActive
+                            ? 'bg-zinc-900 text-white font-medium border border-zinc-700/80'
+                            : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Layers className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>Issues</span>
+                        </div>
+                      </Link>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -358,7 +405,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             <LogOut className="w-3.5 h-3.5" />
           </button>
           <Link
-            href={effectiveTeamKey ? `/${currentOrgSlug}/settings/workspace` : `/${currentOrgSlug}/settings/workspace`}
+            href={`/${currentOrgSlug}/settings/workspace`}
             className="p-1.5 rounded-md hover:bg-[#1a1d22] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
             title="Settings (Cmd+,)"
           >

@@ -68,7 +68,6 @@ class DuplicateCheckResponse(BaseModel):
 class ProposedSubtask(BaseModel):
     title: str
     description: Optional[str] = None
-    estimate: Optional[int] = None
     priority: str = "none"
 
     @field_validator("priority", mode="before")

@@ -1,0 +1,127 @@
+# ==============================================================================
+# Antigravity Ignore Rules (.antigravityignore)
+# Excludes heavy dependencies, compiled binaries, large assets, lockfiles,
+# legacy/archive artifacts, and build outputs from agent indexing and context.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Dependencies & Heavily Nested Lockfiles
+# ------------------------------------------------------------------------------
+node_modules/
+**/node_modules/
+package-lock.json
+**/package-lock.json
+yarn.lock
+**/yarn.lock
+pnpm-lock.yaml
+**/pnpm-lock.yaml
+bun.lockb
+**/bun.lockb
+
+# ------------------------------------------------------------------------------
+# Python Virtual Environments & Packages
+# ------------------------------------------------------------------------------
+backend/my-env/
+**/my-env/
+venv/
+.venv/
+env/
+**/venv/
+**/.venv/
+**/env/
+*.egg-info/
+*.egg
+.Python
+
+# ------------------------------------------------------------------------------
+# Compiled Binaries & Caches
+# ------------------------------------------------------------------------------
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.dylib
+*.dll
+*.exe
+*.bin
+*.obj
+*.o
+*.a
+*.lib
+
+# ------------------------------------------------------------------------------
+# Build Outputs & Bundles
+# ------------------------------------------------------------------------------
+.next/
+**/.next/
+out/
+**/out/
+build/
+**/build/
+dist/
+**/dist/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+
+# ------------------------------------------------------------------------------
+# Testing, Coverage & Linters Caches
+# ------------------------------------------------------------------------------
+.pytest_cache/
+**/.pytest_cache/
+.coverage
+.coverage.*
+coverage/
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ------------------------------------------------------------------------------
+# Large Assets, Media & Datasets
+# ------------------------------------------------------------------------------
+*.mp4
+*.webm
+*.mov
+*.avi
+*.mkv
+*.mp3
+*.wav
+*.ogg
+*.flac
+*.iso
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.7z
+*.rar
+*.psd
+*.ai
+*.sketch
+*.raw
+*.tiff
+*.tif
+*.h5
+*.hdf5
+*.parquet
+*.sqlite
+*.sqlite3
+*.db
+
+# ------------------------------------------------------------------------------
+# Legacy, Archives & Deprecated Artifacts
+# ------------------------------------------------------------------------------
+plan/
+plan2/
+archive/
+legacy/
+backup/
+*.bak
+*.backup
+*.old
+*.orig
+
+# ------------------------------------------------------------------------------
+# Version Control & IDE Internals
+# ------------------------------------------------------------------------------

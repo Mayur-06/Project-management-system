@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Issue, WorkflowState, User } from '@/types';
+import React, { useState, useEffect, useMemo, useRef, Suspense } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { Issue, WorkflowState, User, Label } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
 import { useRealtimeBoard } from '@/hooks/useRealtime';
@@ -11,14 +11,15 @@ import { KanbanBoard } from '@/components/issues/KanbanBoard';
 import { IssueListView } from '@/components/issues/IssueListView';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 
-export default function IssuesPage() {
+function IssuesContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
 
-  // ─── Workspace data from layout context — no extra API calls needed ───
-  const { currentTeam, workspaceUsers, teams: workspaceTeams } = useWorkspace();
+  // ─── Workspace data from layout context ───
+  const { currentTeam, workspaceUsers, teams: workspaceTeams, organization } = useWorkspace();
 
   // Map WorkspaceMember[] to User[] for CreateIssueModal
   const modalUsers = useMemo(() => 
@@ -28,17 +29,34 @@ export default function IssuesPage() {
 
   const [issues, setIssues] = useState<Issue[]>([]);
   const [states, setStates] = useState<WorkflowState[]>([]);
+  const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
+
+  // Persist Horizontal ('parent') vs Vertical ('none') Kanban in localStorage
+  const [groupBy, setGroupBy] = useState<'parent' | 'none'>('parent');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pms_kanban_groupBy');
+      if (saved === 'none' || saved === 'parent') {
+        setGroupBy(saved);
+      }
+    }
+  }, []);
+
+  const handleToggleGroupBy = (mode: 'parent' | 'none') => {
+    setGroupBy(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pms_kanban_groupBy', mode);
+    }
+  };
+
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState('');
-  // Start false — only flip true inside loadData so the spinner
-  // doesn't show before we even know which team to load for.
   const [isLoading, setIsLoading] = useState(false);
 
-  // ─── Active Drag Interruption Guard ──────────────────────────────────────
-  // Prevents incoming CDC/Broadcast events from mutating the board while user
-  // is actively dragging a card, avoiding DOM detachment or cursor snatching.
+  // ─── Active Drag Interruption Guard ───
   const isDraggingRef = useRef(false);
   const pendingUpdatesRef = useRef<(() => void)[]>([]);
 
@@ -68,7 +86,7 @@ export default function IssuesPage() {
     ]);
     setIssues(fetchedIssues);
     setStates(fetchedStates);
-    if (fetchedStates.length > 0) {
+    if (fetchedStates.length > 0 && !initialStateId) {
       const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
       setInitialStateId(defaultState.id);
     }
@@ -81,7 +99,52 @@ export default function IssuesPage() {
     }
   }, [currentTeam?.id]);
 
-  // ─── Supabase Realtime Subscription with Self-Echo Suppression ─────────
+  // Load organization labels
+  useEffect(() => {
+    if (organization?.id) {
+      api.getLabels(organization.id).then((lbls) => {
+        if (lbls) setAvailableLabels(lbls);
+      }).catch(() => {});
+    }
+  }, [organization?.id]);
+
+  // Check search params ?create=true (from legacy route redirect)
+  useEffect(() => {
+    if (searchParams.get('create') === 'true') {
+      const stateParam = searchParams.get('stateId');
+      if (stateParam) setInitialStateId(stateParam);
+      setIsNewIssueOpen(true);
+      router.replace(`/${orgSlug}/${teamKey.toLowerCase()}/issues`);
+    }
+  }, [searchParams, orgSlug, teamKey, router]);
+
+  // Listen to openCreateIssue custom event
+  useEffect(() => {
+    const handleOpen = (e: any) => {
+      if (e?.detail?.stateId) {
+        setInitialStateId(e.detail.stateId);
+      }
+      setIsNewIssueOpen(true);
+    };
+    window.addEventListener('openCreateIssue', handleOpen);
+    return () => window.removeEventListener('openCreateIssue', handleOpen);
+  }, []);
+
+  // Listen to issueCreated event
+  useEffect(() => {
+    const handleCreated = (e: any) => {
+      if (e?.detail) {
+        setIssues((prev) => {
+          if (prev.some((i) => i.id === e.detail.id)) return prev;
+          return [e.detail, ...prev];
+        });
+      }
+    };
+    window.addEventListener('issueCreated', handleCreated);
+    return () => window.removeEventListener('issueCreated', handleCreated);
+  }, []);
+
+  // ─── Supabase Realtime Subscription ─────────
   useRealtimeBoard({
     teamId: currentTeam?.id,
     onIssueCreated: (newIssue) => {
@@ -94,84 +157,44 @@ export default function IssuesPage() {
     },
     onIssueUpdated: (updatedIssue) => {
       queueOrExecute(() => {
-        setIssues((prev) => prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i)));
-      });
-    },
-    onIssueMoved: ({ id, state_id, sort_order }) => {
-      queueOrExecute(() => {
         setIssues((prev) =>
-          prev.map((i) => (i.id === id ? { ...i, state_id, sort_order } : i))
+          prev.map((i) => (i.id === updatedIssue.id ? { ...i, ...updatedIssue } : i))
         );
       });
     },
-    onIssueDeleted: (deletedId) => {
+    onIssueDeleted: (deletedIssueId) => {
       queueOrExecute(() => {
-        setIssues((prev) => prev.filter((i) => i.id !== deletedId));
-      });
-    },
-    onReloadRequested: () => {
-      queueOrExecute(() => {
-        if (currentTeam?.id) loadData(currentTeam.id);
+        setIssues((prev) => prev.filter((i) => i.id !== deletedIssueId));
       });
     },
   });
 
-  // ─── Local window events for immediate optimistic feedback ─────────────
-  useEffect(() => {
-    const handleCreated = (e: any) => {
-      setIssues((prev) => {
-        if (prev.some((i) => i.id === e.detail.id)) return prev;
-        return [e.detail, ...prev];
-      });
-    };
-    const handleUpdated = (e: any) => {
-      setIssues((prev) => prev.map((i) => (i.id === e.detail.id ? e.detail : i)));
-    };
-    const handleDeleted = (e: any) => {
-      const deletedId = typeof e.detail === 'string' ? e.detail : e.detail?.id;
-      setIssues((prev) => prev.filter((i) => i.id !== deletedId));
-    };
-
-    window.addEventListener('issueCreated', handleCreated);
-    window.addEventListener('issueUpdated', handleUpdated);
-    window.addEventListener('issueDeleted', handleDeleted);
-
-    return () => {
-      window.removeEventListener('issueCreated', handleCreated);
-      window.removeEventListener('issueUpdated', handleUpdated);
-      window.removeEventListener('issueDeleted', handleDeleted);
-    };
-  }, []);
-
-  // ─── Memoized filtering — recomputes only when inputs change ──────────
   const filteredIssues = useMemo(() => {
+    if (!searchQuery.trim()) return issues;
     const q = searchQuery.toLowerCase();
-    return issues.filter((i) => {
-      const matchesSearch =
+    return issues.filter(
+      (i) =>
         i.title.toLowerCase().includes(q) ||
-        i.identifier.toLowerCase().includes(q);
-      return matchesSearch;
-    });
+        i.identifier.toLowerCase().includes(q)
+    );
   }, [issues, searchQuery]);
 
-  // ─── Issue actions ─────────────────────────────────────────────────────
   const handleMoveIssueState = async (
     issueId: string,
     newStateId: string,
     prevRank?: string,
     nextRank?: string
   ) => {
-    // Clean rank computation without malformed double ':' terminators (H-1B)
-    let optimisticRank = '0|h00000:';
+    const target = issues.find((i) => i.id === issueId);
+    if (!target) return;
+
+    let optimisticRank = target.sort_order;
     if (prevRank && nextRank) {
-      const pClean = prevRank.replace(/^0\|/, '').replace(/:$/, '');
-      optimisticRank = `0|${pClean}h:`;
+      optimisticRank = `${prevRank}z`;
     } else if (prevRank) {
-      const pClean = prevRank.replace(/^0\|/, '').replace(/:$/, '');
-      optimisticRank = `0|${pClean}h:`;
+      optimisticRank = `${prevRank}z`;
     } else if (nextRank) {
-      const nClean = nextRank.replace(/^0\|/, '').replace(/:$/, '');
-      optimisticRank = `0|0${nClean}:`;
+      optimisticRank = `0${nextRank}`;
     }
 
     // Optimistic UI update
@@ -179,12 +202,42 @@ export default function IssuesPage() {
       prev.map((i) => (i.id === issueId ? { ...i, state_id: newStateId, sort_order: optimisticRank } : i))
     );
 
-    // Persist to server and reconcile accurate rank
+    // Persist to server
     const updated = await api.reorderIssue(issueId, newStateId, prevRank, nextRank);
     if (updated) {
       setIssues((prev) =>
         prev.map((i) => (i.id === issueId ? { ...i, sort_order: updated.sort_order } : i))
       );
+    }
+  };
+
+  const handleUpdateIssue = async (
+    issueId: string,
+    updates: Partial<Issue> & { label_ids?: string[] }
+  ) => {
+    // Optimistic update
+    setIssues((prev) =>
+      prev.map((i) => {
+        if (i.id !== issueId) return i;
+        const patched = { ...i, ...updates };
+        if (updates.state_id) {
+          patched.state = states.find((s) => s.id === updates.state_id) || i.state;
+        }
+        if (updates.label_ids && availableLabels.length > 0) {
+          patched.labels = availableLabels.filter((l) => updates.label_ids!.includes(l.id));
+        }
+        return patched;
+      })
+    );
+
+    try {
+      const updated = await api.updateIssue(issueId, updates);
+      if (updated) {
+        setIssues((prev) => prev.map((i) => (i.id === issueId ? { ...i, ...updated } : i)));
+      }
+    } catch (err) {
+      console.error('Failed to update issue', err);
+      if (currentTeam?.id) loadData(currentTeam.id);
     }
   };
 
@@ -202,11 +255,13 @@ export default function IssuesPage() {
         breadcrumbs={[orgSlug || 'Workspace', currentTeam?.key || teamKey || 'Issues', 'Issues']}
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
+        groupBy={groupBy}
+        onToggleGroupBy={handleToggleGroupBy}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onOpenNewIssue={() => {
           const defaultState = states.find((s) => s.is_default) || states[0];
-          if (defaultState) setInitialStateId(defaultState.id);
+          setInitialStateId(defaultState?.id || '');
           setIsNewIssueOpen(true);
         }}
       />
@@ -221,12 +276,17 @@ export default function IssuesPage() {
           <KanbanBoard
             states={states}
             issues={filteredIssues}
-            users={workspaceUsers}
+            users={modalUsers}
+            groupBy={groupBy}
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
             onOpenNewIssueWithState={(stateId) => {
               setInitialStateId(stateId);
+              setIsNewIssueOpen(true);
+            }}
+            onAddSubtask={(_parentId, stateId) => {
+              if (stateId) setInitialStateId(stateId);
               setIsNewIssueOpen(true);
             }}
             onMoveIssueState={handleMoveIssueState}
@@ -236,20 +296,24 @@ export default function IssuesPage() {
         ) : (
           <IssueListView
             issues={filteredIssues}
-            users={workspaceUsers}
+            states={states}
+            users={modalUsers}
+            availableLabels={availableLabels}
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
+            onUpdateIssue={handleUpdateIssue}
           />
         )}
       </div>
 
-      {/* Create Modal */}
+      {/* Create Modal Popup */}
       <CreateIssueModal
         isOpen={isNewIssueOpen}
         initialStateId={initialStateId}
         states={states}
         users={modalUsers}
+        labels={availableLabels}
         teamKey={teamKey}
         teamId={currentTeam?.id}
         teams={workspaceTeams}
@@ -259,5 +323,13 @@ export default function IssuesPage() {
         }}
       />
     </div>
+  );
+}
+
+export default function IssuesPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full text-xs text-zinc-500">Loading issues...</div>}>
+      <IssuesContent />
+    </Suspense>
   );
 }

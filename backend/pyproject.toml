@@ -37,6 +37,7 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "-m 'not integration'"
 markers = [
     "integration: marks tests as live integration tests against Supabase and running servers",
 ]

@@ -4,9 +4,14 @@ import React, { useState, useEffect } from 'react';
 import {
   X,
   AlertCircle,
+  Tag,
 } from 'lucide-react';
 import { IssuePriority, Issue, WorkflowState, User, Label } from '@/types';
 import { api } from '@/lib/api';
+import { useWorkspace } from '@/lib/WorkspaceContext';
+import { Button } from '@/components/ui/button';
+import { StatusPicker } from '@/components/ui/StatusPicker';
+import { toast } from 'sonner';
 
 interface CreateIssueModalProps {
   isOpen: boolean;
@@ -33,6 +38,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   teamId,
   teams = [],
 }) => {
+  const { organization } = useWorkspace();
   const [selectedTeamId, setSelectedTeamId] = useState<string>(teamId || '');
   const [teamWorkflowStates, setTeamWorkflowStates] = useState<WorkflowState[]>(states);
   const [title, setTitle] = useState('');
@@ -41,9 +47,20 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   const [stateId, setStateId] = useState(initialStateId);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState<string>('');
-  const [estimate, setEstimate] = useState<number>(2);
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [availableLabels, setAvailableLabels] = useState<Label[]>(labels);
   const [modalUsers, setModalUsers] = useState<User[]>(users);
+
+  // Sync available labels when org changes or opens
+  useEffect(() => {
+    if (isOpen && organization?.id) {
+      api.getLabels(organization.id).then((res) => {
+        if (res && res.length > 0) {
+          setAvailableLabels(res);
+        }
+      }).catch(() => {});
+    }
+  }, [isOpen, organization?.id]);
 
   // Sync initial team
   useEffect(() => {
@@ -98,7 +115,6 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     }
   }, [users, selectedTeamId, teamId]);
 
-  // All issues route to default active state (no triage routing)
   useEffect(() => {
     if (activeStates.length > 0) {
       const isCurrentValid = activeStates.some((s) => s.id === stateId);
@@ -156,15 +172,16 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
         priority,
         state_id: targetState,
         assignee_id: assigneeId || undefined,
-        estimate,
-        labels: labels.filter((l) => selectedLabels.includes(l.id)),
+        label_ids: selectedLabels,
       });
       if (created) {
+        toast.success(`Created ${created.identifier || 'issue'}: ${created.title}`);
         onCreated(created);
       }
       onClose();
       setTitle('');
       setDescription('');
+      setSelectedLabels([]);
     } catch (err: any) {
       console.error('Failed to create issue', err);
       setSubmitError(err?.message || 'Failed to create issue. Please check fields.');
@@ -177,9 +194,9 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fade-in font-sans">
-      <div className="w-full max-w-2xl bg-black border border-zinc-800 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-fade-in">
+      <div className="w-full max-w-2xl bg-panel-dark border border-border-standard rounded-lg shadow-2xl flex flex-col overflow-hidden animate-fade-in">
         {/* Modal Header */}
-        <div className="px-5 py-3 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
+        <div className="px-5 py-3 border-b border-border-subtle flex items-center justify-between bg-panel-dark">
           <div className="flex items-center gap-2">
             {/* Destination Team Selector */}
             {teams.length > 1 ? (
@@ -266,7 +283,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add description..."
-              className="w-full bg-zinc-900 text-xs text-zinc-200 placeholder-zinc-500 p-3 rounded border border-zinc-800 focus:border-white focus:outline-none resize-none leading-relaxed"
+              className="w-full bg-surface-elevated/40 text-xs text-text-secondary placeholder:text-text-quaternary p-3 rounded-md border border-border-subtle focus:border-accent-violet/60 focus:outline-none resize-none leading-relaxed"
             />
           </div>
 
@@ -275,17 +292,12 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
             {/* Status */}
             <div>
               <label className="text-[11px] font-medium text-zinc-400 block mb-1">Status</label>
-              <select
-                value={stateId}
-                onChange={(e) => setStateId(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-              >
-                {activeStates.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <StatusPicker
+                states={activeStates}
+                currentStateId={stateId}
+                onSelectState={(newId) => setStateId(newId)}
+                triggerClassName="w-full justify-between h-[34px] bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+              />
             </div>
 
             {/* Priority */}
@@ -304,9 +316,9 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               </select>
             </div>
 
-            {/* Assignee */}
+            {/* Assigned to */}
             <div>
-              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Assignee</label>
+              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Assigned to</label>
               <select
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
@@ -321,39 +333,72 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
               </select>
             </div>
 
-            {/* Estimate */}
-            <div>
-              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Estimate (pts)</label>
-              <select
-                value={estimate}
-                onChange={(e) => setEstimate(Number(e.target.value))}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-              >
-                <option value={1}>1 pt</option>
-                <option value={2}>2 pts</option>
-                <option value={3}>3 pts</option>
-                <option value={5}>5 pts</option>
-                <option value={8}>8 pts</option>
-              </select>
+            {/* Labels Multi-Select */}
+            <div className="col-span-2">
+              <label className="text-[11px] font-medium text-zinc-400 block mb-1">Labels</label>
+              <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-900 border border-zinc-800 rounded min-h-[38px] items-center">
+                {availableLabels.length === 0 ? (
+                  <span className="text-zinc-600 text-xs">No labels configured</span>
+                ) : (
+                  availableLabels.map((lbl) => {
+                    const isSelected = selectedLabels.includes(lbl.id);
+                    return (
+                      <button
+                        key={lbl.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedLabels((prev) =>
+                            isSelected ? prev.filter((id) => id !== lbl.id) : [...prev, lbl.id]
+                          );
+                        }}
+                        className={`text-[11px] px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 cursor-pointer select-none ${
+                          isSelected
+                            ? 'font-medium shadow-xs'
+                            : 'opacity-40 hover:opacity-80 border-transparent bg-zinc-800/60 text-zinc-400'
+                        }`}
+                        style={
+                          isSelected
+                            ? {
+                                backgroundColor: `${lbl.color}25`,
+                                borderColor: lbl.color,
+                                color: lbl.color,
+                              }
+                            : {}
+                        }
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: lbl.color }}
+                        />
+                        <span>{lbl.name}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
 
           {/* Footer Controls */}
-           <div className="pt-4 border-t border-zinc-800 flex items-center justify-end gap-2">
-            <button
+          <div className="pt-4 border-t border-border-subtle flex items-center justify-end gap-2">
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded text-xs text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
+              className="text-text-secondary hover:text-text-primary"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
+              variant="default"
+              size="sm"
               disabled={!title.trim() || isSubmitting}
-              className="px-4 py-1.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 disabled:opacity-30 transition-colors shadow-xs active:scale-95 cursor-pointer"
+              className="bg-brand-primary hover:bg-accent-hover text-white font-medium"
             >
               {isSubmitting ? 'Creating...' : 'Create Issue'}
-            </button>
+            </Button>
           </div>
         </form>
       </div>

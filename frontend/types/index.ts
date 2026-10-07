@@ -11,6 +11,7 @@ export interface User {
   email: string;
   name: string;
   avatar_url?: string;
+  job_description?: string;
 }
 
 export interface Organization {
@@ -71,11 +72,12 @@ export interface Issue {
   description_json?: any;
   description_text?: string;
   priority: IssuePriority;
-  estimate?: number;
   state_id: string;
   state?: WorkflowState;
   assignee_id?: string;
   assignee?: User;
+  assigned_by_id?: string;
+  assigned_by?: User;
   creator_id: string;
   creator?: User;
   project_id?: string;
@@ -145,4 +147,19 @@ export interface UserWorkspaceItem {
 
 export interface UserWorkspacesResponse {
   workspaces: UserWorkspaceItem[];
+}
+
+export interface InboxItem {
+  id: string;
+  action: string;
+  changes?: Record<string, any>;
+  actor?: User;
+  issue_id?: string;
+  issue_identifier?: string;
+  issue_title?: string;
+  team_key?: string;
+  is_deleted: boolean;
+  state?: WorkflowState;
+  priority?: IssuePriority;
+  created_at: string;
 }

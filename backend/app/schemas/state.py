@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field, ConfigDict
 
 
 class StateCategory(str, Enum):
-    TRIAGE = "triage"
     BACKLOG = "backlog"
     UNSTARTED = "unstarted"
     STARTED = "started"

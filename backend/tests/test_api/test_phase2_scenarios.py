@@ -357,26 +357,26 @@ def test_update_issue_echo_suppression_session_id(client, mock_db):
                     }
                 ]
             )
-            mock_t.update().eq().execute.return_value = MagicMock(
-                data=[
-                    {
-                        "id": MOCK_ISSUE_ID,
-                        "organization_id": MOCK_ORG_ID,
-                        "team_id": MOCK_TEAM_ID,
-                        "number": 101,
-                        "identifier": "ENG-101",
-                        "title": "New Title",
-                        "priority": "none",
-                        "state_id": MOCK_STATE_ID_1,
-                        "creator_id": MOCK_USER_ID,
-                        "sort_order": "0|h00000:",
-                        "version": 2,
-                        "last_modified_by_session": "sess-xyz-987",
-                        "created_at": "2026-09-30T10:00:00Z",
-                        "updated_at": "2026-09-30T10:05:00Z",
-                    }
-                ]
-            )
+            updated_data = [
+                {
+                    "id": MOCK_ISSUE_ID,
+                    "organization_id": MOCK_ORG_ID,
+                    "team_id": MOCK_TEAM_ID,
+                    "number": 101,
+                    "identifier": "ENG-101",
+                    "title": "New Title",
+                    "priority": "none",
+                    "state_id": MOCK_STATE_ID_1,
+                    "creator_id": MOCK_USER_ID,
+                    "sort_order": "0|h00000:",
+                    "version": 2,
+                    "last_modified_by_session": "sess-xyz-987",
+                    "created_at": "2026-09-30T10:00:00Z",
+                    "updated_at": "2026-09-30T10:05:00Z",
+                }
+            ]
+            mock_t.update().eq().execute.return_value = MagicMock(data=updated_data)
+            mock_t.update().eq().eq().execute.return_value = MagicMock(data=updated_data)
         elif table_name == "workspace_members":
             mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[{"id": "m1"}])
         elif table_name == "activity_logs":

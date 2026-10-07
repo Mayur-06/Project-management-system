@@ -81,37 +81,60 @@ Found multiple modal/popup components that render as overlays without dedicated 
 - **Issue details**: Preserve view state in localStorage or server-side hydration
 - **Settings**: Save changes on unmount with localStorage backup
 
+## Aligned Architectural Decisions (Grilling Session)
+
+Following the user alignment session, the implementation adheres to the following decisions:
+1. **Layout & Shell**: URL routes render inside the workspace layout shell with the workspace sidebar and top context fully intact.
+2. **Prioritization**: Phase 1 targets **Issue Detail & Create Issue** (`/[orgSlug]/[teamKey]/issues/[issueIdentifier]` and `/[orgSlug]/[teamKey]/issues/new`).
+3. **Browser Navigation & History**: Soft navigation (`router.push`) is used so browser Back/Forward operates seamlessly.
+4. **Route Hierarchy**:
+   - Create Issue: `/[orgSlug]/[teamKey]/issues/new` (receives query parameters such as `?stateId=...` for default state selection).
+   - Issue Detail: `/[orgSlug]/[teamKey]/issues/[issueIdentifier]` (already standalone page, fully hooked up to board/list clicks).
+5. **Back / Cancel Action**: Uses `router.back()` with a fallback to `/[orgSlug]/[teamKey]/issues` if no previous history exists.
+6. **Trigger Transition**:
+   - In `KanbanBoard` and `IssueListView`, item selection navigates to `/[orgSlug]/[teamKey]/issues/[issueIdentifier]`.
+   - TopNav "+ New Issue", sidebar "+ Issue", and Kanban state column "+" navigate to `/[orgSlug]/[teamKey]/issues/new` (optionally with `?stateId=...`).
+   - Retain modal components as fallbacks if needed until migration is validated.
+
 ## Implementation Plan
 
-### Phase 1: Analysis & Baseline (Week 1)
-1. Identify all modal close conditions (escape key, backdrop click, etc.)
-2. Map current data flow and dependencies
-3. Determine which modals can be safely URL-based
-4. Create decision matrix for URL vs Modal approach
+### Phase 1: Issue Detail & Issue Creation URL Migration (Current Focus)
+- [x] **1. Create Issue Route (`/[orgSlug]/[teamKey]/issues/new/page.tsx`)**
+  - Rendered dedicated page inside the workspace layout shell.
+  - Reads query parameters (`stateId`) to pre-select workflow state.
+  - Back/Cancel buttons navigate via `router.back()` with fallback to `/[orgSlug]/[teamKey]/issues`.
+  - On issue creation, dispatches `issueCreated` event and navigates to `/[orgSlug]/[teamKey]/issues/${newIssue.identifier}`.
+  - Includes `@related-files` header tags for upstream dependency tracking.
+- [x] **2. Wire Navigation Triggers to `/issues/new`**
+  - Updated `TopNav` "New Issue" action on issues page to route to `/[orgSlug]/[teamKey]/issues/new` (with default state query param).
+  - Updated `WorkspaceSidebar` "New Issue" action and global keyboard shortcut (`C`) in `layout.tsx` to route to `/[orgSlug]/[teamKey]/issues/new`.
+  - Updated `KanbanBoard` column "+" buttons to pass `stateId` query param: `/[orgSlug]/[teamKey]/issues/new?stateId=${state.id}`.
+- [x] **3. Validate Issue Detail Route (`/[orgSlug]/[teamKey]/issues/[issueIdentifier]`)**
+  - Enhanced back navigation to use `router.back()` with graceful fallback to `/[orgSlug]/[teamKey]/issues`.
+  - Confirmed Kanban and List views route directly to `/[orgSlug]/[teamKey]/issues/[issueIdentifier]`.
+- [x] **4. Test & Verification**
+  - Verified clean TypeScript compilation (`npx tsc --noEmit` exited with code 0).
+  - Preserved legacy modal as non-breaking fallback.
 
-### Phase 2: URL Route Implementation (Week 2)
-1. Create Next.js pages for each URL-based route
-2. Convert modal state to query parameters for form data
-3. Implement data loading/server-side rendering where possible
-4. Add fallback handling for direct navigation
+### Phase 2: Settings & Management Modals (Completed)
+- [x] Create `/settings/[orgSlug]` (redirects to `/settings/workspace`) and `/settings/teams/[teamKey]` (team-level settings with workflow state & member management)
+- [x] Create `/[orgSlug]/teams/new` (dedicated URL-first team creation page with auto-prefixed identifiers)
+- [x] Create `/workspaces/new` (full URL workspace creation page with slug normalization and initial team onboarding)
+- [x] Rewire sidebar triggers: "Create Workspace" navigates to `/workspaces/new`, "Create Team" navigates to `/[orgSlug]/teams/new`
+- [x] Attached `@related-files` header tags to all newly created implementation files
+- [x] Verified zero TypeScript compilation errors (`npx tsc --noEmit` exited with code 0)
 
-### Phase 3: Migration Strategy (Week 3)
-1. Feature flag system for gradual rollout
-2. Maintain modal as fallback for existing behavior
-3. Migrate user interactions progressively
-4. Test both approaches side-by-side
+### Phase 3: AI Assistant (Completed)
+- [x] Integrate URL route `/[orgSlug]/[teamKey]/ai` with `conversationId` query parameter tracking (`?conversationId=...`).
+- [x] Enable conversation thread management with "New Chat" action to generate fresh thread IDs and update URL query state.
+- [x] Add localStorage thread history persistence and auto-restoration across sessions.
+- [x] Rewire AI triggers:
+  - Sidebar "AI Assistant" action button soft-routes to `/[orgSlug]/[teamKey]/ai`.
+  - Global keyboard shortcut (`Cmd+J`) routes directly to `/[orgSlug]/[teamKey]/ai`.
+  - Command palette AI Assistant selection soft-routes to `/[orgSlug]/[teamKey]/ai`.
+- [x] Attached `@related-files` header tags.
+- [x] Verified zero TypeScript compilation errors (`npx tsc --noEmit` exited with code 0).
 
-### Phase 4: Optimization & Cleanup (Week 4)
-1. Remove redundant modal state management
-2. Clean up shared state between modal/URL implementations
-3. Optimize performance and bundle size
-4. Update documentation and routing
-
-### Dependencies & Constraints
-- **Authentication**: All routes require workspace/team membership
-- **Routing**: Update `WorkspaceSidebar` and `layout.tsx` navigation
-- **API**: Ensure all backend endpoints support URL-based access
-- **State**: Migrate form/selection state between modal/URL implementations
 
 ### Technical Implementation Details
 
@@ -129,28 +152,25 @@ Found multiple modal/popup components that render as overlays without dedicated 
 // Has its own close mechanism (navigation away)
 ```
 
-#### Settings (`/workspace/settings/{orgSlug?}`)
+#### Settings (`/[orgSlug]/settings/*`)
 ```typescript
-// Combines org-level and team-level settings access
-// Persistent across sessions via API calls
-// Modal becomes internal detail
+// Full-screen dedicated settings environment with TopNav-style header,
+// interactive breadcrumbs, and "← Back to Workspace" / ESC escape hatches.
+// Hydrated at workspace root via app/(workspace)/[orgSlug]/layout.tsx.
 ```
 
 **Enhanced Settings Implementation:**
-* **Three-section sidebar navigation:**
-  * **Workspace:** Organization-level settings (name, slug, logo, company branding)
-  * **Members:** Team member management (roles, invitations, permissions)
-  * **Profile:** User profile and preferences (avatar, name, theme, notifications)
-* **URL Pattern:** `/workspace/{orgSlug}/settings/{section}`
-  * `/workspace/{orgSlug}/settings/workspace` (Organization settings)
-  * `/workspace/{orgSlug}/settings/members` (Team members)
-  * `/workspace/{orgSlug}/settings/profile` (User profile)
-* **Team-specific settings:** `/workspace/{orgSlug}/{teamKey}/settings/` for team-level access
-* **Sidebar navigation:** Left sidebar with active states for each section
-* **Full page experience:** Settings rendered as dedicated pages with navigation sidebar
-* **State preservation:** Form data saved on unmount/URL changes
-* **Access control:** Proper authorization checks for each section
-* **Modal replaced:** No longer a modal overlay, now a full page route
+* **Dedicated Navigation Sidebar:**
+  * **Workspace:** `/[orgSlug]/settings/workspace` — Organization Name and URL Slug (company branding/logo removed)
+  * **Members:** `/[orgSlug]/settings/members` — Table with `Name`, `Email`, `Status (Membership type)`, `Teams (count)`, `Joined Date`
+  * **Teams Overview:** `/[orgSlug]/settings/teams` — Table of workspace teams + "+ Create Team"
+  * **Team Settings:** `/[orgSlug]/settings/teams/[teamKey]` — General Info (Name, Key Prefix) & assigned Team Members (Workflow states removed)
+  * **Profile:** `/[orgSlug]/settings/profile` — Inline editable Name, optional Job Description, Account info (Theme and Security removed)
+* **RBAC Enforcement**:
+  * **Admin:** Edit access on workspace name, invite member form, create team action, team info editing, and adding/removing team members.
+  * **Member:** View-only access with disabled inputs, hidden invite/create buttons, and view-only badges.
+* **Keyboard Navigation:** `Cmd+,` toggles Settings, and `Escape` returns to the active workspace board.
+* **Context Hydration:** Root `WorkspaceContext.Provider` hoisted to `app/(workspace)/[orgSlug]/layout.tsx`.
 
 ## Migration Strategy
 

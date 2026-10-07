@@ -101,24 +101,45 @@ class IssueService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to issue")
         return issue
 
-    @classmethod
-    def _enrich_issue_assignee(cls, item: dict, db: Client, cache: Optional[dict] = None) -> dict:
-        assignee_id = item.get("assignee_id")
-        if not assignee_id:
-            return item
-        if cache is not None and assignee_id in cache:
-            item["assignee"] = cache[assignee_id]
-            return item
-        email, name = WorkspaceService.resolve_user_info(assignee_id, db)
-        assignee_meta = {
-            "id": assignee_id,
+    @staticmethod
+    def _resolve_user_meta(uid: Optional[str], db: Client, cache: Optional[dict] = None) -> Optional[dict]:
+        if not uid:
+            return None
+        if cache is not None and uid in cache:
+            return cache[uid]
+        email, name = WorkspaceService.resolve_user_info(uid, db)
+        meta = {
+            "id": uid,
             "email": email,
             "name": name,
         }
         if cache is not None:
-            cache[assignee_id] = assignee_meta
-        item["assignee"] = assignee_meta
+            cache[uid] = meta
+        return meta
+
+    @classmethod
+    def _enrich_issue_users(
+        cls,
+        item: dict,
+        db: Client,
+        user_cache: Optional[dict] = None,
+        state_cache: Optional[dict] = None,
+    ) -> dict:
+        item["assignee"] = cls._resolve_user_meta(item.get("assignee_id"), db, user_cache)
+        
+        assigned_by_id = item.get("assigned_by_id")
+        if not assigned_by_id and item.get("assignee_id"):
+            assigned_by_id = item.get("creator_id")
+        item["assigned_by"] = cls._resolve_user_meta(assigned_by_id, db, user_cache)
+        item["creator"] = cls._resolve_user_meta(item.get("creator_id"), db, user_cache)
+
+        if state_cache and item.get("state_id") in state_cache:
+            item["state"] = state_cache[item.get("state_id")]
         return item
+
+    @classmethod
+    def _enrich_issue_assignee(cls, item: dict, db: Client, cache: Optional[dict] = None) -> dict:
+        return cls._enrich_issue_users(item, db, cache)
 
     @classmethod
     def list_issues(
@@ -140,8 +161,6 @@ class IssueService:
             query = query.eq("state_id", state_id)
         if assignee_id:
             query = query.eq("assignee_id", assignee_id)
-        if cycle_id:
-            query = query.eq("cycle_id", cycle_id)
         if project_id:
             query = query.eq("project_id", project_id)
         if priority:
@@ -151,8 +170,39 @@ class IssueService:
 
         query = query.order("sort_order")
         res = query.execute()
+
+        # Cache workflow states for the team to enrich issue.state
+        state_cache = {}
+        try:
+            st_res = db.table("workflow_states").select("id, name, color, category, position, is_default, team_id, created_at").eq("team_id", team_id).execute()
+            if st_res.data:
+                state_cache = {s["id"]: s for s in st_res.data}
+        except Exception:
+            pass
+
         user_cache: dict = {}
-        enriched = [cls._enrich_issue_assignee(item, db, user_cache) for item in (res.data or [])]
+        enriched = [cls._enrich_issue_users(item, db, user_cache, state_cache) for item in (res.data or [])]
+
+        # Batch load labels for issues
+        issue_ids = [item["id"] for item in enriched]
+        labels_by_issue: Dict[str, list] = {iid: [] for iid in issue_ids}
+        if issue_ids:
+            try:
+                lbl_res = (
+                    db.table("issue_labels")
+                    .select("issue_id, label_id, labels(id, name, color, description)")
+                    .in_("issue_id", issue_ids)
+                    .execute()
+                )
+                for row in (lbl_res.data or []):
+                    if row.get("labels"):
+                        labels_by_issue.setdefault(row["issue_id"], []).append(row["labels"])
+            except Exception:
+                pass
+
+        for item in enriched:
+            item["labels"] = labels_by_issue.get(item["id"], [])
+
         return [IssueResponse(**item) for item in enriched]
 
     @classmethod
@@ -176,7 +226,7 @@ class IssueService:
 
         team = cls._verify_team_member(resolved_team_id, user_id, db)
 
-        # 1. State resolution (Strict Cross-Team Triage Invariant)
+        # 1. State resolution
         target_state_id = data.state_id
 
         # Determine if creator is a member of the target destination team
@@ -200,7 +250,7 @@ class IssueService:
             is_team_member = False
 
         # Determine target workflow state
-        # All issues route directly to default active state (no triage routing)
+        # All issues route directly to default active state
         if target_state_id:
             try:
                 chk_state = (
@@ -268,12 +318,11 @@ class IssueService:
             "description_json": data.description_json,
             "description_text": data.description_text,
             "priority": data.priority.value,
-            "estimate": data.estimate,
             "state_id": target_state_id,
             "assignee_id": data.assignee_id,
+            "assigned_by_id": data.assigned_by_id or (user_id if data.assignee_id else None),
             "creator_id": user_id,
             "project_id": data.project_id,
-            "cycle_id": data.cycle_id,
             "parent_id": data.parent_id,
             "sort_order": sort_order,
             "version": 1,
@@ -285,6 +334,20 @@ class IssueService:
         if not res.data:
             raise HTTPException(status_code=500, detail="Failed to create issue")
         created = res.data[0]
+
+        # Attach labels if provided
+        created_labels = []
+        if data.label_ids:
+            for lid in data.label_ids:
+                try:
+                    db.table("issue_labels").insert({"issue_id": created["id"], "label_id": lid}).execute()
+                except Exception:
+                    pass
+            try:
+                l_res = db.table("issue_labels").select("label_id, labels(id, name, color, description)").eq("issue_id", created["id"]).execute()
+                created_labels = [x["labels"] for x in (l_res.data or []) if x.get("labels")]
+            except Exception:
+                pass
 
         # Audit log
         db.table("activity_logs").insert({
@@ -308,7 +371,9 @@ class IssueService:
         except Exception:
             pass
 
-        return IssueResponse(**cls._enrich_issue_assignee(created, db))
+        created_enriched = cls._enrich_issue_assignee(created, db)
+        created_enriched["labels"] = created_labels
+        return IssueResponse(**created_enriched)
 
     @classmethod
     def get_issue(cls, issue_id_or_identifier: str, user_id: str, db: Client) -> IssueDetailResponse:
@@ -323,18 +388,56 @@ class IssueService:
         )
         labels = [item["labels"] for item in (labels_res.data or []) if item.get("labels")]
 
-        # Subtasks
-        subtasks_res = (
-            db.table("issues")
-            .select("*")
-            .eq("parent_id", issue["id"])
-            .is_("deleted_at", "null")
-            .order("sort_order")
-            .execute()
-        )
+        # Recursively fetch all descendants (children, grandchildren, etc.)
+        all_descendants = []
+        current_parent_ids = [issue["id"]]
+        visited_parents = set(current_parent_ids)
+        while current_parent_ids:
+            sub_res = (
+                db.table("issues")
+                .select("*")
+                .in_("parent_id", current_parent_ids)
+                .is_("deleted_at", "null")
+                .order("sort_order")
+                .execute()
+            )
+            if not sub_res.data:
+                break
+            new_items = [r for r in sub_res.data if r["id"] not in visited_parents]
+            if not new_items:
+                break
+            for r in new_items:
+                visited_parents.add(r["id"])
+            all_descendants.extend(new_items)
+            current_parent_ids = [r["id"] for r in new_items]
+
+        # Workflow states cache for team
+        state_cache = {}
+        try:
+            st_res = db.table("workflow_states").select("id, name, color, category, position, is_default, team_id, created_at").eq("team_id", issue["team_id"]).execute()
+            if st_res.data:
+                state_cache = {s["id"]: s for s in st_res.data}
+        except Exception:
+            pass
+
         cache: dict = {}
-        subtasks = [IssueResponse(**cls._enrich_issue_assignee(st, db, cache)) for st in (subtasks_res.data or [])]
-        enriched_issue = cls._enrich_issue_assignee(issue, db, cache)
+        enriched_descendants = [cls._enrich_issue_users(d, db, cache, state_cache) for d in all_descendants]
+
+        # Group descendants by parent_id
+        children_by_parent: Dict[str, list] = {}
+        for d in enriched_descendants:
+            pid = d.get("parent_id")
+            if pid:
+                children_by_parent.setdefault(pid, []).append(d)
+
+        def attach_children(parent_id: str) -> list:
+            children = children_by_parent.get(parent_id, [])
+            for child in children:
+                child["subtasks"] = attach_children(child["id"])
+            return children
+
+        subtasks = attach_children(issue["id"])
+        enriched_issue = cls._enrich_issue_users(issue, db, cache, state_cache)
 
         return IssueDetailResponse(**enriched_issue, labels=labels, subtasks=subtasks)
 
@@ -356,8 +459,19 @@ class IssueService:
         update_dict = {}
         changes = {}
         dumped = data.model_dump(exclude_unset=True)
+
+        if "label_ids" in dumped:
+            new_label_ids = dumped["label_ids"] or []
+            try:
+                db.table("issue_labels").delete().eq("issue_id", issue_id).execute()
+                for lid in new_label_ids:
+                    db.table("issue_labels").insert({"issue_id": issue_id, "label_id": lid}).execute()
+            except Exception:
+                pass
+            changes["labels"] = {"updated": new_label_ids}
+
         for field, val in dumped.items():
-            if field in ("expected_version", "client_session_id"):
+            if field in ("expected_version", "client_session_id", "label_ids"):
                 continue
             if val is None:
                 update_dict[field] = None
@@ -373,6 +487,16 @@ class IssueService:
                 update_dict[field] = val_str
                 if current_issue.get(field) != val_str:
                     changes[field] = {"old": current_issue.get(field), "new": val_str}
+
+        # Dynamically record who assigned the issue whenever assignee_id changes
+        if "assignee_id" in changes:
+            new_assignee = update_dict.get("assignee_id")
+            if new_assignee:
+                update_dict["assigned_by_id"] = user_id
+                changes["assigned_by_id"] = {"old": current_issue.get("assigned_by_id"), "new": user_id}
+            else:
+                update_dict["assigned_by_id"] = None
+                changes["assigned_by_id"] = {"old": current_issue.get("assigned_by_id"), "new": None}
 
         update_dict["version"] = current_issue["version"] + 1
         update_dict["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -393,7 +517,7 @@ class IssueService:
                     "current_state": fresh_issue,
                 }
             )
-        updated = res.data[0]
+        updated = {**current_issue, **update_dict, **(res.data[0] if (res.data and isinstance(res.data[0], dict)) else {})}
 
         if changes:
             db.table("activity_logs").insert({
@@ -418,7 +542,17 @@ class IssueService:
                 except Exception:
                     pass
 
-        return IssueResponse(**cls._enrich_issue_assignee(updated, db))
+        # Load labels for updated issue
+        lbls = []
+        try:
+            l_res = db.table("issue_labels").select("label_id, labels(id, name, color, description)").eq("issue_id", issue_id).execute()
+            lbls = [x["labels"] for x in (l_res.data or []) if x.get("labels")]
+        except Exception:
+            pass
+
+        updated_dict = cls._enrich_issue_assignee(updated, db)
+        updated_dict["labels"] = lbls
+        return IssueResponse(**updated_dict)
 
     @classmethod
     def delete_issue(cls, issue_id: str, user_id: str, db: Client, client_session_id: Optional[str] = None, hard: bool = False) -> None:
@@ -526,8 +660,6 @@ class IssueService:
                 updates_dict["assignee_id"] = item.assignee_id
             if item.priority is not None:
                 updates_dict["priority"] = item.priority.value
-            if item.cycle_id is not None:
-                updates_dict["cycle_id"] = item.cycle_id
             
             if updates_dict:
                 updates_dict["version"] = current_issue.get("version", 1) + 1
@@ -579,7 +711,7 @@ class IssueService:
         last_sub = (
             db.table("issues")
             .select("sort_order")
-            .eq("parent_id", parent_issue_id)
+            .eq("parent_id", parent["id"])
             .is_("deleted_at", "null")
             .order("sort_order", desc=True)
             .limit(1)
@@ -595,13 +727,11 @@ class IssueService:
             "identifier": identifier,
             "title": data.title,
             "priority": data.priority.value,
-            "estimate": data.estimate,
             "state_id": parent["state_id"],
             "assignee_id": data.assignee_id,
             "creator_id": user_id,
             "project_id": parent.get("project_id"),
-            "cycle_id": parent.get("cycle_id"),
-            "parent_id": parent_issue_id,
+            "parent_id": parent["id"],
             "sort_order": sort_order,
             "version": 1,
         }
@@ -613,7 +743,7 @@ class IssueService:
 
         db.table("activity_logs").insert({
             "organization_id": parent["organization_id"],
-            "issue_id": parent_issue_id,
+            "issue_id": parent["id"],
             "actor_id": user_id,
             "action": "subtask_created",
             "changes": {"subtask_identifier": identifier, "title": data.title},

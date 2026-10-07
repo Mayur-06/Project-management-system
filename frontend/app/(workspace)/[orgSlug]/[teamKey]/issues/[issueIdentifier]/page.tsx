@@ -19,16 +19,20 @@ import {
   ArrowLeft,
   ChevronDown,
 } from 'lucide-react';
-import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User } from '@/types';
+import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User, Label } from '@/types';
 import { api } from '@/lib/api';
 import { TopNav } from '@/components/navigation/TopNav';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
+import { StatusPicker } from '@/components/ui/StatusPicker';
+import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
+import { IssueTitleEditor } from '@/components/issues/IssueTitleEditor';
+import { IssueDescriptionEditor } from '@/components/editor/IssueDescriptionEditor';
+import { toast } from 'sonner';
 
 interface ProposedSubtaskItem {
   title: string;
   description?: string;
-  estimate?: number;
   priority?: IssuePriority;
 }
 
@@ -66,10 +70,10 @@ export default function IssueDetailPage() {
   // Manual subtask creation state
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newSubtaskPriority, setNewSubtaskPriority] = useState<IssuePriority>('none');
-  const [newSubtaskEstimate, setNewSubtaskEstimate] = useState<number | undefined>(undefined);
   const [newSubtaskAssigneeId, setNewSubtaskAssigneeId] = useState<string>('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
 
   // Load team, states, workspace users
   useEffect(() => {
@@ -112,6 +116,9 @@ export default function IssueDetailPage() {
       const data = await api.getIssue(issueIdentifier);
       if (data) {
         setIssue(data);
+        if (data.organization_id) {
+          api.getLabels(data.organization_id).then((lbls) => setAvailableLabels(lbls || [])).catch(() => {});
+        }
         api.getComments(data.id).then(setComments);
         api.getActivityLogs(data.id).then(setActivityLogs);
         api.getAttachments(data.id).then(setAttachments);
@@ -175,11 +182,30 @@ export default function IssueDetailPage() {
     }
   };
 
-  const handleAssigneeChange = async (assigneeId: string) => {
+  const handleTitleChange = async (newTitle: string) => {
     if (!issue) return;
     try {
       const updated = await api.updateIssue(issue.id, {
-        assignee_id: assigneeId ? assigneeId : undefined,
+        title: newTitle,
+        expected_version: issue.version,
+      });
+      if (updated) {
+        setIssue(updated);
+        window.dispatchEvent(new CustomEvent('issueUpdated', { detail: updated }));
+        toast.success('Title updated');
+      }
+    } catch (err) {
+      console.error('Failed to update title', err);
+      toast.error('Failed to update title');
+    }
+  };
+
+  const handleDescriptionChange = async (data: { description_text: string; description_json: any }) => {
+    if (!issue) return;
+    try {
+      const updated = await api.updateIssue(issue.id, {
+        description_text: data.description_text,
+        description_json: data.description_json,
         expected_version: issue.version,
       });
       if (updated) {
@@ -187,16 +213,16 @@ export default function IssueDetailPage() {
         window.dispatchEvent(new CustomEvent('issueUpdated', { detail: updated }));
       }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to update description', err);
+      toast.error('Failed to save description');
     }
   };
 
-  const handleEstimateChange = async (estimateStr: string) => {
+  const handleAssigneeChange = async (assigneeId: string) => {
     if (!issue) return;
-    const est = estimateStr ? Number(estimateStr) : undefined;
     try {
       const updated = await api.updateIssue(issue.id, {
-        estimate: est,
+        assignee_id: assigneeId ? assigneeId : undefined,
         expected_version: issue.version,
       });
       if (updated) {
@@ -216,19 +242,13 @@ export default function IssueDetailPage() {
       const created = await api.createSubtask(issue.id, {
         title: newSubtaskTitle.trim(),
         priority: newSubtaskPriority,
-        estimate: newSubtaskEstimate ? Number(newSubtaskEstimate) : undefined,
         assignee_id: newSubtaskAssigneeId || undefined,
       });
       if (created) {
-        const updated = {
-          ...issue,
-          subtasks: [...(issue.subtasks || []), created],
-        };
-        setIssue(updated);
+        await loadIssue();
         window.dispatchEvent(new CustomEvent('issueCreated', { detail: created }));
         setNewSubtaskTitle('');
         setNewSubtaskPriority('none');
-        setNewSubtaskEstimate(undefined);
         setNewSubtaskAssigneeId('');
       }
     } catch (err) {
@@ -287,7 +307,6 @@ export default function IssueDetailPage() {
           (res.proposed_subtasks || []).map((t) => ({
             title: t.title,
             description: t.description || '',
-            estimate: t.estimate || 3,
             priority: (t.priority as IssuePriority) || 'medium',
           }))
         );
@@ -306,7 +325,6 @@ export default function IssueDetailPage() {
       ...prev,
       {
         title: customDraftTitle.trim(),
-        estimate: 3,
         priority: 'medium',
       },
     ]);
@@ -323,7 +341,6 @@ export default function IssueDetailPage() {
     const formattedPayload = proposedSubtasks.map((p) => ({
       title: p.title,
       description: p.description || '',
-      estimate: p.estimate || 3,
       priority: p.priority || 'medium',
     }));
 
@@ -343,7 +360,6 @@ export default function IssueDetailPage() {
           identifier: `${issue.identifier}-sub${subIndex}`,
           title: task.title,
           priority: task.priority || 'medium',
-          estimate: task.estimate,
           state_id: activeStates[0]?.id || issue.state_id,
           state: activeStates[0] || issue.state,
           creator_id: issue.creator_id,
@@ -456,13 +472,20 @@ export default function IssueDetailPage() {
       {/* Main Issue Header Bar */}
       <div className="px-6 py-2.5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
         <div className="flex items-center gap-2 text-xs">
-          <Link
-            href={`/${orgSlug}/${teamKey.toLowerCase()}/issues`}
-            className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-900 transition-colors mr-1"
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues`);
+              }
+            }}
+            className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-900 transition-colors mr-1 cursor-pointer"
             title="Back to all issues"
           >
             <ArrowLeft className="w-4 h-4" />
-          </Link>
+          </button>
           <span className="font-mono font-bold text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700">
             {issue.identifier}
           </span>
@@ -497,14 +520,22 @@ export default function IssueDetailPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Main Left Column */}
         <div className="flex-1 p-6 overflow-y-auto space-y-6">
-          <h2 className="text-xl font-semibold text-white leading-snug">{issue.title}</h2>
+          <IssueTitleEditor
+            initialTitle={issue.title}
+            onSave={handleTitleChange}
+          />
 
           {/* Description */}
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Description</h3>
-            <div className="p-3.5 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">
-              {issue.description_text || 'No description provided.'}
-            </div>
+          <div className="space-y-1.5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+              Description
+            </h3>
+            <IssueDescriptionEditor
+              issueId={issue.id}
+              initialText={issue.description_text}
+              initialJson={issue.description_json}
+              onSave={handleDescriptionChange}
+            />
           </div>
 
           {/* Sub-tasks Section */}
@@ -561,46 +592,24 @@ export default function IssueDetailPage() {
                   <option value="high">Priority: High</option>
                   <option value="urgent">Priority: Urgent</option>
                 </select>
-
-                <select
-                  value={newSubtaskEstimate !== undefined ? String(newSubtaskEstimate) : ''}
-                  onChange={(e) => setNewSubtaskEstimate(e.target.value ? Number(e.target.value) : undefined)}
-                  className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
-                >
-                  <option value="">Estimate: None</option>
-                  <option value="1">1 pt</option>
-                  <option value="2">2 pts</option>
-                  <option value="3">3 pts</option>
-                  <option value="5">5 pts</option>
-                  <option value="8">8 pts</option>
-                </select>
               </div>
             </form>
 
             {issue.subtasks && issue.subtasks.length > 0 ? (
-              <div className="space-y-1.5">
-                {issue.subtasks.map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="p-2.5 rounded bg-zinc-950 border border-zinc-800 hover:border-zinc-700 flex items-center justify-between text-xs transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <CornerDownRight className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                      <Link
-                        href={`/${orgSlug}/${teamKey.toLowerCase()}/issues/${sub.identifier}`}
-                        className="font-mono font-medium text-zinc-400 hover:text-white hover:underline shrink-0"
-                      >
-                        {sub.identifier}
-                      </Link>
-                      <span className="text-zinc-200">{sub.title}</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <StateBadge state={sub.state} />
-                      <PriorityBadge priority={sub.priority} showLabel={false} />
-                    </div>
-                  </div>
-                ))}
+              <div className="p-2.5 rounded-lg bg-black border border-zinc-900/80">
+                <IssueSubtasksTree
+                  rootIssue={issue}
+                  subtasks={issue.subtasks}
+                  orgSlug={orgSlug}
+                  teamKey={teamKey}
+                  users={assignableUsers}
+                  onSelectIssue={(sub) => {
+                    router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${sub.identifier}`);
+                  }}
+                  onAddSubtaskToParent={(parentId) => {
+                    router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new?parentId=${parentId}`);
+                  }}
+                />
               </div>
             ) : (
               <div className="p-3 text-center rounded border border-dashed border-zinc-900 text-xs text-zinc-500">
@@ -758,9 +767,6 @@ export default function IssueDetailPage() {
                           >
                             <span className="font-medium text-white">{task.title}</span>
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-zinc-400 bg-zinc-800 px-1.5 py-0.5 rounded border border-zinc-700">
-                                {task.estimate} pts
-                              </span>
                               <PriorityBadge priority={task.priority || 'medium'} showLabel={false} />
                             </div>
                           </div>
@@ -885,21 +891,13 @@ export default function IssueDetailPage() {
           {/* Status */}
           <div>
             <label className="text-[11px] text-zinc-400 block mb-1">Status</label>
-            <select
-              value={issue.state_id}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-            >
-              {activeStates.length > 0 ? (
-                activeStates.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))
-              ) : (
-                <option value={issue.state_id}>{issue.state?.name || 'Current Status'}</option>
-              )}
-            </select>
+            <StatusPicker
+              states={activeStates}
+              currentStateId={issue.state_id}
+              currentState={issue.state}
+              onSelectState={handleStatusChange}
+              triggerClassName="w-full justify-between h-8 bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+            />
           </div>
 
           {/* Priority */}
@@ -918,9 +916,9 @@ export default function IssueDetailPage() {
             </select>
           </div>
 
-          {/* Assignee */}
+          {/* Assigned to */}
           <div>
-            <label className="text-[11px] text-zinc-400 block mb-1">Assignee</label>
+            <label className="text-[11px] text-zinc-400 block mb-1">Assigned to</label>
             <select
               value={issue.assignee_id || ''}
               onChange={(e) => handleAssigneeChange(e.target.value)}
@@ -935,22 +933,71 @@ export default function IssueDetailPage() {
             </select>
           </div>
 
-          {/* Story Points */}
+          {/* Assignment provenance */}
+          <div className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between">
+              <span className="text-zinc-500">Assigned by</span>
+              <span className="text-zinc-300 font-medium truncate max-w-[120px]">
+                {issue.assigned_by?.name || issue.creator?.name || '—'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between border-t border-zinc-800/40 pt-1.5">
+              <span className="text-zinc-500">Created by</span>
+              <span className="text-zinc-300 font-medium truncate max-w-[120px]">
+                {issue.creator?.name || '—'}
+              </span>
+            </div>
+          </div>
+
+          {/* Labels Manager */}
           <div>
-            <label className="text-[11px] text-zinc-400 block mb-1">Story Points</label>
-            <select
-              value={issue.estimate !== undefined && issue.estimate !== null ? String(issue.estimate) : ''}
-              onChange={(e) => handleEstimateChange(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-            >
-              <option value="">No estimate</option>
-              <option value="1">1 pt</option>
-              <option value="2">2 pts</option>
-              <option value="3">3 pts</option>
-              <option value="5">5 pts</option>
-              <option value="8">8 pts</option>
-              <option value="13">13 pts</option>
-            </select>
+            <label className="text-[11px] text-zinc-400 block mb-1">Labels</label>
+            <div className="flex flex-wrap gap-1.5 p-2 bg-zinc-900 border border-zinc-800 rounded min-h-[36px] items-center">
+              {availableLabels.length === 0 ? (
+                <span className="text-zinc-600 text-xs">No labels configured</span>
+              ) : (
+                availableLabels.map((lbl) => {
+                  const currentLabelIds = (issue.labels || []).map((l) => l.id);
+                  const isAttached = currentLabelIds.includes(lbl.id);
+                  return (
+                    <button
+                      key={lbl.id}
+                      type="button"
+                      onClick={async () => {
+                        const newIds = isAttached
+                          ? currentLabelIds.filter((id) => id !== lbl.id)
+                          : [...currentLabelIds, lbl.id];
+                        const updated = await api.updateIssue(issue.id, {
+                          label_ids: newIds,
+                          expected_version: issue.version,
+                        });
+                        if (updated) {
+                          setIssue(updated);
+                          window.dispatchEvent(new CustomEvent('issueUpdated', { detail: updated }));
+                        }
+                      }}
+                      className={`text-[11px] px-2 py-0.5 rounded-full border transition-all flex items-center gap-1 cursor-pointer ${
+                        isAttached
+                          ? 'font-medium shadow-xs'
+                          : 'opacity-40 hover:opacity-80 border-transparent bg-zinc-800/60 text-zinc-400'
+                      }`}
+                      style={
+                        isAttached
+                          ? {
+                              backgroundColor: `${lbl.color}25`,
+                              borderColor: lbl.color,
+                              color: lbl.color,
+                            }
+                          : {}
+                      }
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lbl.color }} />
+                      <span>{lbl.name}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>

@@ -5,12 +5,13 @@ Verifies service-layer authorization checks, tenant membership validation,
 field clearing, OCC atomic predicates, and deletion permissions.
 """
 
+import uuid
 from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException, status
 
 from app.schemas.issue import IssueUpdate, BatchUpdateRequest, BatchReorderRequest
-from app.schemas.phase4 import TriageClassifyRequest, BreakdownStartRequest
+from app.schemas.phase4 import BreakdownStartRequest
 from app.services.issue_service import IssueService
 from app.services.phase4_service import Phase4Service
 
@@ -137,19 +138,6 @@ def test_C6_batch_reorder_increments_version():
     assert update_payload.get("version") == 6, "C-6 DEFECT: batch_reorder failed to increment version!"
 
 
-def test_C7_classify_issue_verifies_membership():
-    """C-7: Verify classify_issue checks caller organization membership."""
-    mock_db = create_mock_db(member_data=[])
-    mock_db.table("teams").select.return_value.eq.return_value.limit.return_value.execute.return_value = MagicMock(
-        data=[{"id": MOCK_TEAM_ID, "organization_id": MOCK_ORG_ID, "key": "ENG"}]
-    )
-
-    req = TriageClassifyRequest(team_id=MOCK_TEAM_ID, title="Authentication crash")
-    with pytest.raises(HTTPException) as exc:
-        Phase4Service.classify_issue(req, "non_member_id", mock_db)
-    assert exc.value.status_code == status.HTTP_403_FORBIDDEN
-
-
 def test_C7_start_breakdown_verifies_membership():
     """C-7: Verify start_breakdown checks caller organization membership before reading issue."""
     mock_db = create_mock_db(
@@ -187,16 +175,16 @@ def test_H4_field_clearing_due_date_none():
         f"H-4 DEFECT: Explicit due_date=None was dropped from write payload: {update_payload}"
 
 
-def test_H4_field_clearing_estimate_none():
-    """H-4: Verify explicitly passing estimate=None sets estimate to None in DB payload."""
-    mock_db = create_mock_db(issue_data={"id": MOCK_ISSUE_ID, "organization_id": MOCK_ORG_ID, "version": 1, "estimate": 5})
-    data = IssueUpdate(estimate=None, expected_version=1)
+def test_H4_field_clearing_assignee_none():
+    """H-4: Verify explicitly passing assignee_id=None sets assignee_id to None in DB payload."""
+    mock_db = create_mock_db(issue_data={"id": MOCK_ISSUE_ID, "organization_id": MOCK_ORG_ID, "version": 1, "assignee_id": str(uuid.uuid4())})
+    data = IssueUpdate(assignee_id=None, expected_version=1)
     IssueService.update_issue(MOCK_ISSUE_ID, data, MOCK_USER_ID, mock_db)
 
     iss_table = mock_db.table("issues")
     update_payload = iss_table.update.call_args[0][0]
-    assert "estimate" in update_payload and update_payload["estimate"] is None, \
-        f"H-4 DEFECT: Explicit estimate=None was dropped from write payload: {update_payload}"
+    assert "assignee_id" in update_payload and update_payload["assignee_id"] is None, \
+        f"H-4 DEFECT: Explicit assignee_id=None was dropped from write payload: {update_payload}"
 
 
 def test_H9_atomic_occ_predicate_includes_version():

@@ -88,15 +88,17 @@ class Phase4Service:
         try:
             sign_res = db.storage.from_("attachments").create_signed_upload_url(storage_path)
             if isinstance(sign_res, dict):
-                upload_url = sign_res.get("signed_url") or sign_res.get("signedUrl") or sign_res.get("url")
-            elif hasattr(sign_res, "signed_url"):
+                val = sign_res.get("signed_url") or sign_res.get("signedUrl") or sign_res.get("url")
+                if isinstance(val, str):
+                    upload_url = val
+            elif hasattr(sign_res, "signed_url") and isinstance(sign_res.signed_url, str):
                 upload_url = sign_res.signed_url
-            elif hasattr(sign_res, "url"):
+            elif hasattr(sign_res, "url") and isinstance(sign_res.url, str):
                 upload_url = sign_res.url
         except Exception:
             upload_url = None
 
-        if not upload_url:
+        if not upload_url or not isinstance(upload_url, str):
             # Fallback to direct authenticated Supabase storage object path
             upload_url = f"{base_url}/storage/v1/object/attachments/{storage_path}"
 
@@ -259,6 +261,32 @@ class Phase4Service:
                             state_id=iss.get("state_id"),
                         )
                     )
+        # If vector search produced 0 matches, perform title keyword fallback
+        if not results:
+            first_keyword = data.title.split()[0] if data.title else ""
+            if len(first_keyword) >= 3:
+                try:
+                    fallback_res = (
+                        db.table("issues")
+                        .select("id, identifier, title, state_id")
+                        .eq("organization_id", org_id)
+                        .is_("deleted_at", "null")
+                        .ilike("title", f"%{first_keyword}%")
+                        .limit(data.limit)
+                        .execute()
+                    )
+                    for iss in (fallback_res.data or []):
+                        results.append(
+                            DuplicateIssueItem(
+                                issue_id=iss["id"],
+                                identifier=iss["identifier"],
+                                title=iss["title"],
+                                similarity=0.85,
+                                state_id=iss.get("state_id"),
+                            )
+                        )
+                except Exception:
+                    pass
 
         return DuplicateCheckResponse(
             duplicates_found=len(results) > 0,
@@ -333,19 +361,16 @@ class Phase4Service:
             {
                 "title": f"Architectural setup & schema definition for {parent['title']}",
                 "description": "Initialize database migrations, indexes, and entity models.",
-                "estimate": 3,
                 "priority": "high",
             },
             {
                 "title": f"Core API service & business logic handlers",
                 "description": "Implement service layer, validation, and error boundaries.",
-                "estimate": 5,
                 "priority": "medium",
             },
             {
                 "title": f"Integration test coverage & validation suite",
                 "description": "Write unit tests and end-to-end regression validation.",
-                "estimate": 2,
                 "priority": "low",
             },
         ]
@@ -354,7 +379,6 @@ class Phase4Service:
             ProposedSubtask(
                 title=p["title"],
                 description=p.get("description"),
-                estimate=p.get("estimate"),
                 priority=p.get("priority", "medium"),
             )
             for p in proposed_raw
@@ -439,7 +463,6 @@ class Phase4Service:
                     "title": item.title,
                     "description_text": item.description,
                     "priority": item.priority,
-                    "estimate": item.estimate,
                     "state_id": "00000000-0000-0000-0000-000000000000",
                     "creator_id": user_id,
                     "parent_id": parent_id,
