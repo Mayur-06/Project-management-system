@@ -9,6 +9,7 @@ import {
   IssueAttachment,
   UserWorkspaceItem,
   UserWorkspacesResponse,
+  InboxItem,
 } from '@/types';
 import { getClientSessionId, supabase } from '@/lib/supabase/client';
 
@@ -299,8 +300,8 @@ export const api = {
     return data || [];
   },
 
-  async getInbox(orgSlug: string): Promise<Issue[] | null> {
-    return await fetchWithAuth<Issue[]>(`/organizations/${orgSlug}/inbox`);
+  async getInbox(orgSlug: string, offset = 0, limit = 50): Promise<InboxItem[] | null> {
+    return await fetchWithAuth<InboxItem[]>(`/organizations/${orgSlug}/inbox?offset=${offset}&limit=${limit}`);
   },
 
   async getIssue(idOrKey: string): Promise<Issue | null> {

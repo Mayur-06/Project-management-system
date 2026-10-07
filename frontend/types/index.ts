@@ -146,3 +146,18 @@ export interface UserWorkspaceItem {
 export interface UserWorkspacesResponse {
   workspaces: UserWorkspaceItem[];
 }
+
+export interface InboxItem {
+  id: string;
+  action: string;
+  changes?: Record<string, any>;
+  actor?: User;
+  issue_id?: string;
+  issue_identifier?: string;
+  issue_title?: string;
+  team_key?: string;
+  is_deleted: boolean;
+  state?: WorkflowState;
+  priority?: IssuePriority;
+  created_at: string;
+}
