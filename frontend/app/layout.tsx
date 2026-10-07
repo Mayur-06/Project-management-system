@@ -1,16 +1,8 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/martian-mono';
+import { Toaster } from '@/components/ui/sonner';
 import './globals.css';
-
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
 
 export const metadata: Metadata = {
   title: 'Project Management & AI Workspace',
@@ -25,9 +17,13 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
+      className="h-full antialiased dark font-sans"
     >
-      <body className="min-h-full flex flex-col bg-black text-white">{children}</body>
+      <body className="min-h-full flex flex-col bg-[#08090a] text-[#f7f8f8] font-sans antialiased">
+        {children}
+        <Toaster position="bottom-right" richColors={false} closeButton />
+      </body>
     </html>
   );
 }
+

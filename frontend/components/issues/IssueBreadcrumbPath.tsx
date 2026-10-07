@@ -1,8 +1,15 @@
 'use client';
 
 import React from 'react';
-import { ChevronRight } from 'lucide-react';
 import { Issue } from '@/types';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import { cn } from '@/lib/utils';
 
 interface IssueBreadcrumbPathProps {
   ancestors: Issue[];
@@ -32,28 +39,34 @@ export const IssueBreadcrumbPath: React.FC<IssueBreadcrumbPathProps> = ({
     .join(' > ');
 
   return (
-    <div
-      className={`flex items-center gap-1 text-[10px] text-zinc-400 font-medium overflow-hidden whitespace-nowrap min-w-0 ${className}`}
-      title={fullPath}
-    >
-      {ancestors.map((ancestor, index) => (
-        <React.Fragment key={ancestor.id || index}>
-          <button
-            type="button"
-            onClick={(e) => {
-              if (onClickAncestor) {
-                e.stopPropagation();
-                onClickAncestor(ancestor);
-              }
-            }}
-            className="truncate max-w-[110px] hover:text-zinc-200 transition-colors cursor-pointer text-left focus:outline-hidden"
-            title={`${ancestor.identifier}: ${ancestor.title}`}
-          >
-            {ancestor.title}
-          </button>
-          <ChevronRight className="w-2.5 h-2.5 text-zinc-600 shrink-0 stroke-[2.5]" />
-        </React.Fragment>
-      ))}
-    </div>
+    <Breadcrumb className={cn('overflow-hidden whitespace-nowrap min-w-0', className)} title={fullPath}>
+      <BreadcrumbList className="text-[10px] text-text-tertiary gap-1">
+        {ancestors.map((ancestor, index) => (
+          <React.Fragment key={ancestor.id || index}>
+            <BreadcrumbItem>
+              <BreadcrumbLink
+                asChild
+                className="truncate max-w-[120px] hover:text-text-primary transition-colors cursor-pointer text-left text-text-tertiary"
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    if (onClickAncestor) {
+                      e.stopPropagation();
+                      onClickAncestor(ancestor);
+                    }
+                  }}
+                  title={`${ancestor.identifier}: ${ancestor.title}`}
+                >
+                  <span className="font-mono text-zinc-500 mr-1">{ancestor.identifier}</span>
+                  {ancestor.title}
+                </button>
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator className="text-zinc-600 [&>svg]:w-2.5 [&>svg]:h-2.5" />
+          </React.Fragment>
+        ))}
+      </BreadcrumbList>
+    </Breadcrumb>
   );
 };

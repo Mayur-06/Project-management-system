@@ -3,16 +3,22 @@
 import React from 'react';
 import {
   Search,
-  Filter,
-  SlidersHorizontal,
   LayoutGrid,
   List,
   Sparkles,
   Plus,
-  ChevronRight,
-  Bell,
   Layers,
 } from 'lucide-react';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 interface TopNavProps {
   title: string;
@@ -42,47 +48,73 @@ export const TopNav: React.FC<TopNavProps> = ({
   onOpenAIAsk,
 }) => {
   return (
-    <header className="h-14 border-b border-[#1e2025] bg-[#090a0c]/80 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-10 select-none">
+    <header className="h-13 border-b border-border-subtle bg-canvas-workspace/85 backdrop-blur-md px-5 flex items-center justify-between sticky top-0 z-10 select-none">
       {/* Breadcrumbs & Title */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-          {breadcrumbs.map((crumb, idx) => (
-            <React.Fragment key={idx}>
-              <span className="hover:text-zinc-200 transition-colors cursor-pointer">{crumb}</span>
-              {idx < breadcrumbs.length - 1 && <ChevronRight className="w-3 h-3 text-zinc-600" />}
-            </React.Fragment>
-          ))}
-        </div>
-        <div className="h-3.5 w-px bg-zinc-800" />
-        <h1 className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
+      <div className="flex items-center gap-3 min-w-0">
+        {breadcrumbs.length > 0 && (
+          <>
+            <Breadcrumb>
+              <BreadcrumbList className="text-xs text-text-tertiary gap-1 sm:gap-1.5">
+                {breadcrumbs.map((crumb, idx) => {
+                  const isLast = idx === breadcrumbs.length - 1;
+                  return (
+                    <React.Fragment key={idx}>
+                      <BreadcrumbItem>
+                        {isLast ? (
+                          <BreadcrumbPage className="text-text-primary font-medium">
+                            {crumb}
+                          </BreadcrumbPage>
+                        ) : (
+                          <BreadcrumbLink className="hover:text-text-primary transition-colors cursor-pointer text-text-tertiary">
+                            {crumb}
+                          </BreadcrumbLink>
+                        )}
+                      </BreadcrumbItem>
+                      {!isLast && <BreadcrumbSeparator className="text-zinc-600 [&>svg]:w-3 [&>svg]:h-3" />}
+                    </React.Fragment>
+                  );
+                })}
+              </BreadcrumbList>
+            </Breadcrumb>
+            <div className="h-3 w-px bg-border-divider" />
+          </>
+        )}
+
+        <h1 className="text-xs font-semibold text-text-primary flex items-center gap-2 truncate">
           <span>{title}</span>
-          {subtitle && <span className="text-xs font-normal text-zinc-500 font-mono">({subtitle})</span>}
+          {subtitle && (
+            <span className="text-[11px] font-normal text-text-tertiary font-mono">
+              ({subtitle})
+            </span>
+          )}
         </h1>
       </div>
 
       {/* Action Controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5 shrink-0">
         {/* Search Bar */}
         {onSearchChange && (
           <div className="relative flex items-center">
-            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-2.5 pointer-events-none" />
-            <input
+            <Search className="w-3.5 h-3.5 text-text-tertiary absolute left-2.5 pointer-events-none" />
+            <Input
               type="text"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Filter issues..."
-              className="bg-[#121417] text-xs text-zinc-200 pl-8 pr-3 py-1.5 rounded-md border border-[#23262d] focus:border-indigo-500 focus:outline-none w-48 transition-all focus:w-64"
+              className="h-7 text-xs bg-surface-elevated/40 text-text-secondary pl-8 pr-3 w-44 focus:w-60 transition-all border-border-subtle focus-visible:ring-accent-violet/40 placeholder:text-text-quaternary rounded-md"
             />
           </div>
         )}
 
         {/* View Switcher (Board vs List) */}
         {onToggleViewMode && (
-          <div className="flex items-center bg-[#121417] border border-[#23262d] rounded-md p-0.5 text-zinc-400">
+          <div className="flex items-center bg-surface-elevated/50 border border-border-subtle rounded-md p-0.5 text-text-tertiary">
             <button
               onClick={() => onToggleViewMode('board')}
               className={`p-1 rounded text-xs transition-colors cursor-pointer ${
-                viewMode === 'board' ? 'bg-[#20232b] text-zinc-100 shadow-xs' : 'hover:text-zinc-200'
+                viewMode === 'board'
+                  ? 'bg-white/[0.08] text-text-primary shadow-xs'
+                  : 'hover:text-text-primary'
               }`}
               title="Board View"
             >
@@ -91,7 +123,9 @@ export const TopNav: React.FC<TopNavProps> = ({
             <button
               onClick={() => onToggleViewMode('list')}
               className={`p-1 rounded text-xs transition-colors cursor-pointer ${
-                viewMode === 'list' ? 'bg-[#20232b] text-zinc-100 shadow-xs' : 'hover:text-zinc-200'
+                viewMode === 'list'
+                  ? 'bg-white/[0.08] text-text-primary shadow-xs'
+                  : 'hover:text-text-primary'
               }`}
               title="List View"
             >
@@ -102,27 +136,31 @@ export const TopNav: React.FC<TopNavProps> = ({
 
         {/* Group By Switcher (Only visible in Board view) */}
         {viewMode === 'board' && onToggleGroupBy && (
-          <div className="flex items-center bg-[#121417] border border-[#23262d] rounded-md p-0.5 text-zinc-400 text-xs">
+          <div className="flex items-center bg-surface-elevated/50 border border-border-subtle rounded-md p-0.5 text-text-tertiary text-xs">
             <button
               type="button"
               onClick={() => onToggleGroupBy('parent')}
-              className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
-                groupBy === 'parent' ? 'bg-[#20232b] text-zinc-100 font-medium shadow-xs' : 'hover:text-zinc-200'
+              className={`px-2 py-0.5 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
+                groupBy === 'parent'
+                  ? 'bg-white/[0.08] text-text-primary font-medium shadow-xs'
+                  : 'hover:text-text-primary'
               }`}
               title="Group by Parent Issue (Horizontal Kanban)"
             >
-              <Layers className="w-3.5 h-3.5" />
+              <Layers className="w-3 h-3" />
               <span>Parent</span>
             </button>
             <button
               type="button"
               onClick={() => onToggleGroupBy('none')}
-              className={`px-2 py-1 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
-                groupBy === 'none' ? 'bg-[#20232b] text-zinc-100 font-medium shadow-xs' : 'hover:text-zinc-200'
+              className={`px-2 py-0.5 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
+                groupBy === 'none'
+                  ? 'bg-white/[0.08] text-text-primary font-medium shadow-xs'
+                  : 'hover:text-text-primary'
               }`}
               title="No Grouping (Vertical Kanban)"
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
+              <LayoutGrid className="w-3 h-3" />
               <span>Flat</span>
             </button>
           </div>
@@ -130,24 +168,28 @@ export const TopNav: React.FC<TopNavProps> = ({
 
         {/* AI Assistant Button */}
         {onOpenAIAsk && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={onOpenAIAsk}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-colors shadow-xs cursor-pointer"
+            className="gap-1.5 text-text-secondary hover:text-text-primary bg-surface-elevated/60 border-border-subtle hover:bg-white/[0.08]"
           >
-            <Sparkles className="w-3.5 h-3.5 text-zinc-400" />
+            <Sparkles className="w-3.5 h-3.5 text-accent-violet" />
             <span>AI Assistant</span>
-          </button>
+          </Button>
         )}
 
         {/* Create Issue Action */}
         {onOpenNewIssue && (
-          <button
+          <Button
+            variant="default"
+            size="sm"
             onClick={onOpenNewIssue}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium text-black bg-white hover:bg-zinc-200 transition-colors shadow-xs active:scale-95 cursor-pointer"
+            className="gap-1.5 bg-brand-primary hover:bg-accent-hover text-white font-medium shadow-xs"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>New Issue</span>
-          </button>
+          </Button>
         )}
       </div>
     </header>

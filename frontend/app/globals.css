@@ -1,30 +1,65 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
-  --surface: #0a0a0a;
-  --surface-hover: #141414;
-  --surface-active: #1f1f1f;
-  --border: #262626;
-  --border-subtle: #171717;
-  --primary: #ffffff;
-  --primary-hover: #e5e5e5;
-  --primary-text: #000000;
-  --muted: #a3a3a3;
-  --muted-dark: #737373;
-  --card: #0a0a0a;
-  --card-border: #262626;
-  --card-hover-border: #404040;
-  
-  --priority-urgent: #ffffff;
-  --priority-high: #e5e5e5;
-  --priority-medium: #a3a3a3;
-  --priority-low: #737373;
-  --priority-none: #525252;
+  /* ─── Typography Stacks ─── */
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'Martian Mono Variable', 'Martian Mono', ui-monospace, SF Mono, Menlo, monospace;
+
+  /* ─── Background Surfaces & Luminance Stack ─── */
+  --canvas-base: #000000;
+  --canvas-workspace: #08090a;
+  --panel-dark: #0f1011;
+  --surface-elevated: #141517;
+  --surface-hover: rgba(255, 255, 255, 0.04);
+  --surface-active: rgba(255, 255, 255, 0.07);
+  --surface-inset: rgba(0, 0, 0, 0.40);
+
+  /* ─── Backwards-Compatible Base Tokens ─── */
+  --background: #08090a;
+  --foreground: #f7f8f8;
+  --surface: #0f1011;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-divider: rgba(255, 255, 255, 0.04);
+  --primary: #5e6ad2;
+  --primary-hover: #828fff;
+  --primary-text: #ffffff;
+  --muted: #8a8f98;
+  --muted-dark: #62666d;
+  --card: #141517;
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-hover-border: rgba(255, 255, 255, 0.12);
+
+  /* ─── Text & Content Hierarchy ─── */
+  --text-primary: #f7f8f8;
+  --text-secondary: #d0d6e0;
+  --text-tertiary: #8a8f98;
+  --text-quaternary: #62666d;
+
+  /* ─── Brand & Accent Tokens ─── */
+  --brand-primary: #5e6ad2;
+  --accent-violet: #7170ff;
+  --accent-hover: #828fff;
+
+  /* ─── Domain: Issue Priorities ─── */
+  --priority-urgent: #f43f5e;
+  --priority-high: #f97316;
+  --priority-medium: #eab308;
+  --priority-low: #3b82f6;
+  --priority-none: #737373;
+
+  /* ─── Domain: Workflow States ─── */
+  --state-backlog: #737373;
+  --state-unstarted: #94a3b8;
+  --state-started: #3b82f6;
+  --state-completed: #10b981;
+  --state-canceled: #64748b;
 }
 
 @theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
@@ -32,10 +67,31 @@
   --color-surface-active: var(--surface-active);
   --color-border: var(--border);
   --color-border-subtle: var(--border-subtle);
+  --color-border-divider: var(--border-divider);
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-muted: var(--muted);
   --color-card: var(--card);
+
+  --color-canvas-base: var(--canvas-base);
+  --color-canvas-workspace: var(--canvas-workspace);
+  --color-panel-dark: var(--panel-dark);
+  --color-surface-elevated: var(--surface-elevated);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-quaternary: var(--text-quaternary);
+
+  --color-brand-primary: var(--brand-primary);
+  --color-accent-violet: var(--accent-violet);
+  --color-accent-hover: var(--accent-hover);
+
+  --color-priority-urgent: var(--priority-urgent);
+  --color-priority-high: var(--priority-high);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-low: var(--priority-low);
+  --color-priority-none: var(--priority-none);
 }
 
 * {
@@ -43,17 +99,24 @@
 }
 
 html, body {
-  background-color: var(--background);
-  color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--canvas-workspace);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv01" 1, "ss03" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   height: 100%;
 }
 
-/* Custom Monochrome Scrollbar */
+code, kbd, samp, pre, .font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Custom Linear-Grade Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -61,33 +124,21 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #23262b;
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #363a42;
+  background: rgba(255, 255, 255, 0.22);
 }
 
-/* Glassmorphism & Micro-interactions */
-.glass-panel {
-  background: rgba(15, 16, 18, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-}
-
-.subtle-ring:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(94, 106, 210, 0.5);
-}
-
-/* Animation utilities */
+/* Micro-animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: fadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+

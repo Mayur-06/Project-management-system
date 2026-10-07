@@ -1,370 +1,291 @@
-# Design System Inspired by Linear
+# Linear-Grade Design System & Architectural Blueprint
 
-> Category: Productivity & SaaS
-> Project management. Ultra-minimal, precise, purple accent.
+> **Product:** Project Management & AI Workspace  
+> **Philosophy:** Dark-Mode-Native, Atomic, Precision-Engineered, Purple Accent, Borderless/Whisper-Border Luminance
+
+---
 
 ## 1. Visual Theme & Atmosphere
 
-Linear's website is a masterclass in dark-mode-first product design — a near-black canvas (`#08090a`) where content emerges from darkness like starlight. The overall impression is one of extreme precision engineering: every element exists in a carefully calibrated hierarchy of luminance, from barely-visible borders (`rgba(255,255,255,0.05)`) to soft, luminous text (`#f7f8f8`). This is not a dark theme applied to a light design — it is darkness as the native medium, where information density is managed through subtle gradations of white opacity rather than color variation.
+Our workspace is an engineering-first, dark-mode-native product designed for extreme speed, clarity, and precision. Built on a near-black canvas (`#08090a`), the interface rejects harsh, high-contrast 1px boxed outlines around every component. Instead, structure and visual hierarchy emerge through **calibrated luminance stepping**, subtle background opacity gradations (`rgba(255,255,255,0.02)` to `0.05`), whisper-thin borders (`rgba(255,255,255,0.05)` to `0.08`), and borderless rows with soft hover highlights.
 
-The typography system is built entirely on Inter Variable with OpenType features `"cv01"` and `"ss03"` enabled globally, giving the typeface a cleaner, more geometric character. Inter is used at a remarkable range of weights — from 300 (light body) through 510 (medium, Linear's signature weight) to 590 (semibold emphasis). The 510 weight is particularly distinctive: it sits between regular and medium, creating a subtle emphasis that doesn't shout. At display sizes (72px, 64px, 48px), Inter uses aggressive negative letter-spacing (-1.584px to -1.056px), creating compressed, authoritative headlines that feel engineered rather than designed. Berkeley Mono serves as the monospace companion for code and technical labels, with fallbacks to ui-monospace, SF Mono, and Menlo.
+### Key Characteristics:
+- **Dark-Mode-Native Canvas:** `#000000` base, `#08090a` workspace canvas, `#0f1011` panel/sidebar background, `#141517` elevated surfaces.
+- **Luminance Over Boxed Outlines:** Depth is communicated through background luminance stepping and micro-elevations rather than heavy solid borders.
+- **Single Chromatic Brand Accent:** Linear's signature indigo-violet (`#5e6ad2` primary bg, `#7170ff` active/accent, `#828fff` hover) reserved strictly for primary actions, active navigation indicators, and key interactive states.
+- **Dual-Engine Typography:** `Inter Variable` with OpenType features `"cv01", "ss03"` globally for clean geometric sans-serif text, paired with `Martian Mono` for code blocks and issue identifiers (`ENG-104`).
+- **Atomic shadcn UI Component Foundation:** All interactive primitives derive from shadcn UI (`@/components/ui/`), backed by Radix primitives and styled with Tailwind CSS v4.
 
-The color system is almost entirely achromatic — dark backgrounds with white/gray text — punctuated by a single brand accent: Linear's signature indigo-violet (`#5e6ad2` for backgrounds, `#7170ff` for interactive accents). This accent color is used sparingly and intentionally, appearing only on CTAs, active states, and brand elements. The border system uses ultra-thin, semi-transparent white borders (`rgba(255,255,255,0.05)` to `rgba(255,255,255,0.08)`) that create structure without visual noise, like wireframes drawn in moonlight.
+---
 
-**Key Characteristics:**
-- Dark-mode-native: `#08090a` marketing background, `#0f1011` panel background, `#191a1b` elevated surfaces
-- Inter Variable with `"cv01", "ss03"` globally — geometric alternates for a cleaner aesthetic
-- Signature weight 510 (between regular and medium) for most UI text
-- Aggressive negative letter-spacing at display sizes (-1.584px at 72px, -1.056px at 48px)
-- Brand indigo-violet: `#5e6ad2` (bg) / `#7170ff` (accent) / `#828fff` (hover) — the only chromatic color in the system
-- Semi-transparent white borders throughout: `rgba(255,255,255,0.05)` to `rgba(255,255,255,0.08)`
-- Button backgrounds at near-zero opacity: `rgba(255,255,255,0.02)` to `rgba(255,255,255,0.05)`
-- Multi-layered shadows with inset variants for depth on dark surfaces
-- Radix UI primitives as the component foundation (6 detected primitives)
-- Success green (`#27a644`, `#10b981`) used only for status indicators
+## 2. Color Palette & Semantic Tokens
 
-## 2. Color Palette & Roles
+### Background Surfaces & Luminance Stack
+| Token | Hex / Value | Purpose |
+|---|---|---|
+| `--color-canvas-base` | `#000000` | Deepest root canvas |
+| `--color-canvas-workspace` | `#08090a` | Main workspace background (boards, lists, pages) |
+| `--color-panel-dark` | `#0f1011` | Sidebar, column containers, drawer background |
+| `--color-surface-elevated` | `#141517` | Cards, popovers, dropdown menus, modals |
+| `--color-surface-hover` | `rgba(255, 255, 255, 0.04)` | Interactive hover fill for table rows & list items |
+| `--color-surface-active` | `rgba(255, 255, 255, 0.07)` | Selected / active item background |
+| `--color-surface-inset` | `rgba(0, 0, 0, 0.40)` | Recessed input fields, code containers |
 
-### Background Surfaces
-- **Marketing Black** (`#010102` / `#08090a`): The deepest background — the canvas for hero sections and marketing pages. Near-pure black with an imperceptible blue-cool undertone.
-- **Panel Dark** (`#0f1011`): Sidebar and panel backgrounds. One step up from the marketing black.
-- **Level 3 Surface** (`#191a1b`): Elevated surface areas, card backgrounds, dropdowns.
-- **Secondary Surface** (`#28282c`): The lightest dark surface — used for hover states and slightly elevated components.
+### Text & Content Hierarchy
+| Token | Hex | Role |
+|---|---|---|
+| `--color-text-primary` | `#f7f8f8` | Primary text, titles, active navigation labels |
+| `--color-text-secondary` | `#d0d6e0` | Secondary body text, descriptions, table cell data |
+| `--color-text-tertiary` | `#8a8f98` | Muted labels, placeholders, keyboard shortcut hints |
+| `--color-text-quaternary` | `#62666d` | Subdued metadata, relative timestamps, disabled states |
 
-### Text & Content
-- **Primary Text** (`#f7f8f8`): Near-white with a barely-warm cast. The default text color — not pure white, preventing eye strain on dark backgrounds.
-- **Secondary Text** (`#d0d6e0`): Cool silver-gray for body text, descriptions, and secondary content.
-- **Tertiary Text** (`#8a8f98`): Muted gray for placeholders, metadata, and de-emphasized content.
-- **Quaternary Text** (`#62666d`): The most subdued text — timestamps, disabled states, subtle labels.
+### Brand & Interactive Accent
+| Token | Hex | Role |
+|---|---|---|
+| `--color-brand-primary` | `#5e6ad2` | Primary CTA background, active indicator pills |
+| `--color-accent-violet` | `#7170ff` | Interactive links, focused borders, active badges |
+| `--color-accent-hover` | `#828fff` | Hover state on brand interactive elements |
 
-### Brand & Accent
-- **Brand Indigo** (`#5e6ad2`): Primary brand color — used for CTA button backgrounds, brand marks, and key interactive surfaces.
-- **Accent Violet** (`#7170ff`): Brighter variant for interactive elements — links, active states, selected items.
-- **Accent Hover** (`#828fff`): Lighter, more saturated variant for hover states on accent elements.
-- **Security Lavender** (`#7a7fad`): Muted indigo used specifically for security-related UI elements.
+### Domain Tokens: Issue Priorities
+| Priority | Color | Hex | Visual Indicator |
+|---|---|---|---|
+| **Urgent** | Rose / Red | `#f43f5e` | Solid urgent icon, high-contrast indicator |
+| **High** | Orange | `#f97316` | 3-bar signal icon / pill |
+| **Medium** | Amber / Yellow | `#eab308` | 2-bar signal icon / pill |
+| **Low** | Blue | `#3b82f6` | 1-bar signal icon / pill |
+| **None** | Muted Gray | `#737373` | Dotted signal icon / subdued chip |
 
-### Status Colors
-- **Green** (`#27a644`): Primary success/active status. Used for "in progress" indicators.
-- **Emerald** (`#10b981`): Secondary success — pill badges, completion states.
+### Domain Tokens: Workflow State Categories
+| Category | Color | Hex | Default State Name |
+|---|---|---|---|
+| **Backlog** | Zinc Gray | `#737373` | Backlog |
+| **Unstarted** | Slate | `#94a3b8` | Todo |
+| **Started** | Yellow / Blue | `#eab308` / `#3b82f6` | In Progress |
+| **Completed** | Emerald Green | `#10b981` | Done |
+| **Canceled** | Slate Muted | `#64748b` | Canceled |
 
-### Border & Divider
-- **Border Primary** (`#23252a`): Solid dark border for prominent separations.
-- **Border Secondary** (`#34343a`): Slightly lighter solid border.
-- **Border Tertiary** (`#3e3e44`): Lightest solid border variant.
-- **Border Subtle** (`rgba(255,255,255,0.05)`): Ultra-subtle semi-transparent border — the default.
-- **Border Standard** (`rgba(255,255,255,0.08)`): Standard semi-transparent border for cards, inputs, code blocks.
-- **Line Tint** (`#141516`): Nearly invisible line for the subtlest divisions.
-- **Line Tertiary** (`#18191a`): Slightly more visible divider line.
+### Borders & Dividers (Whisper Borders)
+| Token | Value | Role |
+|---|---|---|
+| `--color-border-subtle` | `rgba(255, 255, 255, 0.05)` | Default component boundaries (subtle hairline) |
+| `--color-border-standard` | `rgba(255, 255, 255, 0.08)` | Popover, modal, card boundaries |
+| `--color-border-divider` | `rgba(255, 255, 255, 0.04)` | Row separators, vertical column dividers |
 
-### Light Mode Neutrals (for light theme contexts)
-- **Light Background** (`#f7f8f8`): Page background in light mode.
-- **Light Surface** (`#f3f4f5` / `#f5f6f7`): Subtle surface tinting.
-- **Light Border** (`#d0d6e0`): Visible border in light contexts.
-- **Light Border Alt** (`#e6e6e6`): Alternative lighter border.
-- **Pure White** (`#ffffff`): Card surfaces, highlights.
+---
 
-### Overlay
-- **Overlay Primary** (`rgba(0,0,0,0.85)`): Modal/dialog backdrop — extremely dark for focus isolation.
+## 3. Typography System
 
-## 3. Typography Rules
+### Typefaces
+- **Primary UI Sans:** `Inter Variable` with OpenType `font-feature-settings: "cv01", "ss03"` enabled globally.
+  - `"cv01"` provides single-story alternate 'a'.
+  - `"ss03"` provides geometric letterform adjustments.
+  - **Signature Weight 510:** Linear's default UI weight between 400 (regular) and 500/600 (medium/semibold).
+- **Monospace Companion:** `Martian Mono` (by Evil Martians, OFL-1.1) for issue identifiers (`ENG-104`), git branches, and code blocks.
+  - Fallbacks: `ui-monospace, SF Mono, Menlo, monospace`.
 
-### Font Family
-- **Primary**: `Inter Variable`, with fallbacks: `SF Pro Display, -apple-system, system-ui, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Open Sans, Helvetica Neue`
-- **Monospace**: `Berkeley Mono`, with fallbacks: `ui-monospace, SF Mono, Menlo`
-- **OpenType Features**: `"cv01", "ss03"` enabled globally — cv01 provides an alternate lowercase 'a' (single-story), ss03 adjusts specific letterforms for a cleaner geometric appearance.
+### Workspace Typographic Scale
+| Level | Font Family | Size | Weight | Line Height | Tracking | Usage |
+|---|---|---|---|---|---|---|
+| **Page Title** | Inter Variable | 20px (1.25rem) | 510 | 1.25 | -0.24px | Workspace page headers |
+| **Drawer / Modal Title** | Inter Variable | 18px (1.13rem) | 590 | 1.30 | -0.18px | Issue detail titles, modal headers |
+| **Section Header** | Inter Variable | 14px (0.88rem) | 590 | 1.40 | -0.15px | Sidebar section labels, drawer rails |
+| **UI Body / Cell** | Inter Variable | 13px (0.81rem) | 510 | 1.50 | normal | Issue list rows, Kanban card titles |
+| **Small / Meta** | Inter Variable | 12px (0.75rem) | 400 | 1.40 | normal | Timestamps, secondary metadata |
+| **Caption / Tiny** | Inter Variable | 11px (0.69rem) | 510 | 1.30 | normal | Badges, subtask rollups, status pills |
+| **Identifier** | Martian Mono | 12px (0.75rem) | 500 | 1.40 | normal | Issue keys (`ENG-104`), subtask tags |
+| **Code Block** | Martian Mono | 13px (0.81rem) | 400 | 1.50 | normal | Markdown code blocks, JSON traces |
 
-### Hierarchy
+---
 
-| Role | Font | Size | Weight | Line Height | Letter Spacing | Notes |
-|------|------|------|--------|-------------|----------------|-------|
-| Display XL | Inter Variable | 72px (4.50rem) | 510 | 1.00 (tight) | -1.584px | Hero headlines, maximum impact |
-| Display Large | Inter Variable | 64px (4.00rem) | 510 | 1.00 (tight) | -1.408px | Secondary hero text |
-| Display | Inter Variable | 48px (3.00rem) | 510 | 1.00 (tight) | -1.056px | Section headlines |
-| Heading 1 | Inter Variable | 32px (2.00rem) | 400 | 1.13 (tight) | -0.704px | Major section titles |
-| Heading 2 | Inter Variable | 24px (1.50rem) | 400 | 1.33 | -0.288px | Sub-section headings |
-| Heading 3 | Inter Variable | 20px (1.25rem) | 590 | 1.33 | -0.24px | Feature titles, card headers |
-| Body Large | Inter Variable | 18px (1.13rem) | 400 | 1.60 (relaxed) | -0.165px | Introduction text, feature descriptions |
-| Body Emphasis | Inter Variable | 17px (1.06rem) | 590 | 1.60 (relaxed) | normal | Emphasized body, sub-headings in content |
-| Body | Inter Variable | 16px (1.00rem) | 400 | 1.50 | normal | Standard reading text |
-| Body Medium | Inter Variable | 16px (1.00rem) | 510 | 1.50 | normal | Navigation, labels |
-| Body Semibold | Inter Variable | 16px (1.00rem) | 590 | 1.50 | normal | Strong emphasis |
-| Small | Inter Variable | 15px (0.94rem) | 400 | 1.60 (relaxed) | -0.165px | Secondary body text |
-| Small Medium | Inter Variable | 15px (0.94rem) | 510 | 1.60 (relaxed) | -0.165px | Emphasized small text |
-| Small Semibold | Inter Variable | 15px (0.94rem) | 590 | 1.60 (relaxed) | -0.165px | Strong small text |
-| Small Light | Inter Variable | 15px (0.94rem) | 300 | 1.47 | -0.165px | De-emphasized body |
-| Caption Large | Inter Variable | 14px (0.88rem) | 510–590 | 1.50 | -0.182px | Sub-labels, category headers |
-| Caption | Inter Variable | 13px (0.81rem) | 400–510 | 1.50 | -0.13px | Metadata, timestamps |
-| Label | Inter Variable | 12px (0.75rem) | 400–590 | 1.40 | normal | Button text, small labels |
-| Micro | Inter Variable | 11px (0.69rem) | 510 | 1.40 | normal | Tiny labels |
-| Tiny | Inter Variable | 10px (0.63rem) | 400–510 | 1.50 | -0.15px | Overline text, sometimes uppercase |
-| Link Large | Inter Variable | 16px (1.00rem) | 400 | 1.50 | normal | Standard links |
-| Link Medium | Inter Variable | 15px (0.94rem) | 510 | 2.67 | normal | Spaced navigation links |
-| Link Small | Inter Variable | 14px (0.88rem) | 510 | 1.50 | normal | Compact links |
-| Link Caption | Inter Variable | 13px (0.81rem) | 400–510 | 1.50 | -0.13px | Footer, metadata links |
-| Mono Body | Berkeley Mono | 14px (0.88rem) | 400 | 1.50 | normal | Code blocks |
-| Mono Caption | Berkeley Mono | 13px (0.81rem) | 400 | 1.50 | normal | Code labels |
-| Mono Label | Berkeley Mono | 12px (0.75rem) | 400 | 1.40 | normal | Code metadata, sometimes uppercase |
-
-### Principles
-- **510 is the signature weight**: Linear uses Inter Variable's 510 weight (between regular 400 and medium 500) as its default emphasis weight. This creates a subtly bolded feel without the heaviness of traditional medium or semibold.
-- **Compression at scale**: Display sizes use progressively tighter letter-spacing — -1.584px at 72px, -1.408px at 64px, -1.056px at 48px, -0.704px at 32px. Below 24px, spacing relaxes toward normal.
-- **OpenType as identity**: `"cv01", "ss03"` aren't decorative — they transform Inter into Linear's distinctive typeface, giving it a more geometric, purposeful character.
-- **Three-tier weight system**: 400 (reading), 510 (emphasis/UI), 590 (strong emphasis). The 300 weight appears only in deliberately de-emphasized contexts.
-
-## 4. Component Stylings
+## 4. Atomic Primitives & Component Styling
 
 ### Buttons
+- **Ghost Button (Default):** `background: transparent;` text: `#d0d6e0`; hover: `rgba(255,255,255,0.05)` fill; radius: `6px`. Used for toolbar actions, inline menu triggers, icon controls.
+- **Subtle Button:** `background: rgba(255,255,255,0.03);` border: `1px solid rgba(255,255,255,0.06);` text: `#d0d6e0`; hover: `background: rgba(255,255,255,0.06);`. Used for secondary actions ("Add filter", "Display").
+- **Primary Brand CTA:** `background: #5e6ad2;` text: `#ffffff`; radius: `6px`; hover: `#828fff`. Used for primary actions ("Create Issue", "Save").
+- **Icon Button:** Circular (`radius: 50%`) or rounded 6px, hover: `background: rgba(255,255,255,0.05);`.
 
-**Ghost Button (Default)**
-- Background: `rgba(255,255,255,0.02)`
-- Text: `#e2e4e7` (near-white)
-- Padding: comfortable
-- Radius: 6px
-- Border: `1px solid rgb(36, 40, 44)`
-- Outline: none
-- Focus shadow: `rgba(0,0,0,0.1) 0px 4px 12px`
-- Use: Standard actions, secondary CTAs
+### Inputs & Inset Containers
+- **Borderless Typographic Input:** Transparent background, no borders; seamless on focus; used for issue title inline editing.
+- **Translucent Form Input:** `background: rgba(255,255,255,0.03);` border: `1px solid rgba(255,255,255,0.06);` radius: `6px`; focus: `border: 1px solid rgba(113,112,255,0.6); box-shadow: 0 0 0 1px rgba(113,112,255,0.2);`.
 
-**Subtle Button**
-- Background: `rgba(255,255,255,0.04)`
-- Text: `#d0d6e0` (silver-gray)
-- Padding: 0px 6px
-- Radius: 6px
-- Use: Toolbar actions, contextual buttons
+### Badges & Status Chips
+- **StateBadge:** Rounded pill (`9999px` or `4px`), category-tinted icon + state name, 11px Inter weight 510.
+- **PriorityBadge:** Signal icon with priority color, tooltip hint with shortcut (`1` Urgent, `2` High, `3` Medium, `4` Low, `0` None).
+- **Identifier Tag:** `Martian Mono` 11px font, `#8a8f98` text, hover: `#f7f8f8`.
 
-**Primary Brand Button (Inferred)**
-- Background: `#5e6ad2` (brand indigo)
-- Text: `#ffffff`
-- Padding: 8px 16px
-- Radius: 6px
-- Hover: `#828fff` shift
-- Use: Primary CTAs ("Start building", "Sign up")
+### Breadcrumbs
+- Unified shadcn `Breadcrumb` primitive:
+  - **TopNav Navigation:** `Workspace > [TeamKey] > Issues > [ENG-104]` with subtle chevrons (`ChevronRight 12px`) and interactive ancestor navigation.
+  - **Issue Subtask Hierarchy:** `IssueBreadcrumbPath.tsx` rendering parent hierarchy pills with overflow truncation.
 
-**Icon Button (Circle)**
-- Background: `rgba(255,255,255,0.03)` or `rgba(255,255,255,0.05)`
-- Text: `#f7f8f8` or `#ffffff`
-- Radius: 50%
-- Border: `1px solid rgba(255,255,255,0.08)`
-- Use: Close, menu toggle, icon-only actions
+### Feedback & Notification Toaster
+- **Sonner (`<Toaster />`):** Dark-mode toast notifications positioned at bottom-right.
+  - Background: `#141517` with hairline border `rgba(255,255,255,0.08)`.
+  - Used for issue mutations ("Issue ENG-104 created"), link copied to clipboard, upload progress, and undo actions.
 
-**Pill Button**
-- Background: transparent
-- Text: `#d0d6e0`
-- Padding: 0px 10px 0px 5px
-- Radius: 9999px
-- Border: `1px solid rgb(35, 37, 42)`
-- Use: Filter chips, tags, status indicators
+---
 
-**Small Toolbar Button**
-- Background: `rgba(255,255,255,0.05)`
-- Text: `#62666d` (muted)
-- Radius: 2px
-- Border: `1px solid rgba(255,255,255,0.05)`
-- Shadow: `rgba(0,0,0,0.03) 0px 1.2px 0px 0px`
-- Font: 12px weight 510
-- Use: Toolbar actions, quick-access controls
+## 5. Rich-Text Description Editor & Inline Title Editing (TipTap Integration)
 
-### Cards & Containers
-- Background: `rgba(255,255,255,0.02)` to `rgba(255,255,255,0.05)` (never solid — always translucent)
-- Border: `1px solid rgba(255,255,255,0.08)` (standard) or `1px solid rgba(255,255,255,0.05)` (subtle)
-- Radius: 8px (standard), 12px (featured), 22px (large panels)
-- Shadow: `rgba(0,0,0,0.2) 0px 0px 0px 1px` or layered multi-shadow stacks
-- Hover: subtle background opacity increase
+### 5.1 Inline Title Editing (Linear Style)
+- **Component:** `IssueTitleEditor` in `IssueDetailDrawer.tsx` and `[issueIdentifier]/page.tsx`.
+- **Interaction:**
+  - Displays as clean typography (`text-xl font-semibold text-white`).
+  - Seamlessly editable on click or focus without clunky input box borders.
+  - Auto-saves changes on `blur` or when pressing `Enter`.
+  - Pressing `Escape` cancels edits and restores previous title.
+  - Debounced PATCH call to `api.updateIssue(id, { title })`.
 
-### Inputs & Forms
+### 5.2 TipTap WYSIWYG Description Editor
+- **Framework:** Headless TipTap (`@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`).
+- **Typography & Styling:** Rendered in `Inter Variable` 14px with line height 1.6, secondary text color `#d0d6e0`.
+- **Rich Formatting Supported:**
+  - **Text Styling:** Bold (`Cmd+B`), Italic (`Cmd+I`), Strikethrough, Inline Code (`Cmd+E`).
+  - **Structure:** Headings (`# `, `## `), Blockquotes (`> `), Bullet Lists (`- `), Ordered Lists (`1. `), Task Lists / Checkboxes (`[ ] `).
+  - **Code Blocks:** Fenced code with `Martian Mono` styling.
+  - **Markdown Shortcuts:** Realtime markdown input rules (typing `**text**` instantly becomes bold).
+- **Floating Bubble Menu:**
+  - Appears smoothly above text selections.
+  - Compact dark pill (`#141517` bg, `1px solid rgba(255,255,255,0.08)` border, 6px radius) containing icons for Bold, Italic, Strikethrough, Code, Link.
 
-**Text Area**
-- Background: `rgba(255,255,255,0.02)`
-- Text: `#d0d6e0`
-- Border: `1px solid rgba(255,255,255,0.08)`
-- Padding: 12px 14px
-- Radius: 6px
+### 5.3 Clipboard Image Paste & Async Upload Pipeline
+- **Interaction:** User copies an image from clipboard / screenshot tool and presses `Cmd+V` / `Ctrl+V` in the editor.
+- **Pipeline:**
+  1. Editor intercepts `paste` event checking for image MIME types (`image/png`, `image/jpeg`, `image/webp`).
+  2. Immediately inserts an inline image placeholder node displaying a subtle pulse / loading spinner.
+  3. Client asynchronously calls `api.getUploadUrl(issueId, file.name, file.size, file.type)`.
+  4. Client uploads the raw binary file to Supabase storage via the presigned URL.
+  5. On upload completion, the placeholder node is seamlessly replaced with the permanent hosted image URL.
+  6. Toast notification confirms: `"Image uploaded successfully"`.
 
-**Search Input**
-- Background: transparent
-- Text: `#f7f8f8`
-- Padding: 1px 32px (icon-aware)
+### 5.4 Autosave & Synchronization
+- **Debounced Autosave:** Changes are debounced by 800ms after typing stops; blurring immediately forces pending saves.
+- **Dual Output:** TipTap automatically outputs and synchronizes:
+  - `description_text`: Clean markdown / plain text string.
+  - `description_json`: Structured ProseMirror AST JSON object.
+- **Status Indicator:** Quiet indicator in the editor bottom rail ("Saved" with checkmark, or subtle "Saving...").
 
-**Button-style Input**
-- Text: `#8a8f98`
-- Padding: 1px 6px
-- Radius: 5px
-- Focus shadow: multi-layer stack
+---
 
-### Badges & Pills
+## 6. Exhaustive shadcn Component Architecture & Codebase Mapping
 
-**Success Pill**
-- Background: `#10b981`
-- Text: `#f7f8f8`
-- Radius: 50% (circular)
-- Font: 10px weight 510
-- Use: Status dots, completion indicators
+| # | shadcn Component | Target Surfaces & Files | Implementation Purpose |
+|---|---|---|---|
+| 1 | **Dialog** | `CreateIssueModal.tsx`, `CreateTeamModal.tsx`, `AIAssistantModal.tsx` | Accessible modal dialogs with focus trapping and backdrop blur. |
+| 2 | **Sheet** | `IssueDetailDrawer.tsx` | Slide-over drawer from right edge with smooth animations. |
+| 3 | **Command** | `CommandPalette.tsx` | Spotlight command palette (`Cmd+K`) powered by `cmdk` with fuzzy filtering. |
+| 4 | **DropdownMenu** | `WorkspaceSidebar.tsx`, `TopNav.tsx`, Issue rows | Workspace switcher, user profile menu, issue action menus (`...`). |
+| 5 | **Popover** | `KanbanBoard.tsx`, `IssueListView.tsx`, `IssueDetailDrawer.tsx` | Inline property pickers for State, Priority, Assignee, and Labels. |
+| 6 | **Tooltip** | TopNav action icons, Sidebar triggers, Priority shortcuts | Micro-tooltips explaining shortcuts (`C` create, `K` search, `Esc` close). |
+| 7 | **Badge** | `PriorityBadge.tsx`, `StateBadge.tsx`, Label tags | Semantic indicator pills for priority, workflow states, and team tags. |
+| 8 | **Avatar** | `TopNav.tsx`, `WorkspaceSidebar.tsx`, Comments, Assignee | User avatars with initials fallback on dark background. |
+| 9 | **Button** | Across all components | Standardized button variants (ghost, subtle, brand CTA, icon). |
+| 10 | **Input** | Modals, Search inputs, Settings forms | Consistent dark-mode text input with focus ring. |
+| 11 | **Textarea** | Modals, Comment composer | Auto-expanding textarea for comments and subtask descriptions. |
+| 12 | **Select** | Settings forms, Invite modal | Dropdown select for roles, default teams, and notification settings. |
+| 13 | **Tabs** | Issues page, Inbox, Settings, Issue drawer | Switching between Board/List, All/Assigned/Mentioned, Comments/Attachments. |
+| 14 | **Calendar / DatePicker** | `IssueDetailDrawer.tsx`, `[issueIdentifier]/page.tsx` | Due date picker popover with dark calendar grid. |
+| 15 | **ScrollArea** | `KanbanBoard.tsx`, `WorkspaceSidebar.tsx`, Drawer | Sleek custom scrollbars without browser layout shifts. |
+| 16 | **Separator** | Across all components | Hairline `1px` subtle divider lines replacing harsh borders. |
+| 17 | **Skeleton** | `KanbanBoard.tsx`, `IssueListView.tsx`, Drawer | Shimmering loading skeletons during initial hydration and route changes. |
+| 18 | **Collapsible / Accordion** | `WorkspaceSidebar.tsx`, `KanbanBoard.tsx` swimlanes | Collapsing sidebar team lists and parent issue swimlane rows. |
+| 19 | **Checkbox** | `IssueSubtasksTree.tsx`, bulk issue actions | Checkboxes for subtask completion and multi-issue selection. |
+| 20 | **Switch** | Settings pages | Toggle switches for settings (notifications, compact view). |
+| 21 | **Sonner / Toast** | Root layout (`layout.tsx`), all mutations | Modern, non-intrusive action confirmation toasts. |
+| 22 | **ContextMenu & HoverCard** | `KanbanBoard.tsx`, `IssueListView.tsx` | Right-click issue actions & user profile preview cards on hover. |
 
-**Neutral Pill**
-- Background: transparent
-- Text: `#d0d6e0`
-- Padding: 0px 10px 0px 5px
-- Radius: 9999px
-- Border: `1px solid rgb(35, 37, 42)`
-- Font: 12px weight 510
-- Use: Tags, filter chips, category labels
+---
 
-**Subtle Badge**
-- Background: `rgba(255,255,255,0.05)`
-- Text: `#f7f8f8`
-- Padding: 0px 8px 0px 2px
-- Radius: 2px
-- Border: `1px solid rgba(255,255,255,0.05)`
-- Font: 10px weight 510
-- Use: Inline labels, version tags
+## 7. Workspace Surface Layout Blueprints
 
-### Navigation
-- Dark sticky header on near-black background
-- Linear logomark left-aligned (SVG icon)
-- Links: Inter Variable 13–14px weight 510, `#d0d6e0` text
-- Active/hover: text lightens to `#f7f8f8`
-- CTA: Brand indigo button or ghost button
-- Mobile: hamburger collapse
-- Search: command palette trigger (`/` or `Cmd+K`)
+### 7.1 Workspace Shell
+- **Sidebar (`WorkspaceSidebar.tsx`):**
+  - Background: `#0f1011` with hairline right border `rgba(255,255,255,0.05)`.
+  - Workspace selector dropdown at top, followed by global links (Inbox, My Issues).
+  - Teams section with collapsible team lists and quick-add action.
+  - User profile trigger at bottom with status indicator.
+- **TopNav (`TopNav.tsx`):**
+  - Height: `52px`, background: `rgba(8, 9, 10, 0.85)` with blur filter `blur(12px)`.
+  - Left: Interactive breadcrumbs with chevron separators.
+  - Center/Right: View mode switcher (Board / List tabs), search trigger (`Cmd+K`), AI assistant trigger, and "+ New Issue" button.
 
-### Image Treatment
-- Product screenshots on dark backgrounds with subtle border (`rgba(255,255,255,0.08)`)
-- Top-rounded images: `12px 12px 0px 0px` radius
-- Dashboard/issue previews dominate feature sections
-- Subtle shadow beneath screenshots: `rgba(0,0,0,0.4) 0px 2px 4px`
+### 7.2 Kanban Board (`KanbanBoard.tsx`)
+- **Structure:**
+  - Multi-column layout horizontally scrollable.
+  - Columns: `#0f1011` background, hairline border, sticky header with state badge and count pill.
+  - Cards: Elevated `#141517` background with whisper border `rgba(255,255,255,0.06)`, no harsh box outline.
+  - Drag State: Dragged card renders with subtle shadow and border glow; drop target shows subtle accent line indicator.
+- **Parent Swimlanes (`groupBy: 'parent'`):**
+  - Collapsible horizontal row headers with parent issue identifier, title, progress bar, and chevron toggle.
 
-## 5. Layout Principles
+### 7.3 Issue List View (`IssueListView.tsx`)
+- **Structure:**
+  - Dense, borderless data table optimized for high information density.
+  - Rows: Clean transparent background; hover triggers soft fill `rgba(255,255,255,0.04)`.
+  - Inline property selectors: Clicking Priority, State, or Assignee in the row opens a lightweight popover for instant edits without opening the drawer.
 
-### Spacing System
-- Base unit: 8px
-- Scale: 1px, 4px, 7px, 8px, 11px, 12px, 16px, 19px, 20px, 22px, 24px, 28px, 32px, 35px
-- The 7px and 11px values suggest micro-adjustments for optical alignment
-- Primary rhythm: 8px, 16px, 24px, 32px (standard 8px grid)
+### 7.4 Issue Detail (Drawer & Full Page)
+- **Drawer (`IssueDetailDrawer.tsx`) & Full Page (`[issueIdentifier]/page.tsx`):**
+  - Left Column (Main):
+    - Issue identifier in `Martian Mono` with ancestor subtask breadcrumb path.
+    - Inline editable title (`IssueTitleEditor`).
+    - TipTap rich-text description editor with image paste and autosave.
+    - Subtasks tree with progress counter and inline "+ Add subtask" row.
+    - Tabbed comments and attachments stream.
+  - Right Column (Property Rail):
+    - State, Priority, Assignee, Team, Labels, and Due Date property pickers with keyboard navigation.
 
-### Grid & Container
-- Max content width: approximately 1200px
-- Hero: centered single-column with generous vertical padding
-- Feature sections: 2–3 column grids for feature cards
-- Full-width dark sections with internal max-width constraints
-- Changelog: single-column timeline layout
+### 7.5 Inbox / Triage (`inbox/page.tsx`)
+- **Layout:**
+  - Master-detail split view: Left list of notification items (assigned, mentioned, state changed), right preview panel.
+  - Triage actions: Quick keyboard actions (`Accept`, `Decline`, `Snooze`).
 
-### Whitespace Philosophy
-- **Darkness as space**: On Linear's dark canvas, empty space isn't white — it's absence. The near-black background IS the whitespace, and content emerges from it.
-- **Compressed headlines, expanded surroundings**: Display text at 72px with -1.584px tracking is dense and compressed, but sits within vast dark padding. The contrast between typographic density and spatial generosity creates tension.
-- **Section isolation**: Each feature section is separated by generous vertical padding (80px+) with no visible dividers — the dark background provides natural separation.
+---
 
-### Border Radius Scale
-- Micro (2px): Inline badges, toolbar buttons, subtle tags
-- Standard (4px): Small containers, list items
-- Comfortable (6px): Buttons, inputs, functional elements
-- Card (8px): Cards, dropdowns, popovers
-- Panel (12px): Panels, featured cards, section containers
-- Large (22px): Large panel elements
-- Full Pill (9999px): Chips, filter pills, status tags
-- Circle (50%): Icon buttons, avatars, status dots
+## 8. Phased Implementation Roadmap
 
-## 6. Depth & Elevation
+```mermaid
+graph TD
+  P1[Phase 1: Design System Blueprint & Foundation Tokens] --> P2[Phase 2: Atomic Primitives, Breadcrumbs & Sonner Toaster]
+  P2 --> P3[Phase 3: Inline Title & TipTap Rich-Text Description Editor]
+  P3 --> P4[Phase 4: Workspace Surface Overhaul & shadcn Integration]
+```
 
-| Level | Treatment | Use |
-|-------|-----------|-----|
-| Flat (Level 0) | No shadow, `#010102` bg | Page background, deepest canvas |
-| Subtle (Level 1) | `rgba(0,0,0,0.03) 0px 1.2px 0px` | Toolbar buttons, micro-elevation |
-| Surface (Level 2) | `rgba(255,255,255,0.05)` bg + `1px solid rgba(255,255,255,0.08)` border | Cards, input fields, containers |
-| Inset (Level 2b) | `rgba(0,0,0,0.2) 0px 0px 12px 0px inset` | Recessed panels, inner shadows |
-| Ring (Level 3) | `rgba(0,0,0,0.2) 0px 0px 0px 1px` | Border-as-shadow technique |
-| Elevated (Level 4) | `rgba(0,0,0,0.4) 0px 2px 4px` | Floating elements, dropdowns |
-| Dialog (Level 5) | Multi-layer stack: `rgba(0,0,0,0) 0px 8px 2px, rgba(0,0,0,0.01) 0px 5px 2px, rgba(0,0,0,0.04) 0px 3px 2px, rgba(0,0,0,0.07) 0px 1px 1px, rgba(0,0,0,0.08) 0px 0px 1px` | Popovers, command palette, modals |
-| Focus | `rgba(0,0,0,0.1) 0px 4px 12px` + additional layers | Keyboard focus on interactive elements |
+### Phase 1: Design System Blueprint & Foundation Tokens
+- Configure typography: setup `Inter Variable` (`cv01`, `ss03`) and `Martian Mono`.
+- Define dark-mode CSS tokens in `globals.css`: pure dark-mode luminance ramp (`#08090a`, `#0f1011`, `#141517`), domain priority colors, and state tokens.
 
-**Shadow Philosophy**: On dark surfaces, traditional shadows (dark on dark) are nearly invisible. Linear solves this by using semi-transparent white borders as the primary depth indicator. Elevation isn't communicated through shadow darkness but through background luminance steps — each level slightly increases the white opacity of the surface background (`0.02` → `0.04` → `0.05`), creating a subtle stacking effect. The inset shadow technique (`rgba(0,0,0,0.2) 0px 0px 12px 0px inset`) creates a unique "sunken" effect for recessed panels, adding dimensional depth that traditional dark themes lack.
+### Phase 2: Atomic Primitives, Breadcrumbs & Sonner Toaster
+- Add core shadcn primitives under `components/ui/`: `Button`, `Input`, `Badge`, `Avatar`, `Tooltip`, `Separator`, `Skeleton`.
+- Install and mount `Sonner` (`<Toaster />`) in root layout for dark-mode action feedback.
+- Migrate `TopNav.tsx` and `IssueBreadcrumbPath.tsx` to the unified shadcn `Breadcrumb` system.
 
-## 7. Do's and Don'ts
+### Phase 3: Inline Title & TipTap Rich-Text Description Editor
+- Install TipTap packages (`@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`, `@tiptap/extension-placeholder`, `@tiptap/extension-bubble-menu`, `@tiptap/extension-image`).
+- Build `IssueTitleEditor` (borderless typographic input, auto-save on blur/Enter, Escape to revert).
+- Build `IssueDescriptionEditor` (TipTap WYSIWYG, bold/italics, floating bubble menu, clipboard image paste pipeline with `api.getUploadUrl`, debounced 800ms autosave).
+- Integrate both editors into `IssueDetailDrawer.tsx` and `[issueIdentifier]/page.tsx`.
 
-### Do
-- Use Inter Variable with `"cv01", "ss03"` on ALL text — these features are fundamental to Linear's typeface identity
-- Use weight 510 as your default emphasis weight — it's Linear's signature between-weight
-- Apply aggressive negative letter-spacing at display sizes (-1.584px at 72px, -1.056px at 48px)
-- Build on near-black backgrounds: `#08090a` for marketing, `#0f1011` for panels, `#191a1b` for elevated surfaces
-- Use semi-transparent white borders (`rgba(255,255,255,0.05)` to `rgba(255,255,255,0.08)`) instead of solid dark borders
-- Keep button backgrounds nearly transparent: `rgba(255,255,255,0.02)` to `rgba(255,255,255,0.05)`
-- Reserve brand indigo (`#5e6ad2` / `#7170ff`) for primary CTAs and interactive accents only
-- Use `#f7f8f8` for primary text — not pure `#ffffff`, which would be too harsh
-- Apply the luminance stacking model: deeper = darker bg, elevated = slightly lighter bg
+### Phase 4: Workspace Surface Overhaul & shadcn Integration
+- Refactor `KanbanBoard.tsx` and `IssueListView.tsx` to remove harsh 1px boxed outlines and apply whisper borders with subtle luminance stepping.
+- Adopt shadcn `Dialog` (modals), `Sheet` (drawer), `Command` (command palette), and `Popover`/`DropdownMenu` (inline property pickers).
 
-### Don't
-- Don't use pure white (`#ffffff`) as primary text — `#f7f8f8` prevents eye strain
-- Don't use solid colored backgrounds for buttons — transparency is the system (rgba white at 0.02–0.05)
-- Don't apply the brand indigo decoratively — it's reserved for interactive/CTA elements only
-- Don't use positive letter-spacing on display text — Inter at large sizes always runs negative
-- Don't use visible/opaque borders on dark backgrounds — borders should be whisper-thin semi-transparent white
-- Don't skip the OpenType features (`"cv01", "ss03"`) — without them, it's generic Inter, not Linear's Inter
-- Don't use weight 700 (bold) — Linear's maximum weight is 590, with 510 as the workhorse
-- Don't introduce warm colors into the UI chrome — the palette is cool gray with blue-violet accent only
-- Don't use drop shadows for elevation on dark surfaces — use background luminance stepping instead
+---
 
-## 8. Responsive Behavior
+## 9. Do's and Don'ts
 
-### Breakpoints
-| Name | Width | Key Changes |
-|------|-------|-------------|
-| Mobile Small | <600px | Single column, compact padding |
-| Mobile | 600–640px | Standard mobile layout |
-| Tablet | 640–768px | Two-column grids begin |
-| Desktop Small | 768–1024px | Full card grids, expanded padding |
-| Desktop | 1024–1280px | Standard desktop, full navigation |
-| Large Desktop | >1280px | Full layout, generous margins |
+### Do:
+- Build on dark-mode-native luminance steps: deeper background for canvas (`#08090a`), lighter for elevated surfaces (`#141517`).
+- Use whisper-thin borders (`rgba(255,255,255,0.05)` to `0.08`) and borderless row hover fills (`rgba(255,255,255,0.04)`).
+- Use `Inter Variable` with `"cv01", "ss03"` for UI text, and signature weight 510 for default UI labels.
+- Use `Martian Mono` for issue identifiers (`ENG-104`) and code blocks.
+- Reserve brand indigo (`#5e6ad2` / `#7170ff`) strictly for primary actions, active navigation states, and interactive focal points.
+- Provide immediate, subtle feedback through `Sonner` toasts and autosave status indicators.
 
-### Touch Targets
-- Buttons use comfortable padding with 6px radius minimum
-- Navigation links at 13–14px with adequate spacing
-- Pill tags have 10px horizontal padding for touch accessibility
-- Icon buttons at 50% radius ensure circular, easy-to-tap targets
-- Search trigger is prominently placed with generous hit area
-
-### Collapsing Strategy
-- Hero: 72px → 48px → 32px display text, tracking adjusts proportionally
-- Navigation: horizontal links + CTAs → hamburger menu at 768px
-- Feature cards: 3-column → 2-column → single column stacked
-- Product screenshots: maintain aspect ratio, may reduce padding
-- Changelog: timeline maintains single-column through all sizes
-- Footer: multi-column → stacked single column
-- Section spacing: 80px+ → 48px on mobile
-
-### Image Behavior
-- Dashboard screenshots maintain border treatment at all sizes
-- Hero visuals simplify on mobile (fewer floating UI elements)
-- Product screenshots use responsive sizing with consistent radius
-- Dark background ensures screenshots blend naturally at any viewport
-
-## 9. Agent Prompt Guide
-
-### Quick Color Reference
-- Primary CTA: Brand Indigo (`#5e6ad2`)
-- Page Background: Marketing Black (`#08090a`)
-- Panel Background: Panel Dark (`#0f1011`)
-- Surface: Level 3 (`#191a1b`)
-- Heading text: Primary White (`#f7f8f8`)
-- Body text: Silver Gray (`#d0d6e0`)
-- Muted text: Tertiary Gray (`#8a8f98`)
-- Subtle text: Quaternary Gray (`#62666d`)
-- Accent: Violet (`#7170ff`)
-- Accent Hover: Light Violet (`#828fff`)
-- Border (default): `rgba(255,255,255,0.08)`
-- Border (subtle): `rgba(255,255,255,0.05)`
-- Focus ring: Multi-layer shadow stack
-
-### Example Component Prompts
-- "Create a hero section on `#08090a` background. Headline at 48px Inter Variable weight 510, line-height 1.00, letter-spacing -1.056px, color `#f7f8f8`, font-feature-settings `'cv01', 'ss03'`. Subtitle at 18px weight 400, line-height 1.60, color `#8a8f98`. Brand CTA button (`#5e6ad2`, 6px radius, 8px 16px padding) and ghost button (`rgba(255,255,255,0.02)` bg, `1px solid rgba(255,255,255,0.08)` border, 6px radius)."
-- "Design a card on dark background: `rgba(255,255,255,0.02)` background, `1px solid rgba(255,255,255,0.08)` border, 8px radius. Title at 20px Inter Variable weight 590, letter-spacing -0.24px, color `#f7f8f8`. Body at 15px weight 400, color `#8a8f98`, letter-spacing -0.165px."
-- "Build a pill badge: transparent background, `#d0d6e0` text, 9999px radius, 0px 10px padding, `1px solid #23252a` border, 12px Inter Variable weight 510."
-- "Create navigation: dark sticky header on `#0f1011`. Inter Variable 13px weight 510 for links, `#d0d6e0` text. Brand indigo CTA `#5e6ad2` right-aligned with 6px radius. Bottom border: `1px solid rgba(255,255,255,0.05)`."
-- "Design a command palette: `#191a1b` background, `1px solid rgba(255,255,255,0.08)` border, 12px radius, multi-layer shadow stack. Input at 16px Inter Variable weight 400, `#f7f8f8` text. Results list with 13px weight 510 labels in `#d0d6e0` and 12px metadata in `#62666d`."
-
-### Iteration Guide
-1. Always set font-feature-settings `"cv01", "ss03"` on all Inter text — this is non-negotiable for Linear's look
-2. Letter-spacing scales with font size: -1.584px at 72px, -1.056px at 48px, -0.704px at 32px, normal below 16px
-3. Three weights: 400 (read), 510 (emphasize/navigate), 590 (announce)
-4. Surface elevation via background opacity: `rgba(255,255,255, 0.02 → 0.04 → 0.05)` — never solid backgrounds on dark
-5. Brand indigo (`#5e6ad2` / `#7170ff`) is the only chromatic color — everything else is grayscale
-6. Borders are always semi-transparent white, never solid dark colors on dark backgrounds
-7. Berkeley Mono for any code or technical content, Inter Variable for everything else
+### Don't:
+- Don't wrap every component in harsh, high-contrast 1px boxed outlines.
+- Don't use pure white (`#ffffff`) for body text — use `#f7f8f8` or `#d0d6e0` to prevent eye strain.
+- Don't use heavy drop shadows on dark backgrounds — depth is created through background luminance stepping.
+- Don't clutter Kanban cards with heavy editors; keep rich description editing inside the Detail Drawer and Full Page.
+- Don't re-introduce marketing elements (hero banners, public changelogs, marketing footers) into workspace SaaS documentation.

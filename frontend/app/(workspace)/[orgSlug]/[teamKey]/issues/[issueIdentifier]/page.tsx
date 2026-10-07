@@ -25,6 +25,9 @@ import { TopNav } from '@/components/navigation/TopNav';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
 import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
+import { IssueTitleEditor } from '@/components/issues/IssueTitleEditor';
+import { IssueDescriptionEditor } from '@/components/editor/IssueDescriptionEditor';
+import { toast } from 'sonner';
 
 interface ProposedSubtaskItem {
   title: string;
@@ -175,6 +178,42 @@ export default function IssueDetailPage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleTitleChange = async (newTitle: string) => {
+    if (!issue) return;
+    try {
+      const updated = await api.updateIssue(issue.id, {
+        title: newTitle,
+        expected_version: issue.version,
+      });
+      if (updated) {
+        setIssue(updated);
+        window.dispatchEvent(new CustomEvent('issueUpdated', { detail: updated }));
+        toast.success('Title updated');
+      }
+    } catch (err) {
+      console.error('Failed to update title', err);
+      toast.error('Failed to update title');
+    }
+  };
+
+  const handleDescriptionChange = async (data: { description_text: string; description_json: any }) => {
+    if (!issue) return;
+    try {
+      const updated = await api.updateIssue(issue.id, {
+        description_text: data.description_text,
+        description_json: data.description_json,
+        expected_version: issue.version,
+      });
+      if (updated) {
+        setIssue(updated);
+        window.dispatchEvent(new CustomEvent('issueUpdated', { detail: updated }));
+      }
+    } catch (err) {
+      console.error('Failed to update description', err);
+      toast.error('Failed to save description');
     }
   };
 
@@ -480,14 +519,22 @@ export default function IssueDetailPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Main Left Column */}
         <div className="flex-1 p-6 overflow-y-auto space-y-6">
-          <h2 className="text-xl font-semibold text-white leading-snug">{issue.title}</h2>
+          <IssueTitleEditor
+            initialTitle={issue.title}
+            onSave={handleTitleChange}
+          />
 
           {/* Description */}
-          <div className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Description</h3>
-            <div className="p-3.5 rounded bg-zinc-950 border border-zinc-800 text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">
-              {issue.description_text || 'No description provided.'}
-            </div>
+          <div className="space-y-1.5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary">
+              Description
+            </h3>
+            <IssueDescriptionEditor
+              issueId={issue.id}
+              initialText={issue.description_text}
+              initialJson={issue.description_json}
+              onSave={handleDescriptionChange}
+            />
           </div>
 
           {/* Sub-tasks Section */}
