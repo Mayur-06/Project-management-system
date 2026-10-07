@@ -206,8 +206,8 @@ export default function IssuesPage() {
         onSearchChange={setSearchQuery}
         onOpenNewIssue={() => {
           const defaultState = states.find((s) => s.is_default) || states[0];
-          if (defaultState) setInitialStateId(defaultState.id);
-          setIsNewIssueOpen(true);
+          const query = defaultState?.id ? `?stateId=${defaultState.id}` : '';
+          router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new${query}`);
         }}
       />
 
@@ -226,8 +226,7 @@ export default function IssuesPage() {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
             onOpenNewIssueWithState={(stateId) => {
-              setInitialStateId(stateId);
-              setIsNewIssueOpen(true);
+              router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new?stateId=${stateId}`);
             }}
             onMoveIssueState={handleMoveIssueState}
             onDeleteIssue={handleDeleteIssue}

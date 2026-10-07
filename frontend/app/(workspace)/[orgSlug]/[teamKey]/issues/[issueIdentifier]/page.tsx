@@ -456,13 +456,20 @@ export default function IssueDetailPage() {
       {/* Main Issue Header Bar */}
       <div className="px-6 py-2.5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950">
         <div className="flex items-center gap-2 text-xs">
-          <Link
-            href={`/${orgSlug}/${teamKey.toLowerCase()}/issues`}
-            className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-900 transition-colors mr-1"
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.history.length > 1) {
+                router.back();
+              } else {
+                router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues`);
+              }
+            }}
+            className="p-1 text-zinc-400 hover:text-white rounded hover:bg-zinc-900 transition-colors mr-1 cursor-pointer"
             title="Back to all issues"
           >
             <ArrowLeft className="w-4 h-4" />
-          </Link>
+          </button>
           <span className="font-mono font-bold text-white bg-zinc-900 px-2 py-0.5 rounded border border-zinc-700">
             {issue.identifier}
           </span>

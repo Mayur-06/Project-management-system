@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { WorkspaceSidebar } from '@/components/sidebar/WorkspaceSidebar';
 import { CommandPalette } from '@/components/command/CommandPalette';
 import { AIAssistantModal } from '@/components/ai/AIAssistantModal';
@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase/client';
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
+  const router = useRouter();
   const orgSlug = (params?.orgSlug as string) || '';
   const teamKey = (params?.teamKey as string) || '';
 
@@ -24,6 +25,11 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const [isAIAskOpen, setIsAIAskOpen] = useState(false);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceMember[]>([]);
+
+  const handleOpenNewIssue = () => {
+    const targetTeam = (teamKey || teams[0]?.key || 'eng').toLowerCase();
+    router.push(`/${orgSlug}/${targetTeam}/issues/new`);
+  };
 
   useEffect(() => {
     // Resolve auth token first so all downstream API calls can proceed immediately
@@ -61,7 +67,12 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
     });
   }, [orgSlug]);
 
-  // Global Keyboard Shortcuts (Cmd+K for palette, C for new issue)
+  const handleOpenAIAsk = () => {
+    const targetTeam = (teamKey || teams[0]?.key || 'eng').toLowerCase();
+    router.push(`/${orgSlug}/${targetTeam}/ai`);
+  };
+
+  // Global Keyboard Shortcuts (Cmd+K for palette, C for new issue, Cmd+J for AI Assistant)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
@@ -73,16 +84,16 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         setIsCommandOpen((prev) => !prev);
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
         e.preventDefault();
-        setIsAIAskOpen((prev) => !prev);
+        handleOpenAIAsk();
       } else if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
-        setIsNewIssueOpen(true);
+        handleOpenNewIssue();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [orgSlug, teamKey, teams]);
 
   const [currentTeamStates, setCurrentTeamStates] = useState<WorkflowState[]>([]);
 
@@ -115,8 +126,8 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           teams={teams}
           currentUser={currentUser}
           onOpenCommandPalette={() => setIsCommandOpen(true)}
-          onOpenNewIssue={() => setIsNewIssueOpen(true)}
-          onOpenAIAsk={() => setIsAIAskOpen(true)}
+          onOpenNewIssue={handleOpenNewIssue}
+          onOpenAIAsk={handleOpenAIAsk}
         />
 
         {/* Main View Area */}
@@ -128,8 +139,8 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         <CommandPalette
           isOpen={isCommandOpen}
           onClose={() => setIsCommandOpen(false)}
-          onOpenNewIssue={() => setIsNewIssueOpen(true)}
-          onOpenAIAsk={() => setIsAIAskOpen(true)}
+          onOpenNewIssue={handleOpenNewIssue}
+          onOpenAIAsk={handleOpenAIAsk}
           orgSlug={orgSlug}
           currentTeamKey={teamKey}
           teams={teams}

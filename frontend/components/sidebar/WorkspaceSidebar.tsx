@@ -214,7 +214,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <button
                 onClick={() => {
                   setIsWorkspaceDropdownOpen(false);
-                  setIsCreateWorkspaceOpen(true);
+                  router.push('/workspaces/new');
                 }}
                 className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-zinc-300 hover:text-white hover:bg-zinc-900 transition-colors cursor-pointer"
               >
@@ -290,7 +290,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <span>Teams</span>
               <button
                 type="button"
-                onClick={() => setIsCreateTeamOpen(true)}
+                onClick={() => router.push(`/${currentOrgSlug}/teams/new`)}
                 className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
                 title="Create New Team"
               >
