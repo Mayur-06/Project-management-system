@@ -73,9 +73,13 @@ export const IssueDescriptionEditor: React.FC<IssueDescriptionEditorProps> = ({
         }
 
         // Upload binary to Supabase Storage
+        const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
         const uploadRes = await fetch(uploadTicket.upload_url, {
           method: 'PUT',
-          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: file,
         });
 
@@ -140,6 +144,7 @@ export const IssueDescriptionEditor: React.FC<IssueDescriptionEditorProps> = ({
   }, [initialJson, initialText]);
 
   const editor = useEditor({
+    immediatelyRender: false,
     editable,
     extensions: [
       StarterKit.configure({

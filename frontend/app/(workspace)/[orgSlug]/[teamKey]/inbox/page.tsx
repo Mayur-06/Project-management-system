@@ -23,6 +23,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { InboxItem } from '@/types';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { api } from '@/lib/api';
 import { TopNav } from '@/components/navigation/TopNav';
 import { StateBadge } from '@/components/ui/StateBadge';
@@ -213,30 +214,14 @@ export default function InboxPage() {
       );
     }
 
-    if (actor.avatar_url) {
-      return (
-        <img
-          src={actor.avatar_url}
-          alt={actor.name || 'Member'}
-          className="w-6 h-6 rounded-full object-cover ring-1 ring-border-subtle shrink-0"
-        />
-      );
-    }
-
-    const initials = (actor.name || actor.email || 'M')
-      .split(' ')
-      .filter(Boolean)
-      .map((part) => part[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase() || 'M';
-
     return (
-      <div
-        className="w-6 h-6 rounded-full bg-brand-primary/20 border border-brand-primary/40 text-brand-primary flex items-center justify-center text-[10px] font-bold shrink-0"
-        title={actor.name || actor.email}
-      >
-        {initials}
+      <div title={actor.name || actor.email} className="shrink-0">
+        <UserAvatar
+          name={actor.name}
+          email={actor.email}
+          avatarUrl={actor.avatar_url}
+          size="md"
+        />
       </div>
     );
   };

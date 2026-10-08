@@ -219,14 +219,16 @@ Our workspace is an engineering-first, dark-mode-native product designed for ext
   - Left: Interactive breadcrumbs with chevron separators.
   - Center/Right: View mode switcher (Board / List tabs), search trigger (`Cmd+K`), AI assistant trigger, and "+ New Issue" button.
 
-### 7.2 Kanban Board (`KanbanBoard.tsx`)
-- **Structure:**
+### 7.2 Kanban Board & Horizontal Tree Swimlanes (`KanbanBoard.tsx`, `HorizontalTreeBoard.tsx`)
+- **Flat Vertical Board (`groupBy: 'none'`):**
   - Multi-column layout horizontally scrollable.
   - Columns: `#0f1011` background, hairline border, sticky header with state badge and count pill.
-  - Cards: Elevated `#141517` background with whisper border `rgba(255,255,255,0.06)`, no harsh box outline.
-  - Drag State: Dragged card renders with subtle shadow and border glow; drop target shows subtle accent line indicator.
-- **Parent Swimlanes (`groupBy: 'parent'`):**
-  - Collapsible horizontal row headers with parent issue identifier, title, progress bar, and chevron toggle.
+  - Cards: Elevated `#141517` background with whisper border `rgba(255,255,255,0.06)`, no harsh box outline, displaying `SignalPriorityIcon`.
+- **Horizontal Swimlanes (`groupBy: 'parent'` — `HorizontalTreeBoard.tsx`):**
+  - Hierarchical issue and sub-issue tree layout matching Linear's design.
+  - Precision tree guide lines (`│`, `├──`, `└──`) mapping recursive issue depth with continuous connector paths.
+  - Row Elements: `SignalPriorityIcon` + Mono identifier + `StatusIcon` + Title + Circular subtask progress ring (`0/3`) + `UserAvatar` + Created date.
+  - Borderless rows with soft hover fill (`rgba(255, 255, 255, 0.04)`).
 
 ### 7.3 Issue List View (`IssueListView.tsx`)
 - **Structure:**
@@ -240,10 +242,41 @@ Our workspace is an engineering-first, dark-mode-native product designed for ext
     - Issue identifier in `Martian Mono` with ancestor subtask breadcrumb path.
     - Inline editable title (`IssueTitleEditor`).
     - TipTap rich-text description editor with image paste and autosave.
+    - Description header corner attachment button (`IssueAttachmentButton`): micro-paperclip button with count pill triggering a popover file gallery and upload dropzone.
     - Subtasks tree with progress counter and inline "+ Add subtask" row.
-    - Tabbed comments and attachments stream.
+    - Unified Activity & Comments stream (`IssueActivityFeed`):
+      - Replaced fragmented horizontal tabs with a single Linear-style chronological stream.
+      - Clean "Activity" header (subscribe button and mechanics removed).
+      - Micro-action event rows matching Linear's design:
+        - Status changes: Linear `StatusIcon` (Backlog dotted circle, In Progress amber pie slice, Done check, Canceled cross).
+        - Title changes: Subtle `Pencil` icon.
+        - Assignee & Priority changes: Actor `UserAvatar` micro-chip.
+        - Issue creation: Creator `UserAvatar` micro-chip.
+        - Due date set/changed: Red `CalendarClock` icon.
+        - Cycle transitions: Subtle `CirclePlay` icon.
+        - Label updates: `Tag` icon with colored bullet highlights.
+        - Timestamps: Inline with subtle middle dot separator (`&middot; {timeAgo}`).
+      - Card-based comment feed with author `UserAvatar`, relative timestamps, `(edited)` indicators, `@mention` highlights, and styled link chips.
+      - Bottom comment composer with `Ctrl+Enter` submit shortcut.
+    - Removal of AI breakdown tabs and review gates from issue drawer and full page.
   - Right Column (Property Rail):
     - State, Priority, Assignee, Team, Labels, and Due Date property pickers with keyboard navigation.
+
+### 7.5 TopNav View Switcher
+- **2-Mode Switcher:**
+  - `Board View` (`LayoutGrid`): Flat vertical kanban columns.
+  - `List View` (`List`): Hierarchical tree row view matching Linear's design (no table headers, zero outlines, signal priority, status, title, subtask progress ring, avatar, and date).
+
+### 7.6 Platform-Wide UserAvatar Standard (`UserAvatar.tsx`)
+- Unified avatar primitive built on Radix UI `@radix-ui/react-avatar`.
+- Deterministic color hashing: assigns each user a consistent vibrant pastel background (`bg-emerald-600`, `bg-sky-600`, `bg-indigo-600`, `bg-violet-600`, `bg-amber-600`, `bg-rose-600`, etc.) with white uppercase 2-letter initials.
+- Replaces ad-hoc `<img>` and `<div>` tags across:
+  - Kanban board card assignee
+  - List view assignee chips & dropdown
+  - Subtask tree assignee badges
+  - Activity stream event rows & comment author cards
+  - Inbox notification actor chips
+  - Workspace sidebar user footer
 
 ### 7.5 Inbox / Triage (`inbox/page.tsx`)
 - **Layout:**

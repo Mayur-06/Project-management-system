@@ -2,34 +2,53 @@
 
 import React, { useMemo, useState } from 'react';
 import { Plus, Trash2, CornerDownRight, ChevronDown, ChevronRight, Layers, FolderGit2, Calendar } from 'lucide-react';
-import { Issue, WorkflowState, User } from '@/types';
+import { Issue, WorkflowState, User, Label } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
+import { SignalPriorityIcon } from '@/components/ui/SignalPriorityIcon';
+import { StatusIcon } from '@/components/ui/StatusIcon';
 import { StateBadge } from '@/components/ui/StateBadge';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { buildIssueTree, buildSwimlanes, SwimlaneRow } from '@/lib/issueTree';
 import { IssueBreadcrumbPath } from '@/components/issues/IssueBreadcrumbPath';
+import { HorizontalTreeBoard } from '@/components/issues/HorizontalTreeBoard';
 
 interface KanbanBoardProps {
   states: WorkflowState[];
   issues: Issue[];
   users?: (User | { id: string; user_id?: string; user?: User; name?: string; email?: string; avatar_url?: string })[];
+  availableLabels?: Label[];
   groupBy?: 'parent' | 'none';
   onSelectIssue: (issue: Issue) => void;
   onOpenNewIssueWithState: (stateId: string) => void;
   onAddSubtask?: (parentId: string, stateId?: string) => void;
   onMoveIssueState: (issueId: string, newStateId: string, prevRank?: string, nextRank?: string) => void;
+  onUpdateIssue?: (issueId: string, updates: Partial<Issue> & { label_ids?: string[]; expected_version?: number }) => Promise<void>;
   onDeleteIssue?: (issueId: string) => void;
   onDragStateChange?: (isDragging: boolean) => void;
+}
+
+function formatRelativeMonthDay(dateString?: string): string {
+  if (!dateString) return '';
+  try {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch {
+    return '';
+  }
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   states,
   issues,
   users = [],
-  groupBy = 'parent',
+  availableLabels = [],
+  groupBy = 'none',
   onSelectIssue,
   onOpenNewIssueWithState,
   onAddSubtask,
   onMoveIssueState,
+  onUpdateIssue,
   onDeleteIssue,
   onDragStateChange,
 }) => {
@@ -37,22 +56,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   // Build tree & swimlanes data structure
   const tree = useMemo(() => buildIssueTree(issues), [issues]);
-  const swimlanes = useMemo(() => buildSwimlanes(issues, states), [issues, states]);
 
-  // Collapsed state map for swimlanes (default all expanded)
-  const [collapsedSwimlanes, setCollapsedSwimlanes] = useState<Record<string, boolean>>({});
+  // Track manually toggled columns for vertical kanban
+  const [manuallyRevealedStateIds, setManuallyRevealedStateIds] = useState<Record<string, boolean>>({});
+  const [manuallyHiddenStateIds, setManuallyHiddenStateIds] = useState<Record<string, boolean>>({});
+  const [isHiddenColumnsExpanded, setIsHiddenColumnsExpanded] = useState(true);
 
-  const toggleSwimlane = (id: string) => {
-    setCollapsedSwimlanes((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
-
-  // ─── Drag & Drop Helpers ──────────────────────────────────────────────────
-  const handleDragStart = (e: React.DragEvent, issueId: string, swimlaneId: string = '__default__') => {
-    e.dataTransfer.setData('text/plain', issueId);
-    e.dataTransfer.setData('application/json', JSON.stringify({ issueId, swimlaneId }));
+  // Drag and drop state
+  const handleDragStart = (e: React.DragEvent, issueId: string, swimlaneId?: string) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({ issueId, swimlaneId }));
     e.dataTransfer.effectAllowed = 'move';
     onDragStateChange?.(true);
   };
@@ -66,296 +78,192 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     e.dataTransfer.dropEffect = 'move';
   };
 
-  // Helper to parse dragged issue payload
   const parseDragData = (e: React.DragEvent): { issueId: string; swimlaneId?: string } => {
     try {
-      const raw = e.dataTransfer.getData('application/json');
-      if (raw) {
-        return JSON.parse(raw);
-      }
-    } catch {}
-    const issueId = e.dataTransfer.getData('text/plain');
-    return { issueId };
+      const raw = e.dataTransfer.getData('text/plain');
+      return JSON.parse(raw);
+    } catch {
+      return { issueId: '' };
+    }
   };
 
   // Flat mode: Drop on Column
-  const handleDropOnFlatColumn = (e: React.DragEvent, stateId: string) => {
+  const handleDropOnFlatColumn = (e: React.DragEvent, targetStateId: string) => {
     e.preventDefault();
     onDragStateChange?.(false);
     const { issueId } = parseDragData(e);
     if (!issueId) return;
 
-    const columnIssues = issues.filter((i) => i.state_id === stateId && i.id !== issueId);
+    const columnIssues = issues.filter((i) => i.state_id === targetStateId && i.id !== issueId);
     const lastIssue = columnIssues.length > 0 ? columnIssues[columnIssues.length - 1] : null;
-    onMoveIssueState(issueId, stateId, lastIssue?.sort_order, undefined);
+    onMoveIssueState(issueId, targetStateId, lastIssue?.sort_order, undefined);
   };
 
   // Flat mode: Drop on Card
-  const handleDropOnFlatCard = (e: React.DragEvent, targetIssue: Issue, stateId: string) => {
+  const handleDropOnFlatCard = (e: React.DragEvent, targetIssue: Issue, targetStateId: string) => {
     e.preventDefault();
     e.stopPropagation();
     onDragStateChange?.(false);
     const { issueId } = parseDragData(e);
     if (!issueId || issueId === targetIssue.id) return;
 
-    const columnIssues = issues.filter((i) => i.state_id === stateId && i.id !== issueId);
+    const columnIssues = issues.filter((i) => i.state_id === targetStateId && i.id !== issueId);
     const targetIdx = columnIssues.findIndex((i) => i.id === targetIssue.id);
     const prevIssue = targetIdx > 0 ? columnIssues[targetIdx - 1] : null;
     const nextIssue = columnIssues[targetIdx];
 
-    onMoveIssueState(issueId, stateId, prevIssue?.sort_order, nextIssue?.sort_order);
+    onMoveIssueState(issueId, targetStateId, prevIssue?.sort_order, nextIssue?.sort_order);
   };
 
-  // Swimlane mode: Drop on Cell (Restrict cross-swimlane drag)
-  const handleDropOnSwimlaneCell = (
-    e: React.DragEvent,
-    targetSwimlaneId: string,
-    stateId: string
-  ) => {
-    e.preventDefault();
-    onDragStateChange?.(false);
-    const { issueId, swimlaneId: sourceSwimlaneId } = parseDragData(e);
-    if (!issueId) return;
-
-    // Boundary check: Enforce no cross-swimlane drag
-    if (sourceSwimlaneId && sourceSwimlaneId !== targetSwimlaneId) {
-      return;
-    }
-
-    const targetSwimlane = swimlanes.find((s) => s.id === targetSwimlaneId);
-    const cellIssues = (targetSwimlane?.columns[stateId] || []).filter((i) => i.id !== issueId);
-    const lastIssue = cellIssues.length > 0 ? cellIssues[cellIssues.length - 1] : null;
-    onMoveIssueState(issueId, stateId, lastIssue?.sort_order, undefined);
-  };
-
-  // Swimlane mode: Drop on Card (Restrict cross-swimlane drag)
-  const handleDropOnSwimlaneCard = (
-    e: React.DragEvent,
-    targetIssue: Issue,
-    targetSwimlaneId: string,
-    stateId: string
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onDragStateChange?.(false);
-    const { issueId, swimlaneId: sourceSwimlaneId } = parseDragData(e);
-    if (!issueId || issueId === targetIssue.id) return;
-
-    // Boundary check: Enforce no cross-swimlane drag
-    if (sourceSwimlaneId && sourceSwimlaneId !== targetSwimlaneId) {
-      return;
-    }
-
-    const targetSwimlane = swimlanes.find((s) => s.id === targetSwimlaneId);
-    const cellIssues = (targetSwimlane?.columns[stateId] || []).filter((i) => i.id !== issueId);
-    const targetIdx = cellIssues.findIndex((i) => i.id === targetIssue.id);
-    const prevIssue = targetIdx > 0 ? cellIssues[targetIdx - 1] : null;
-    const nextIssue = cellIssues[targetIdx];
-
-    onMoveIssueState(issueId, stateId, prevIssue?.sort_order, nextIssue?.sort_order);
-  };
-
-  // ─── Render Assignee Avatar Helper ────────────────────────────────────────
+  // Render Assignee Avatar
   const renderAssigneeAvatar = (issue: Issue) => {
-    const resolvedAssignee =
+    if (!issue.assignee && !issue.assignee_id) return null;
+
+    const assigneeUser =
       issue.assignee ||
-      (issue.assignee_id
-        ? (users.find(
-            (u: any) =>
-              u.id === issue.assignee_id ||
-              u.user_id === issue.assignee_id ||
-              u.user?.id === issue.assignee_id
-          ) as any)
-        : null);
+      users.find((u: any) => (u.user?.id || u.id) === issue.assignee_id);
 
-    const assigneeUser = resolvedAssignee?.user || resolvedAssignee;
-    if (!assigneeUser) {
-      return <span className="text-[10px] text-zinc-500">Unassigned</span>;
-    }
-    const name = assigneeUser.name || assigneeUser.email || 'Member';
-    const initials =
-      name
-        .split(' ')
-        .filter(Boolean)
-        .map((n: string) => n[0])
-        .slice(0, 2)
-        .join('')
-        .toUpperCase() || 'M';
-
-    const assignedByName =
-      issue.assigned_by?.name ||
-      issue.assigned_by?.email ||
-      issue.creator?.name ||
-      issue.creator?.email;
-    const tooltipText = `Assigned to: ${name}${assignedByName ? ` (by ${assignedByName})` : ''}`;
-
-    if (assigneeUser.avatar_url) {
-      return (
-        <img
-          src={assigneeUser.avatar_url}
-          alt={name}
-          className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
-          title={tooltipText}
-        />
-      );
-    }
+    if (!assigneeUser) return null;
 
     return (
-      <div
-        className="w-4 h-4 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[8px] font-bold"
-        title={tooltipText}
-      >
-        {initials}
+      <div className="shrink-0" title={`Assigned to ${assigneeUser.name || assigneeUser.email}`}>
+        <UserAvatar
+          name={assigneeUser.name}
+          email={assigneeUser.email}
+          avatarUrl={assigneeUser.avatar_url}
+          size="xs"
+        />
       </div>
     );
   };
 
-  // ─── Render Issue Card Component ──────────────────────────────────────────
+  // ─── Render Issue Card Component Matching Image 1 ─────────────────────────
   const renderCard = (
     issue: Issue,
-    swimlaneId: string,
     onDropCard: (e: React.DragEvent, issue: Issue, stateId: string) => void
   ) => {
     const ancestors = tree.allNodes.get(issue.id)?.ancestors || [];
+    const resolvedState = issue.state || states.find((s) => s.id === issue.state_id);
 
     return (
       <div
         key={issue.id}
         draggable
-        onDragStart={(e) => handleDragStart(e, issue.id, swimlaneId)}
+        onDragStart={(e) => handleDragStart(e, issue.id)}
         onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
         onDrop={(e) => onDropCard(e, issue, issue.state_id)}
         onClick={() => onSelectIssue(issue)}
-        className="p-3 rounded-md bg-surface-elevated/70 hover:bg-surface-elevated border border-border-subtle hover:border-white/[0.12] transition-all duration-150 shadow-xs cursor-grab active:cursor-grabbing group flex flex-col gap-2"
+        className="p-3 rounded-lg bg-[#141517] hover:bg-[#18191c] border border-white/[0.06] hover:border-white/[0.12] transition-all duration-150 shadow-sm cursor-grab active:cursor-grabbing group flex flex-col gap-2 select-none"
       >
-        {/* Card Header: Hierarchy Slug Track & Actions */}
-        <div className="flex items-start justify-between gap-1">
-          <div className="flex flex-col min-w-0">
-            {ancestors.length > 0 && (
-              <IssueBreadcrumbPath
-                ancestors={ancestors}
-                currentIdentifier={issue.identifier}
-                currentTitle={issue.title}
-                onClickAncestor={onSelectIssue}
-                className="mb-1"
-              />
-            )}
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-[11px] font-mono font-medium text-zinc-400 group-hover:text-white transition-colors">
-                {issue.identifier}
+        {/* Card Header: Hierarchy Breadcrumb & Assignee Avatar */}
+        <div className="flex items-center justify-between gap-1.5 min-w-0">
+          <div className="flex items-center min-w-0 text-[11px] font-mono text-zinc-400 group-hover:text-zinc-300 transition-colors truncate">
+            {ancestors.length > 0 ? (
+              <span className="truncate">
+                {issue.identifier} &gt; {ancestors.map((a) => a.title).join(' > ')}
               </span>
-              {issue.parent_id && (
-                <span
-                  className="text-[9px] font-mono font-medium px-1 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 flex items-center gap-0.5 shrink-0"
-                  title="Subtask"
-                >
-                  <CornerDownRight className="w-2.5 h-2.5 text-zinc-500" />
-                  <span>subtask</span>
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            {onAddSubtask && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddSubtask(issue.id, issue.state_id);
-                }}
-                className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all cursor-pointer flex items-center gap-0.5 border border-zinc-800"
-                title={`Create subtask under ${issue.identifier}`}
-              >
-                <Plus className="w-2.5 h-2.5 stroke-[2.5]" />
-                <span>Subtask</span>
-              </button>
+            ) : (
+              <span>{issue.identifier}</span>
             )}
-            {onDeleteIssue && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (window.confirm(`Delete ${issue.identifier}: "${issue.title}" permanently?`)) {
-                    onDeleteIssue(issue.id);
-                  }
-                }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-800 transition-all cursor-pointer"
-                title="Delete Issue"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            )}
-            <PriorityBadge priority={issue.priority} />
           </div>
+          {renderAssigneeAvatar(issue)}
         </div>
 
-        {/* Title */}
-        <p className="text-xs font-medium text-text-primary line-clamp-2 leading-relaxed">
-          {issue.title}
-        </p>
-
-        {/* Labels */}
-        {issue.labels && issue.labels.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {issue.labels.map((lbl) => (
-              <span
-                key={lbl.id}
-                className="text-[10px] px-1.5 py-0.5 rounded border font-medium flex items-center gap-1"
-                style={{
-                  backgroundColor: `${lbl.color}15`,
-                  borderColor: `${lbl.color}35`,
-                  color: lbl.color,
-                }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: lbl.color }} />
-                {lbl.name}
-              </span>
-            ))}
+        {/* Title with Status Glyph */}
+        <div className="flex items-start gap-2 min-w-0">
+          <div className="mt-0.5 shrink-0">
+            <StatusIcon state={resolvedState} size="xs" />
           </div>
-        )}
+          <p className="text-[13px] font-medium text-zinc-200 group-hover:text-white line-clamp-2 leading-snug">
+            {issue.title}
+          </p>
+        </div>
 
-        {/* Card Footer: Assignee & Date Created */}
-        <div className="flex items-center justify-between pt-1 border-t border-border-divider text-[11px] text-text-tertiary">
-          <div className="flex items-center gap-1.5">
-            {renderAssigneeAvatar(issue)}
-            {issue.subtasks && issue.subtasks.length > 0 && (
-              <span className="text-[10px] text-text-tertiary font-mono">
-                {issue.subtasks.filter((s) => s.state?.category === 'completed').length}/
-                {issue.subtasks.length}
-              </span>
-            )}
-          </div>
+        {/* Sub-properties: Priority Signal, Labels, Subtask progress fraction */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <SignalPriorityIcon priority={issue.priority} size="xs" />
 
-          {issue.created_at && (
+          {issue.labels?.map((lbl) => (
             <span
-              className="text-[10px] text-zinc-400 flex items-center gap-1 font-sans"
-              title={`Created: ${new Date(issue.created_at).toLocaleString()}`}
+              key={lbl.id}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/[0.06] text-zinc-300 border border-white/[0.04]"
             >
-              <Calendar className="w-3 h-3 text-zinc-500" />
+              <span
+                className="w-1.5 h-1.5 rounded-full shrink-0"
+                style={{ backgroundColor: lbl.color || '#a1a1aa' }}
+              />
+              <span>{lbl.name}</span>
+            </span>
+          ))}
+
+          {issue.subtasks && issue.subtasks.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-400">
+              <span className="w-1.5 h-1.5 rounded-full border border-zinc-500" />
               <span>
-                {new Date(issue.created_at).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  ...(new Date(issue.created_at).getFullYear() !== new Date().getFullYear()
-                    ? { year: 'numeric' }
-                    : {}),
-                })}
+                {issue.subtasks.filter((s) => s.state?.category === 'completed').length}/{issue.subtasks.length}
               </span>
             </span>
           )}
         </div>
+
+        {/* Footer: Date Created */}
+        {issue.created_at && (
+          <div className="text-[10px] font-sans text-zinc-500 pt-1 border-t border-white/[0.04]">
+            Created {formatRelativeMonthDay(issue.created_at)}
+          </div>
+        )}
       </div>
     );
   };
 
   // ──────────────────────────────────────────────────────────────────────────
-  // VIEW MODE: Vertical Kanban (Group By None)
+  // VIEW MODE: Vertical Kanban (Group By None) Matching Image 1
   // ──────────────────────────────────────────────────────────────────────────
   if (groupBy === 'none') {
+    // Separate visible columns vs auto-collapsed hidden columns (0 issues)
+    const visibleStates: WorkflowState[] = [];
+    const hiddenStates: WorkflowState[] = [];
+
+    activeStates.forEach((state) => {
+      const count = issues.filter((i) => i.state_id === state.id).length;
+      const isManuallyHidden = manuallyHiddenStateIds[state.id];
+      const isManuallyRevealed = manuallyRevealedStateIds[state.id];
+
+      if (isManuallyHidden) {
+        hiddenStates.push(state);
+      } else if (isManuallyRevealed) {
+        visibleStates.push(state);
+      } else if (count === 0) {
+        // Auto-collapse empty columns into hidden rail per Image 1 & user decision
+        hiddenStates.push(state);
+      } else {
+        visibleStates.push(state);
+      }
+    });
+
+    const revealColumn = (stateId: string) => {
+      setManuallyRevealedStateIds((prev) => ({ ...prev, [stateId]: true }));
+      setManuallyHiddenStateIds((prev) => {
+        const next = { ...prev };
+        delete next[stateId];
+        return next;
+      });
+    };
+
+    const hideColumn = (stateId: string) => {
+      setManuallyHiddenStateIds((prev) => ({ ...prev, [stateId]: true }));
+      setManuallyRevealedStateIds((prev) => {
+        const next = { ...prev };
+        delete next[stateId];
+        return next;
+      });
+    };
+
     return (
-      <div className="flex-1 overflow-x-auto p-6 flex gap-4 select-none min-h-[calc(100vh-3.5rem)] font-sans">
-        {activeStates.map((state) => {
+      <div className="flex-1 overflow-x-auto p-6 flex gap-6 select-none min-h-[calc(100vh-3.5rem)] font-sans">
+        {/* Active Columns */}
+        {visibleStates.map((state) => {
           const stateIssues = issues.filter((i) => i.state_id === state.id);
 
           return (
@@ -363,22 +271,32 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               key={state.id}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDropOnFlatColumn(e, state.id)}
-              className="w-80 shrink-0 flex flex-col bg-panel-dark/95 rounded-lg border border-border-subtle overflow-hidden"
+              className="w-80 shrink-0 flex flex-col bg-[#0f1011] rounded-xl border border-white/[0.06] overflow-hidden"
             >
               {/* Column Header */}
-              <div className="p-3 border-b border-border-subtle flex items-center justify-between bg-panel-dark">
+              <div className="p-3 border-b border-white/[0.06] flex items-center justify-between bg-[#121315]">
                 <div className="flex items-center gap-2">
-                  <StateBadge state={state} />
-                  <span className="text-xs font-mono text-text-tertiary">{stateIssues.length}</span>
+                  <StatusIcon state={state} size="sm" />
+                  <span className="text-xs font-semibold text-zinc-200">{state.name}</span>
+                  <span className="text-xs font-mono text-zinc-500">{stateIssues.length}</span>
                 </div>
 
                 <div className="flex items-center gap-1">
                   <button
+                    type="button"
                     onClick={() => onOpenNewIssueWithState(state.id)}
-                    className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-white/[0.06] transition-colors cursor-pointer"
+                    className="p-1 rounded text-zinc-500 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
                     title="Add Issue to State"
                   >
-                    <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => hideColumn(state.id)}
+                    className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06] transition-colors cursor-pointer text-[10px]"
+                    title="Hide column"
+                  >
+                    ···
                   </button>
                 </div>
               </div>
@@ -386,13 +304,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               {/* Column Issues List */}
               <div className="flex-1 p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-10rem)]">
                 {stateIssues.map((issue) =>
-                  renderCard(issue, '__default__', (e, target) =>
-                    handleDropOnFlatCard(e, target, state.id)
-                  )
+                  renderCard(issue, (e, target) => handleDropOnFlatCard(e, target, state.id))
                 )}
 
                 {stateIssues.length === 0 && (
-                  <div className="py-6 text-center text-xs text-text-quaternary border border-dashed border-border-subtle rounded-md">
+                  <div className="py-8 text-center text-xs text-zinc-600 border border-dashed border-white/[0.04] rounded-lg">
                     No issues
                   </div>
                 )}
@@ -400,179 +316,65 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             </div>
           );
         })}
+
+        {/* Collapsible Hidden Columns Rail Matching Image 1 */}
+        {hiddenStates.length > 0 && (
+          <div className="w-72 shrink-0 flex flex-col space-y-2">
+            <button
+              type="button"
+              onClick={() => setIsHiddenColumnsExpanded((prev) => !prev)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer px-1 py-1"
+            >
+              {isHiddenColumnsExpanded ? (
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-500" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 text-zinc-500" />
+              )}
+              <span>Hidden columns</span>
+            </button>
+
+            {isHiddenColumnsExpanded && (
+              <div className="space-y-1.5">
+                {hiddenStates.map((state) => {
+                  const count = issues.filter((i) => i.state_id === state.id).length;
+                  return (
+                    <button
+                      key={state.id}
+                      type="button"
+                      onClick={() => revealColumn(state.id)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg bg-[#121315] hover:bg-[#16171a] border border-white/[0.05] hover:border-white/[0.1] text-xs transition-colors cursor-pointer text-left group"
+                      title="Click to reveal column"
+                    >
+                      <div className="flex items-center gap-2">
+                        <StatusIcon state={state} size="sm" />
+                        <span className="text-zinc-300 group-hover:text-white font-medium">
+                          {state.name}
+                        </span>
+                      </div>
+                      <span className="font-mono text-zinc-500 text-[11px]">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   }
 
   // ──────────────────────────────────────────────────────────────────────────
-  // VIEW MODE: Horizontal Swimlanes (Group By Parent)
+  // VIEW MODE: Horizontal Swimlanes / Tree View (Group By Parent) - Matches Image 1
   // ──────────────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 overflow-x-auto p-6 select-none min-h-[calc(100vh-3.5rem)] font-sans flex flex-col gap-6">
-      {/* ─── Sticky Master Column Header Row ─── */}
-      <div className="sticky top-0 z-20 bg-canvas-workspace/90 backdrop-blur-md pb-3 border-b border-border-subtle flex gap-4 min-w-max">
-        {activeStates.map((state) => {
-          // Total issues across all swimlanes in this state
-          const count = issues.filter((i) => i.state_id === state.id).length;
-
-          return (
-            <div
-              key={state.id}
-              className="w-80 shrink-0 px-3 py-2 bg-panel-dark border border-border-subtle rounded-md flex items-center justify-between"
-            >
-              <div className="flex items-center gap-2">
-                <StateBadge state={state} />
-                <span className="text-xs font-mono text-text-tertiary">{count}</span>
-              </div>
-              <button
-                onClick={() => onOpenNewIssueWithState(state.id)}
-                className="p-1 rounded text-text-tertiary hover:text-text-primary hover:bg-white/[0.06] transition-colors cursor-pointer"
-                title={`Add Issue in ${state.name}`}
-              >
-                <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-              </button>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ─── Swimlane Rows ─── */}
-      <div className="flex flex-col gap-5 min-w-max">
-        {swimlanes.map((swimlane) => {
-          const isCollapsed = collapsedSwimlanes[swimlane.id] ?? false;
-
-          return (
-            <div
-              key={swimlane.id}
-              className="flex flex-col rounded-lg border border-border-subtle bg-panel-dark/50 overflow-hidden shadow-xs"
-            >
-              {/* ─── Swimlane Row Header ─── */}
-              <div className="p-3 bg-panel-dark/90 border-b border-border-subtle flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  {/* Collapse Toggle */}
-                  <button
-                    onClick={() => toggleSwimlane(swimlane.id)}
-                    className="p-1 rounded hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-                    title={isCollapsed ? 'Expand Swimlane' : 'Collapse Swimlane'}
-                  >
-                    {isCollapsed ? (
-                      <ChevronRight className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    )}
-                  </button>
-
-                  {swimlane.isIndependent ? (
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-zinc-400" />
-                      <span className="text-sm font-semibold text-zinc-200">
-                        Independent Issues
-                      </span>
-                      <span className="text-xs font-mono text-zinc-500">
-                        ({swimlane.totalCount} issues)
-                      </span>
-                    </div>
-                  ) : (
-                    swimlane.parent && (
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <FolderGit2 className="w-4 h-4 text-indigo-400 shrink-0" />
-                        <button
-                          onClick={() => onSelectIssue(swimlane.parent!)}
-                          className="text-xs font-mono font-semibold text-zinc-300 hover:text-indigo-400 transition-colors cursor-pointer shrink-0"
-                          title="Open Parent Issue"
-                        >
-                          {swimlane.parent.identifier}
-                        </button>
-                        <span className="text-zinc-600">·</span>
-                        <span
-                          onClick={() => onSelectIssue(swimlane.parent!)}
-                          className="text-xs font-medium text-zinc-100 truncate max-w-[280px] hover:text-zinc-300 transition-colors cursor-pointer"
-                          title={swimlane.parent.title}
-                        >
-                          {swimlane.parent.title}
-                        </span>
-                        <div className="flex items-center gap-1.5 shrink-0 ml-1">
-                          {swimlane.parent.state && <StateBadge state={swimlane.parent.state} />}
-                          <PriorityBadge priority={swimlane.parent.priority} />
-                          {renderAssigneeAvatar(swimlane.parent)}
-                        </div>
-                      </div>
-                    )
-                  )}
-                </div>
-
-                {/* Swimlane Stats & Quick Actions */}
-                <div className="flex items-center gap-3 shrink-0">
-                  {/* Progress Bar */}
-                  <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono">
-                    <span>
-                      {swimlane.completedCount}/{swimlane.totalCount}
-                    </span>
-                    <div className="w-20 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                        style={{ width: `${swimlane.completionPercent}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Add Subtask Button for Parent Swimlane */}
-                  {!swimlane.isIndependent && swimlane.parent && onAddSubtask && (
-                    <button
-                      onClick={() => onAddSubtask(swimlane.parent!.id)}
-                      className="px-2 py-1 rounded text-xs bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 flex items-center gap-1 transition-colors cursor-pointer"
-                      title="Add Subtask to this Parent"
-                    >
-                      <Plus className="w-3 h-3 stroke-[2.5]" />
-                      <span>Add subtask</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* ─── Swimlane Columns Row (Hidden when collapsed) ─── */}
-              {!isCollapsed && (
-                <div className="p-3 flex gap-4 bg-zinc-950/40">
-                  {activeStates.map((state) => {
-                    const cellIssues = swimlane.columns[state.id] || [];
-
-                    return (
-                      <div
-                        key={state.id}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDropOnSwimlaneCell(e, swimlane.id, state.id)}
-                        className={`w-80 shrink-0 min-h-[110px] p-2 rounded-lg border flex flex-col gap-2 transition-colors ${
-                          cellIssues.length > 0
-                            ? 'bg-zinc-950 border-zinc-800/80'
-                            : 'bg-zinc-950/30 border-dashed border-zinc-900 hover:border-zinc-800'
-                        }`}
-                      >
-                        {cellIssues.map((issue) =>
-                          renderCard(issue, swimlane.id, (e, target) =>
-                            handleDropOnSwimlaneCard(e, target, swimlane.id, state.id)
-                          )
-                        )}
-
-                        {cellIssues.length === 0 && (
-                          <div className="flex-1 flex items-center justify-center text-[11px] text-zinc-600 select-none py-4">
-                            Drop subticket here
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {swimlanes.length === 0 && (
-          <div className="py-16 text-center text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-xl">
-            No issues found. Create a parent issue and break it down into subtickets to view the horizontal kanban.
-          </div>
-        )}
-      </div>
-    </div>
+    <HorizontalTreeBoard
+      issues={issues}
+      states={states}
+      users={users}
+      availableLabels={availableLabels}
+      onSelectIssue={onSelectIssue}
+      onUpdateIssue={onUpdateIssue}
+      onDeleteIssue={onDeleteIssue}
+    />
   );
 };

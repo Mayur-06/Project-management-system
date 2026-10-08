@@ -24,6 +24,7 @@ import { api } from '@/lib/api';
 import { Organization, Team, User, UserWorkspaceItem } from '@/types';
 import { CreateTeamModal } from '@/components/teams/CreateTeamModal';
 import { Check, Building2, ExternalLink } from 'lucide-react';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 interface WorkspaceSidebarProps {
   currentOrgSlug?: string;
@@ -239,38 +240,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           </div>
         )}
 
-        {/* Quick Action Buttons */}
-        <div className="p-2 space-y-1">
-          <button
-            onClick={onOpenCommandPalette}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-white/[0.04] border border-transparent transition-colors group cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <Command className="w-3.5 h-3.5 text-text-tertiary group-hover:text-text-primary" />
-              <span>Search & Command</span>
-            </div>
-            <kbd className="text-[10px] bg-white/[0.05] text-text-tertiary px-1.5 py-0.5 rounded border border-border-subtle">
-              ⌘K
-            </kbd>
-          </button>
-
-          <button
-            onClick={onOpenAIAsk}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs text-text-secondary hover:text-text-primary bg-surface-elevated/70 hover:bg-surface-elevated border border-border-subtle hover:border-border-standard transition-colors group cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-accent-violet" />
-              <span className="font-medium text-text-primary">AI Assistant</span>
-            </div>
-            <span className="text-[10px] text-text-tertiary bg-white/[0.05] px-1 rounded border border-border-subtle">Agent</span>
-          </button>
-        </div>
-
         {/* Primary Views */}
         <div className="px-2 py-2 space-y-0.5">
-          <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
-            Workspace Views
-          </div>
           {navItems.map((item) => {
             const isActive = item.label === 'Settings'
               ? pathname?.includes('/settings')
@@ -378,17 +349,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       {/* User Footer */}
       <div className="p-3 border-t border-[#1a1c21] flex items-center justify-between bg-[#0a0b0c]">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          {currentUser?.avatar_url ? (
-            <img
-              src={currentUser.avatar_url}
-              alt={currentUser.name}
-              className="w-7 h-7 rounded-full ring-1 ring-zinc-700 object-cover"
-            />
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400">
-              <UserIcon className="w-4 h-4" />
-            </div>
-          )}
+          <UserAvatar
+            name={currentUser?.name}
+            email={currentUser?.email}
+            avatarUrl={currentUser?.avatar_url}
+            size="lg"
+          />
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-medium text-zinc-200 truncate">
               {currentUser?.name || 'Workspace User'}

@@ -4,6 +4,8 @@ import React from 'react';
 import Link from 'next/link';
 import { Issue, WorkflowState, User } from '@/types';
 import { Plus } from 'lucide-react';
+import { UserAvatar } from '@/components/ui/UserAvatar';
+import { SignalPriorityIcon } from '@/components/ui/SignalPriorityIcon';
 
 interface IssueSubtasksTreeProps {
   rootIssue?: Issue;
@@ -142,41 +144,13 @@ export const IssueSubtasksTree: React.FC<IssueSubtasksTreeProps> = ({
     }
   };
 
-  // Render Priority Icon (Linear style `---` for none)
+  // Render Priority Icon using standard Linear signal indicators
   const renderPriorityIcon = (priority?: string) => {
-    switch (priority) {
-      case 'urgent':
-        return (
-          <span className="text-[10px] font-mono font-bold text-red-400 tracking-tighter" title="Urgent">
-            ▲▲
-          </span>
-        );
-      case 'high':
-        return (
-          <span className="text-[10px] font-mono font-bold text-orange-400 tracking-tighter" title="High">
-            ▲
-          </span>
-        );
-      case 'medium':
-        return (
-          <span className="text-[10px] font-mono font-bold text-yellow-400 tracking-tighter" title="Medium">
-            ■
-          </span>
-        );
-      case 'low':
-        return (
-          <span className="text-[10px] font-mono font-bold text-blue-400 tracking-tighter" title="Low">
-            ▼
-          </span>
-        );
-      case 'none':
-      default:
-        return (
-          <span className="text-zinc-500 font-mono text-xs font-semibold tracking-[-1px] select-none shrink-0" title="No Priority">
-            ---
-          </span>
-        );
-    }
+    return (
+      <span className="inline-flex items-center shrink-0" title={`Priority: ${priority || 'none'}`}>
+        <SignalPriorityIcon priority={(priority as any) || 'none'} size="xs" />
+      </span>
+    );
   };
 
   // Render Assignee Avatar
@@ -205,23 +179,14 @@ export const IssueSubtasksTree: React.FC<IssueSubtasksTreeProps> = ({
         .join('')
         .toUpperCase() || 'M';
 
-    if (assigneeUser.avatar_url) {
-      return (
-        <img
-          src={assigneeUser.avatar_url}
-          alt={name}
-          className="w-4.5 h-4.5 rounded-full object-cover ring-1 ring-zinc-700 shrink-0"
-          title={`Assigned to ${name}`}
-        />
-      );
-    }
-
     return (
-      <div
-        className="w-4.5 h-4.5 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-500 text-white flex items-center justify-center text-[9px] font-bold shrink-0"
-        title={`Assigned to ${name}`}
-      >
-        {initials}
+      <div title={`Assigned to ${name}`} className="shrink-0">
+        <UserAvatar
+          name={assigneeUser.name}
+          email={assigneeUser.email}
+          avatarUrl={assigneeUser.avatar_url}
+          size="xs"
+        />
       </div>
     );
   };

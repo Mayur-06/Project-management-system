@@ -1,13 +1,13 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import {
   Search,
   LayoutGrid,
   List,
   Sparkles,
   Plus,
-  Layers,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -21,9 +21,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 interface TopNavProps {
-  title: string;
+  title?: string;
   subtitle?: string;
-  breadcrumbs?: string[];
+  breadcrumbs?: (string | { label: string; href?: string })[];
   viewMode?: 'board' | 'list';
   onToggleViewMode?: (mode: 'board' | 'list') => void;
   groupBy?: 'parent' | 'none';
@@ -32,6 +32,7 @@ interface TopNavProps {
   onSearchChange?: (q: string) => void;
   onOpenNewIssue?: () => void;
   onOpenAIAsk?: () => void;
+  actions?: React.ReactNode;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -40,12 +41,13 @@ export const TopNav: React.FC<TopNavProps> = ({
   breadcrumbs = [],
   viewMode = 'board',
   onToggleViewMode,
-  groupBy = 'parent',
+  groupBy = 'none',
   onToggleGroupBy,
   searchQuery = '',
   onSearchChange,
   onOpenNewIssue,
   onOpenAIAsk,
+  actions,
 }) => {
   return (
     <header className="h-13 border-b border-border-subtle bg-canvas-workspace/85 backdrop-blur-md px-5 flex items-center justify-between sticky top-0 z-10 select-none">
@@ -57,16 +59,26 @@ export const TopNav: React.FC<TopNavProps> = ({
               <BreadcrumbList className="text-xs text-text-tertiary gap-1 sm:gap-1.5">
                 {breadcrumbs.map((crumb, idx) => {
                   const isLast = idx === breadcrumbs.length - 1;
+                  const label = typeof crumb === 'string' ? crumb : crumb.label;
+                  const href = typeof crumb === 'string' ? undefined : crumb.href;
+
                   return (
                     <React.Fragment key={idx}>
                       <BreadcrumbItem>
                         {isLast ? (
                           <BreadcrumbPage className="text-text-primary font-medium">
-                            {crumb}
+                            {label}
                           </BreadcrumbPage>
+                        ) : href ? (
+                          <Link
+                            href={href}
+                            className="hover:text-text-primary transition-colors cursor-pointer text-text-tertiary"
+                          >
+                            {label}
+                          </Link>
                         ) : (
                           <BreadcrumbLink className="hover:text-text-primary transition-colors cursor-pointer text-text-tertiary">
-                            {crumb}
+                            {label}
                           </BreadcrumbLink>
                         )}
                       </BreadcrumbItem>
@@ -76,22 +88,25 @@ export const TopNav: React.FC<TopNavProps> = ({
                 })}
               </BreadcrumbList>
             </Breadcrumb>
-            <div className="h-3 w-px bg-border-divider" />
+            {title && <div className="h-3 w-px bg-border-divider" />}
           </>
         )}
 
-        <h1 className="text-xs font-semibold text-text-primary flex items-center gap-2 truncate">
-          <span>{title}</span>
-          {subtitle && (
-            <span className="text-[11px] font-normal text-text-tertiary font-mono">
-              ({subtitle})
-            </span>
-          )}
-        </h1>
+        {title && (
+          <h1 className="text-xs font-semibold text-text-primary flex items-center gap-2 truncate">
+            <span>{title}</span>
+            {subtitle && (
+              <span className="text-[11px] font-normal text-text-tertiary font-mono">
+                ({subtitle})
+              </span>
+            )}
+          </h1>
+        )}
       </div>
 
       {/* Action Controls */}
       <div className="flex items-center gap-2.5 shrink-0">
+        {actions}
         {/* Search Bar */}
         {onSearchChange && (
           <div className="relative flex items-center">
@@ -110,7 +125,10 @@ export const TopNav: React.FC<TopNavProps> = ({
         {onToggleViewMode && (
           <div className="flex items-center bg-surface-elevated/50 border border-border-subtle rounded-md p-0.5 text-text-tertiary">
             <button
-              onClick={() => onToggleViewMode('board')}
+              onClick={() => {
+                onToggleViewMode('board');
+                onToggleGroupBy?.('none');
+              }}
               className={`p-1 rounded text-xs transition-colors cursor-pointer ${
                 viewMode === 'board'
                   ? 'bg-white/[0.08] text-text-primary shadow-xs'
@@ -130,38 +148,6 @@ export const TopNav: React.FC<TopNavProps> = ({
               title="List View"
             >
               <List className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Group By Switcher (Only visible in Board view) */}
-        {viewMode === 'board' && onToggleGroupBy && (
-          <div className="flex items-center bg-surface-elevated/50 border border-border-subtle rounded-md p-0.5 text-text-tertiary text-xs">
-            <button
-              type="button"
-              onClick={() => onToggleGroupBy('parent')}
-              className={`px-2 py-0.5 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
-                groupBy === 'parent'
-                  ? 'bg-white/[0.08] text-text-primary font-medium shadow-xs'
-                  : 'hover:text-text-primary'
-              }`}
-              title="Group by Parent Issue (Horizontal Kanban)"
-            >
-              <Layers className="w-3 h-3" />
-              <span>Parent</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onToggleGroupBy('none')}
-              className={`px-2 py-0.5 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
-                groupBy === 'none'
-                  ? 'bg-white/[0.08] text-text-primary font-medium shadow-xs'
-                  : 'hover:text-text-primary'
-              }`}
-              title="No Grouping (Vertical Kanban)"
-            >
-              <LayoutGrid className="w-3 h-3" />
-              <span>Flat</span>
             </button>
           </div>
         )}

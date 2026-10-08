@@ -32,8 +32,8 @@ function IssuesContent() {
   const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
 
-  // Persist Horizontal ('parent') vs Vertical ('none') Kanban in localStorage
-  const [groupBy, setGroupBy] = useState<'parent' | 'none'>('parent');
+  // Persist Horizontal ('parent') vs Vertical ('none') Kanban in localStorage (default to 'none' for flat vertical board)
+  const [groupBy, setGroupBy] = useState<'parent' | 'none'>('none');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -277,6 +277,7 @@ function IssuesContent() {
             states={states}
             issues={filteredIssues}
             users={modalUsers}
+            availableLabels={availableLabels}
             groupBy={groupBy}
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
@@ -290,6 +291,7 @@ function IssuesContent() {
               setIsNewIssueOpen(true);
             }}
             onMoveIssueState={handleMoveIssueState}
+            onUpdateIssue={handleUpdateIssue}
             onDeleteIssue={handleDeleteIssue}
             onDragStateChange={handleDragStateChange}
           />
@@ -303,6 +305,7 @@ function IssuesContent() {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
             onUpdateIssue={handleUpdateIssue}
+            onDeleteIssue={handleDeleteIssue}
           />
         )}
       </div>
