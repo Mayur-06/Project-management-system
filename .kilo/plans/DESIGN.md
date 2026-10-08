@@ -240,10 +240,42 @@ Our workspace is an engineering-first, dark-mode-native product designed for ext
     - Issue identifier in `Martian Mono` with ancestor subtask breadcrumb path.
     - Inline editable title (`IssueTitleEditor`).
     - TipTap rich-text description editor with image paste and autosave.
+    - Description header corner attachment button (`IssueAttachmentButton`): micro-paperclip button with count pill triggering a popover file gallery and upload dropzone.
     - Subtasks tree with progress counter and inline "+ Add subtask" row.
-    - Tabbed comments and attachments stream.
+    - Unified Activity & Comments stream (`IssueActivityFeed`):
+      - Replaced fragmented horizontal tabs with a single Linear-style chronological stream.
+      - Clean "Activity" header (subscribe button and mechanics removed).
+      - Micro-action event rows matching Linear's design:
+        - Status changes: Linear `StatusIcon` (Backlog dotted circle, In Progress amber pie slice, Done check, Canceled cross).
+        - Title changes: Subtle `Pencil` icon.
+        - Assignee & Priority changes: Actor `UserAvatar` micro-chip.
+        - Issue creation: Creator `UserAvatar` micro-chip.
+        - Due date set/changed: Red `CalendarClock` icon.
+        - Cycle transitions: Subtle `CirclePlay` icon.
+        - Label updates: `Tag` icon with colored bullet highlights.
+        - Timestamps: Inline with subtle middle dot separator (`&middot; {timeAgo}`).
+      - Card-based comment feed with author `UserAvatar`, relative timestamps, `(edited)` indicators, `@mention` highlights, and styled link chips.
+      - Bottom comment composer with `Ctrl+Enter` submit shortcut.
+    - Removal of AI breakdown tabs and review gates from issue drawer and full page.
   - Right Column (Property Rail):
     - State, Priority, Assignee, Team, Labels, and Due Date property pickers with keyboard navigation.
+
+### 7.5 TopNav View Switcher
+- **3-Mode Switcher:**
+  - `Board View` (`LayoutGrid`): Strictly flat vertical columns (`groupBy='none'`). The parent grouping sub-option is removed from vertical kanban.
+  - `Swimlanes` (`Layers`): Horizontal Kanban grouped by parent issue (`groupBy='parent'`).
+  - `List View` (`List`): Compact tabular view with inline state and assignee chips.
+
+### 7.6 Platform-Wide UserAvatar Standard (`UserAvatar.tsx`)
+- Unified avatar primitive built on Radix UI `@radix-ui/react-avatar`.
+- Deterministic color hashing: assigns each user a consistent vibrant pastel background (`bg-emerald-600`, `bg-sky-600`, `bg-indigo-600`, `bg-violet-600`, `bg-amber-600`, `bg-rose-600`, etc.) with white uppercase 2-letter initials.
+- Replaces ad-hoc `<img>` and `<div>` tags across:
+  - Kanban board card assignee
+  - List view assignee chips & dropdown
+  - Subtask tree assignee badges
+  - Activity stream event rows & comment author cards
+  - Inbox notification actor chips
+  - Workspace sidebar user footer
 
 ### 7.5 Inbox / Triage (`inbox/page.tsx`)
 - **Layout:**

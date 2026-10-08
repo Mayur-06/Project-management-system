@@ -21,6 +21,7 @@ import { Issue, WorkflowState, User, Label, IssuePriority } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
 import { StatusPicker } from '@/components/ui/StatusPicker';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { buildIssueTree } from '@/lib/issueTree';
 
 interface IssueListViewProps {
@@ -276,17 +277,12 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
                   >
                     {resolvedAssignee ? (
                       <div className="flex items-center gap-1.5 min-w-0">
-                        {resolvedAssignee.avatar_url ? (
-                          <img
-                            src={resolvedAssignee.avatar_url}
-                            alt=""
-                            className="w-4 h-4 rounded-full object-cover shrink-0"
-                          />
-                        ) : (
-                          <div className="w-4 h-4 rounded-full bg-indigo-600/40 border border-indigo-500/40 text-indigo-200 flex items-center justify-center text-[8px] font-bold shrink-0">
-                            {(resolvedAssignee.name || resolvedAssignee.email || 'M')[0].toUpperCase()}
-                          </div>
-                        )}
+                        <UserAvatar
+                          name={resolvedAssignee.name}
+                          email={resolvedAssignee.email}
+                          avatarUrl={resolvedAssignee.avatar_url}
+                          size="xs"
+                        />
                         <span className="text-zinc-200 truncate text-xs font-medium">
                           {resolvedAssignee.name || resolvedAssignee.email?.split('@')[0]}
                         </span>
@@ -353,13 +349,12 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
                             }`}
                           >
                             <div className="flex items-center gap-2 truncate">
-                              {u.avatar_url ? (
-                                <img src={u.avatar_url} alt="" className="w-4 h-4 rounded-full object-cover shrink-0" />
-                              ) : (
-                                <div className="w-4 h-4 rounded-full bg-zinc-700 flex items-center justify-center text-[8px] font-bold shrink-0 text-zinc-200">
-                                  {(u.name || u.email || 'U')[0].toUpperCase()}
-                                </div>
-                              )}
+                              <UserAvatar
+                                name={u.name}
+                                email={u.email}
+                                avatarUrl={u.avatar_url}
+                                size="xs"
+                              />
                               <span className="truncate">{u.name || u.email}</span>
                             </div>
                             {isCurrent && <Check className="w-3.5 h-3.5 text-zinc-300 shrink-0" />}

@@ -32,8 +32,8 @@ function IssuesContent() {
   const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
 
-  // Persist Horizontal ('parent') vs Vertical ('none') Kanban in localStorage
-  const [groupBy, setGroupBy] = useState<'parent' | 'none'>('parent');
+  // Persist Horizontal ('parent') vs Vertical ('none') Kanban in localStorage (default to 'none' for flat vertical board)
+  const [groupBy, setGroupBy] = useState<'parent' | 'none'>('none');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

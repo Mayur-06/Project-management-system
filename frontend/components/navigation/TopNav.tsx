@@ -40,7 +40,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   breadcrumbs = [],
   viewMode = 'board',
   onToggleViewMode,
-  groupBy = 'parent',
+  groupBy = 'none',
   onToggleGroupBy,
   searchQuery = '',
   onSearchChange,
@@ -106,20 +106,39 @@ export const TopNav: React.FC<TopNavProps> = ({
           </div>
         )}
 
-        {/* View Switcher (Board vs List) */}
+        {/* View Switcher (Board vs Swimlanes vs List) */}
         {onToggleViewMode && (
           <div className="flex items-center bg-surface-elevated/50 border border-border-subtle rounded-md p-0.5 text-text-tertiary">
             <button
-              onClick={() => onToggleViewMode('board')}
+              onClick={() => {
+                onToggleViewMode('board');
+                onToggleGroupBy?.('none');
+              }}
               className={`p-1 rounded text-xs transition-colors cursor-pointer ${
-                viewMode === 'board'
+                viewMode === 'board' && (!groupBy || groupBy === 'none')
                   ? 'bg-white/[0.08] text-text-primary shadow-xs'
                   : 'hover:text-text-primary'
               }`}
-              title="Board View"
+              title="Board View (Flat Vertical Columns)"
             >
               <LayoutGrid className="w-3.5 h-3.5" />
             </button>
+            {onToggleGroupBy && (
+              <button
+                onClick={() => {
+                  onToggleViewMode('board');
+                  onToggleGroupBy('parent');
+                }}
+                className={`p-1 rounded text-xs transition-colors cursor-pointer ${
+                  viewMode === 'board' && groupBy === 'parent'
+                    ? 'bg-white/[0.08] text-text-primary shadow-xs'
+                    : 'hover:text-text-primary'
+                }`}
+                title="Horizontal Swimlanes (Group by Parent)"
+              >
+                <Layers className="w-3.5 h-3.5" />
+              </button>
+            )}
             <button
               onClick={() => onToggleViewMode('list')}
               className={`p-1 rounded text-xs transition-colors cursor-pointer ${
@@ -130,38 +149,6 @@ export const TopNav: React.FC<TopNavProps> = ({
               title="List View"
             >
               <List className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Group By Switcher (Only visible in Board view) */}
-        {viewMode === 'board' && onToggleGroupBy && (
-          <div className="flex items-center bg-surface-elevated/50 border border-border-subtle rounded-md p-0.5 text-text-tertiary text-xs">
-            <button
-              type="button"
-              onClick={() => onToggleGroupBy('parent')}
-              className={`px-2 py-0.5 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
-                groupBy === 'parent'
-                  ? 'bg-white/[0.08] text-text-primary font-medium shadow-xs'
-                  : 'hover:text-text-primary'
-              }`}
-              title="Group by Parent Issue (Horizontal Kanban)"
-            >
-              <Layers className="w-3 h-3" />
-              <span>Parent</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onToggleGroupBy('none')}
-              className={`px-2 py-0.5 rounded flex items-center gap-1.5 transition-colors cursor-pointer ${
-                groupBy === 'none'
-                  ? 'bg-white/[0.08] text-text-primary font-medium shadow-xs'
-                  : 'hover:text-text-primary'
-              }`}
-              title="No Grouping (Vertical Kanban)"
-            >
-              <LayoutGrid className="w-3 h-3" />
-              <span>Flat</span>
             </button>
           </div>
         )}

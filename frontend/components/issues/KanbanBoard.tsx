@@ -5,6 +5,7 @@ import { Plus, Trash2, CornerDownRight, ChevronDown, ChevronRight, Layers, Folde
 import { Issue, WorkflowState, User } from '@/types';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StateBadge } from '@/components/ui/StateBadge';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 import { buildIssueTree, buildSwimlanes, SwimlaneRow } from '@/lib/issueTree';
 import { IssueBreadcrumbPath } from '@/components/issues/IssueBreadcrumbPath';
 
@@ -25,7 +26,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   states,
   issues,
   users = [],
-  groupBy = 'parent',
+  groupBy = 'none',
   onSelectIssue,
   onOpenNewIssueWithState,
   onAddSubtask,
@@ -189,23 +190,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       issue.creator?.email;
     const tooltipText = `Assigned to: ${name}${assignedByName ? ` (by ${assignedByName})` : ''}`;
 
-    if (assigneeUser.avatar_url) {
-      return (
-        <img
-          src={assigneeUser.avatar_url}
-          alt={name}
-          className="w-4 h-4 rounded-full object-cover ring-1 ring-zinc-700"
-          title={tooltipText}
-        />
-      );
-    }
-
     return (
-      <div
-        className="w-4 h-4 rounded-full bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 flex items-center justify-center text-[8px] font-bold"
-        title={tooltipText}
-      >
-        {initials}
+      <div title={tooltipText} className="shrink-0">
+        <UserAvatar
+          name={assigneeUser.name}
+          email={assigneeUser.email}
+          avatarUrl={assigneeUser.avatar_url}
+          size="xs"
+        />
       </div>
     );
   };

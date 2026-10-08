@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Issue, WorkflowState, User } from '@/types';
 import { Plus } from 'lucide-react';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 interface IssueSubtasksTreeProps {
   rootIssue?: Issue;
@@ -205,23 +206,14 @@ export const IssueSubtasksTree: React.FC<IssueSubtasksTreeProps> = ({
         .join('')
         .toUpperCase() || 'M';
 
-    if (assigneeUser.avatar_url) {
-      return (
-        <img
-          src={assigneeUser.avatar_url}
-          alt={name}
-          className="w-4.5 h-4.5 rounded-full object-cover ring-1 ring-zinc-700 shrink-0"
-          title={`Assigned to ${name}`}
-        />
-      );
-    }
-
     return (
-      <div
-        className="w-4.5 h-4.5 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-500 text-white flex items-center justify-center text-[9px] font-bold shrink-0"
-        title={`Assigned to ${name}`}
-      >
-        {initials}
+      <div title={`Assigned to ${name}`} className="shrink-0">
+        <UserAvatar
+          name={assigneeUser.name}
+          email={assigneeUser.email}
+          avatarUrl={assigneeUser.avatar_url}
+          size="xs"
+        />
       </div>
     );
   };

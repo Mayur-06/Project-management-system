@@ -24,6 +24,7 @@ import { api } from '@/lib/api';
 import { Organization, Team, User, UserWorkspaceItem } from '@/types';
 import { CreateTeamModal } from '@/components/teams/CreateTeamModal';
 import { Check, Building2, ExternalLink } from 'lucide-react';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 interface WorkspaceSidebarProps {
   currentOrgSlug?: string;
@@ -378,17 +379,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       {/* User Footer */}
       <div className="p-3 border-t border-[#1a1c21] flex items-center justify-between bg-[#0a0b0c]">
         <div className="flex items-center gap-2.5 overflow-hidden">
-          {currentUser?.avatar_url ? (
-            <img
-              src={currentUser.avatar_url}
-              alt={currentUser.name}
-              className="w-7 h-7 rounded-full ring-1 ring-zinc-700 object-cover"
-            />
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400">
-              <UserIcon className="w-4 h-4" />
-            </div>
-          )}
+          <UserAvatar
+            name={currentUser?.name}
+            email={currentUser?.email}
+            avatarUrl={currentUser?.avatar_url}
+            size="lg"
+          />
           <div className="flex flex-col min-w-0">
             <span className="text-xs font-medium text-zinc-200 truncate">
               {currentUser?.name || 'Workspace User'}
