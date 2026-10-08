@@ -36,7 +36,7 @@ def test_get_workspaces_me(client, mock_db):
                 ]
             )
         elif table_name == "teams":
-            mock_t.select().eq().execute.return_value = MagicMock(
+            teams_mock_data = MagicMock(
                 data=[
                     {
                         "id": MOCK_TEAM_ID,
@@ -46,6 +46,8 @@ def test_get_workspaces_me(client, mock_db):
                     }
                 ]
             )
+            mock_t.select().eq().execute.return_value = teams_mock_data
+            mock_t.select().in_().execute.return_value = teams_mock_data
         return mock_t
 
     mock_db.table.side_effect = mock_table

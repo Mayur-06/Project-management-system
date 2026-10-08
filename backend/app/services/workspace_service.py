@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import HTTPException, status
 from supabase import Client
 
@@ -78,20 +78,44 @@ class WorkspaceService:
         if not member_res.data:
             return workspaces
 
+        # Bulk-fetch all teams across all user organizations in a single query (eliminating N+1 overhead)
+        org_ids = [
+            row["organizations"]["id"]
+            for row in member_res.data
+            if row.get("organizations") and "id" in row["organizations"]
+        ]
+
+        teams_by_org: Dict[str, List[TeamSummary]] = {oid: [] for oid in org_ids}
+        if len(org_ids) == 1:
+            teams_res = (
+                db.table("teams")
+                .select("id, name, key, organization_id")
+                .eq("organization_id", org_ids[0])
+                .execute()
+            )
+            for t in (teams_res.data or []):
+                oid = t.get("organization_id")
+                if oid in teams_by_org:
+                    teams_by_org[oid].append(TeamSummary(**t))
+        elif len(org_ids) > 1:
+            teams_res = (
+                db.table("teams")
+                .select("id, name, key, organization_id")
+                .in_("organization_id", org_ids)
+                .execute()
+            )
+            for t in (teams_res.data or []):
+                oid = t.get("organization_id")
+                if oid in teams_by_org:
+                    teams_by_org[oid].append(TeamSummary(**t))
+
         for row in member_res.data:
             org_data = row.get("organizations")
             if not org_data:
                 continue
 
             org_id = org_data["id"]
-            # Fetch teams belonging to this organization
-            teams_res = (
-                db.table("teams")
-                .select("id, name, key, organization_id")
-                .eq("organization_id", org_id)
-                .execute()
-            )
-            teams_list = [TeamSummary(**t) for t in (teams_res.data or [])]
+            teams_list = teams_by_org.get(org_id, [])
 
             workspaces.append(
                 UserWorkspaceItem(

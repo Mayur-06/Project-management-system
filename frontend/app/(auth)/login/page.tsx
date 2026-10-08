@@ -124,18 +124,13 @@ export default function LoginPage() {
         setStatusText('Entering workspace...');
         console.log('[Login] Redirecting to:', targetUrl);
 
-        // Navigate directly to workspace page
-        window.location.href = targetUrl;
+        // Client-side SPA navigation preserving in-memory tokens
+        router.replace(targetUrl);
       } else {
         // No workspaces yet — go to workspace creation
         setStatusText('Setting up workspace...');
         console.log('[Login] No workspaces found, redirecting to signup...');
         router.replace('/signup');
-        setTimeout(() => {
-          if (typeof window !== 'undefined') {
-            window.location.href = '/signup';
-          }
-        }, 800);
       }
     } catch (err: any) {
       console.error('[Login] Caught error during sign-in flow:', err);
