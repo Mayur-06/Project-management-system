@@ -201,6 +201,26 @@ export default function MyIssuesPage() {
     await api.deleteIssue(issueId, true);
   };
 
+  const handleUpdateIssue = async (
+    issueId: string,
+    updates: Partial<Issue> & { label_ids?: string[] }
+  ) => {
+    setIssues((prev) =>
+      prev.map((i) => {
+        if (i.id !== issueId) return i;
+        const patched = { ...i, ...updates };
+        if (updates.state_id) {
+          patched.state = states.find((s) => s.id === updates.state_id) || i.state;
+        }
+        if (updates.label_ids && availableLabels.length > 0) {
+          patched.labels = availableLabels.filter((l) => updates.label_ids!.includes(l.id));
+        }
+        return patched;
+      })
+    );
+    await api.updateIssue(issueId, updates);
+  };
+
   return (
     <div className="flex flex-col flex-1 h-full overflow-hidden">
       {/* Top Navigation */}
@@ -276,6 +296,7 @@ export default function MyIssuesPage() {
               setIsNewIssueOpen(true);
             }}
             onMoveIssueState={handleMoveIssueState}
+            onUpdateIssue={handleUpdateIssue}
             onDeleteIssue={handleDeleteIssue}
             onDragStateChange={handleDragStateChange}
           />
@@ -288,22 +309,7 @@ export default function MyIssuesPage() {
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
-            onUpdateIssue={async (issueId, updates) => {
-              setIssues((prev) =>
-                prev.map((i) => {
-                  if (i.id !== issueId) return i;
-                  const patched = { ...i, ...updates };
-                  if (updates.state_id) {
-                    patched.state = states.find((s) => s.id === updates.state_id) || i.state;
-                  }
-                  if (updates.label_ids && availableLabels.length > 0) {
-                    patched.labels = availableLabels.filter((l) => updates.label_ids!.includes(l.id));
-                  }
-                  return patched;
-                })
-              );
-              await api.updateIssue(issueId, updates);
-            }}
+            onUpdateIssue={handleUpdateIssue}
           />
         )}
       </div>

@@ -1,24 +1,41 @@
 import React from 'react';
-import { StateCategory } from '@/types';
+import { StateCategory, WorkflowState } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface StatusIconProps {
+  state?: WorkflowState;
   category?: StateCategory | string;
   name?: string;
   color?: string;
   className?: string;
-  size?: number;
+  size?: number | 'xs' | 'sm' | 'md';
 }
 
 export const StatusIcon: React.FC<StatusIconProps> = ({
+  state,
   category,
   name = '',
   color,
   className,
   size = 14,
 }) => {
-  const normalizedCategory = (category || '').toLowerCase();
-  const normalizedName = (name || '').toLowerCase();
+  const pixelSize =
+    typeof size === 'number'
+      ? size
+      : size === 'xs'
+      ? 12
+      : size === 'sm'
+      ? 14
+      : size === 'md'
+      ? 16
+      : 14;
+
+  const rawCategory = category || state?.category || '';
+  const rawName = name || state?.name || '';
+  const rawColor = color || state?.color;
+
+  const normalizedCategory = rawCategory.toLowerCase();
+  const normalizedName = rawName.toLowerCase();
 
   // 1. Duplicate
   if (normalizedName.includes('duplicate')) {
@@ -26,8 +43,8 @@ export const StatusIcon: React.FC<StatusIconProps> = ({
       <svg
         viewBox="0 0 16 16"
         fill="none"
-        width={size}
-        height={size}
+        width={pixelSize}
+        height={pixelSize}
         className={cn('shrink-0 text-[#71717a]', className)}
       >
         <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
@@ -42,8 +59,8 @@ export const StatusIcon: React.FC<StatusIconProps> = ({
       <svg
         viewBox="0 0 16 16"
         fill="none"
-        width={size}
-        height={size}
+        width={pixelSize}
+        height={pixelSize}
         className={cn('shrink-0 text-[#71717a]', className)}
       >
         <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
@@ -59,8 +76,8 @@ export const StatusIcon: React.FC<StatusIconProps> = ({
       <svg
         viewBox="0 0 16 16"
         fill="none"
-        width={size}
-        height={size}
+        width={pixelSize}
+        height={pixelSize}
         className={cn('shrink-0', className)}
         style={{ color: iconColor }}
       >
@@ -90,8 +107,8 @@ export const StatusIcon: React.FC<StatusIconProps> = ({
       <svg
         viewBox="0 0 16 16"
         fill="none"
-        width={size}
-        height={size}
+        width={pixelSize}
+        height={pixelSize}
         className={cn('shrink-0', className)}
         style={{ color: iconColor }}
       >
@@ -109,8 +126,8 @@ export const StatusIcon: React.FC<StatusIconProps> = ({
       <svg
         viewBox="0 0 16 16"
         fill="none"
-        width={size}
-        height={size}
+        width={pixelSize}
+        height={pixelSize}
         className={cn('shrink-0', className)}
         style={{ color: iconColor }}
       >
@@ -128,8 +145,8 @@ export const StatusIcon: React.FC<StatusIconProps> = ({
       <svg
         viewBox="0 0 16 16"
         fill="none"
-        width={size}
-        height={size}
+        width={pixelSize}
+        height={pixelSize}
         className={cn('shrink-0', className)}
         style={{ color: iconColor }}
       >
@@ -144,8 +161,8 @@ export const StatusIcon: React.FC<StatusIconProps> = ({
     <svg
       viewBox="0 0 16 16"
       fill="none"
-      width={size}
-      height={size}
+      width={pixelSize}
+      height={pixelSize}
       className={cn('shrink-0', className)}
       style={{ color: backlogColor }}
     >

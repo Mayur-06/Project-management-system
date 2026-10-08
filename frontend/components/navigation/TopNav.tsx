@@ -7,7 +7,6 @@ import {
   List,
   Sparkles,
   Plus,
-  Layers,
 } from 'lucide-react';
 import {
   Breadcrumb,
@@ -106,7 +105,7 @@ export const TopNav: React.FC<TopNavProps> = ({
           </div>
         )}
 
-        {/* View Switcher (Board vs Swimlanes vs List) */}
+        {/* View Switcher (Board vs List) */}
         {onToggleViewMode && (
           <div className="flex items-center bg-surface-elevated/50 border border-border-subtle rounded-md p-0.5 text-text-tertiary">
             <button
@@ -115,30 +114,14 @@ export const TopNav: React.FC<TopNavProps> = ({
                 onToggleGroupBy?.('none');
               }}
               className={`p-1 rounded text-xs transition-colors cursor-pointer ${
-                viewMode === 'board' && (!groupBy || groupBy === 'none')
+                viewMode === 'board'
                   ? 'bg-white/[0.08] text-text-primary shadow-xs'
                   : 'hover:text-text-primary'
               }`}
-              title="Board View (Flat Vertical Columns)"
+              title="Board View"
             >
               <LayoutGrid className="w-3.5 h-3.5" />
             </button>
-            {onToggleGroupBy && (
-              <button
-                onClick={() => {
-                  onToggleViewMode('board');
-                  onToggleGroupBy('parent');
-                }}
-                className={`p-1 rounded text-xs transition-colors cursor-pointer ${
-                  viewMode === 'board' && groupBy === 'parent'
-                    ? 'bg-white/[0.08] text-text-primary shadow-xs'
-                    : 'hover:text-text-primary'
-                }`}
-                title="Horizontal Swimlanes (Group by Parent)"
-              >
-                <Layers className="w-3.5 h-3.5" />
-              </button>
-            )}
             <button
               onClick={() => onToggleViewMode('list')}
               className={`p-1 rounded text-xs transition-colors cursor-pointer ${

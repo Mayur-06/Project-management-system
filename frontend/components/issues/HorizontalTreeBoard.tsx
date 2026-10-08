@@ -1,33 +1,32 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { Issue, WorkflowState, User, Label } from '@/types';
+import { Issue, WorkflowState, User } from '@/types';
 import { SignalPriorityIcon } from '@/components/ui/SignalPriorityIcon';
 import { StatusIcon } from '@/components/ui/StatusIcon';
-import { StatusPicker } from '@/components/ui/StatusPicker';
 import { PriorityPicker } from '@/components/ui/PriorityPicker';
+import { StatusPicker } from '@/components/ui/StatusPicker';
 import { AssigneePicker } from '@/components/ui/AssigneePicker';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { buildIssueTree } from '@/lib/issueTree';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-interface IssueListViewProps {
+interface HorizontalTreeBoardProps {
   issues: Issue[];
   states?: WorkflowState[];
   users?: (User | { id: string; user_id?: string; user?: User; name?: string; email?: string; avatar_url?: string })[];
-  availableLabels?: Label[];
   onSelectIssue: (issue: Issue) => void;
   onUpdateIssue?: (issueId: string, updates: Partial<Issue> & { label_ids?: string[]; expected_version?: number }) => Promise<void>;
 }
 
-interface FlattenedListRow {
+interface FlattenedTreeRow {
   issue: Issue;
   depth: number;
   isLastChild: boolean;
   hasChildren: boolean;
   childrenCount: number;
   completedChildrenCount: number;
-  ancestorGuides: boolean[];
+  ancestorGuides: boolean[]; // whether ancestor at each level has more siblings below
 }
 
 function formatRelativeMonthDay(dateString?: string): string {
@@ -41,7 +40,7 @@ function formatRelativeMonthDay(dateString?: string): string {
   }
 }
 
-export const IssueListView: React.FC<IssueListViewProps> = ({
+export const HorizontalTreeBoard: React.FC<HorizontalTreeBoardProps> = ({
   issues,
   states = [],
   users = [],
@@ -54,9 +53,9 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
     return users.map((u: any) => u.user || u).filter(Boolean);
   }, [users]);
 
-  // Flatten issues into tree order so subtasks appear under parent with guide lines
-  const flattenedIssues = useMemo(() => {
-    const result: FlattenedListRow[] = [];
+  // Flatten issues recursively into tree order with guide lines
+  const flattenedRows = useMemo(() => {
+    const result: FlattenedTreeRow[] = [];
 
     const traverse = (items: Issue[], depth: number, guides: boolean[]) => {
       items.forEach((item, idx) => {
@@ -78,6 +77,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
         });
 
         if (childrenCount > 0) {
+          // If this child is NOT the last among its siblings, draw a continuing vertical guide line for descendants
           traverse(children, depth + 1, [...guides, !isLast]);
         }
       });
@@ -87,20 +87,20 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
     return result;
   }, [tree]);
 
-  if (flattenedIssues.length === 0) {
+  if (flattenedRows.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-12 text-center text-zinc-500 font-sans">
         <p className="text-sm">No issues found.</p>
-        <p className="text-xs text-zinc-600 mt-1">Create issues or subissues to view them in the list.</p>
+        <p className="text-xs text-zinc-600 mt-1">Create issues or subissues to view them in the tree view.</p>
       </div>
     );
   }
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="flex-1 overflow-x-auto overflow-y-auto p-4 sm:p-6 font-sans select-none pb-32">
+      <div className="flex-1 overflow-x-auto overflow-y-auto p-4 sm:p-6 font-sans select-none">
         <div className="min-w-[700px] flex flex-col space-y-1">
-          {flattenedIssues.map((row) => {
+          {flattenedRows.map((row) => {
             const {
               issue,
               depth,
@@ -132,11 +132,11 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
               <div
                 key={issue.id}
                 onClick={() => onSelectIssue(issue)}
-                className="group flex items-center justify-between min-h-[38px] py-2 px-3.5 rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer text-xs relative select-none"
+                className="group flex items-center justify-between min-h-[38px] py-2 px-3.5 rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer select-none text-xs"
               >
-                {/* Left side: Tree Guide Lines + Priority + Identifier + Status + Title + Progress */}
+                {/* Left side: Tree Lines + Priority + Identifier + Status + Title + Progress */}
                 <div className="flex items-center min-w-0 flex-1 gap-3 mr-4">
-                  {/* Indent & Guide Lines for depth > 0 matching Image 1 */}
+                  {/* Indent & Guide Lines for depth > 0 */}
                   {depth > 0 && (
                     <div
                       className="flex items-center shrink-0 self-stretch"
@@ -245,13 +245,14 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
                     {issue.title}
                   </span>
 
-                  {/* Subtask Progress Badge matching Image 1 */}
+                  {/* Subtask Progress Badge (if has children) */}
                   {childrenCount > 0 && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-zinc-400 shrink-0">
                           {/* Circular Progress Ring */}
                           <svg className="w-3.5 h-3.5 -rotate-90 shrink-0" viewBox="0 0 12 12">
+                            {/* Track */}
                             <circle
                               cx="6"
                               cy="6"
@@ -261,6 +262,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
                               strokeOpacity="0.2"
                               strokeWidth="1.5"
                             />
+                            {/* Progress indicator */}
                             <circle
                               cx="6"
                               cy="6"

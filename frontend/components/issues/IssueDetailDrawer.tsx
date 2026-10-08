@@ -10,6 +10,7 @@ import {
 import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User } from '@/types';
 import { api } from '@/lib/api';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
+import { PriorityPicker } from '@/components/ui/PriorityPicker';
 import { StateBadge } from '@/components/ui/StateBadge';
 import { StatusPicker } from '@/components/ui/StatusPicker';
 import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
@@ -373,17 +374,11 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
                   </select>
 
                   {/* Priority Selector */}
-                  <select
-                    value={newSubtaskPriority}
-                    onChange={(e) => setNewSubtaskPriority(e.target.value as IssuePriority)}
-                    className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded px-2 py-1 text-[11px] focus:outline-none focus:border-zinc-700 cursor-pointer"
-                  >
-                    <option value="none">Priority: None</option>
-                    <option value="low">Priority: Low</option>
-                    <option value="medium">Priority: Medium</option>
-                    <option value="high">Priority: High</option>
-                    <option value="urgent">Priority: Urgent</option>
-                  </select>
+                  <PriorityPicker
+                    currentPriority={newSubtaskPriority}
+                    onSelectPriority={(pr) => setNewSubtaskPriority(pr)}
+                    triggerClassName="bg-zinc-900 border-zinc-800 text-zinc-300 px-2 py-1 text-[11px] h-7"
+                  />
                 </div>
               </form>
 
@@ -441,17 +436,11 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
             {/* Priority */}
             <div>
               <label className="text-[11px] text-zinc-400 block mb-1">Priority</label>
-              <select
-                value={issue.priority}
-                onChange={(e) => handlePriorityChange(e.target.value as IssuePriority)}
-                className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-              >
-                <option value="none">None</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="urgent">Urgent</option>
-              </select>
+              <PriorityPicker
+                currentPriority={issue.priority}
+                onSelectPriority={handlePriorityChange}
+                triggerClassName="w-full justify-between h-8 bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+              />
             </div>
 
             {/* Assigned to */}

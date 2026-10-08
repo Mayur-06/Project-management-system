@@ -290,6 +290,7 @@ function IssuesContent() {
               setIsNewIssueOpen(true);
             }}
             onMoveIssueState={handleMoveIssueState}
+            onUpdateIssue={handleUpdateIssue}
             onDeleteIssue={handleDeleteIssue}
             onDragStateChange={handleDragStateChange}
           />

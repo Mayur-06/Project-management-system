@@ -17,6 +17,7 @@ interface StatusPickerProps {
   triggerClassName?: string;
   align?: 'start' | 'end' | 'center';
   showLabel?: boolean;
+  showChevron?: boolean;
   children?: React.ReactNode;
 }
 
@@ -30,6 +31,7 @@ export const StatusPicker: React.FC<StatusPickerProps> = ({
   triggerClassName,
   align = 'start',
   showLabel = true,
+  showChevron = true,
   children,
 }) => {
   const [open, setOpen] = useState(false);
@@ -98,6 +100,7 @@ export const StatusPicker: React.FC<StatusPickerProps> = ({
         ) : (
           <button
             type="button"
+            onClick={(e) => e.stopPropagation()}
             className={cn(
               'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-[#0f1011] hover:bg-[#141517] border border-white/[0.06] hover:border-white/[0.12] text-zinc-200 transition-all cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed group',
               triggerClassName
@@ -112,7 +115,9 @@ export const StatusPicker: React.FC<StatusPickerProps> = ({
               />
             )}
             {showLabel && <span className="truncate max-w-[120px]">{activeState?.name || 'Status'}</span>}
-            <ChevronDown className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300 ml-0.5 shrink-0 transition-transform duration-150" />
+            {showChevron && (
+              <ChevronDown className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300 ml-0.5 shrink-0 transition-transform duration-150" />
+            )}
           </button>
         )}
       </PopoverTrigger>
@@ -120,6 +125,7 @@ export const StatusPicker: React.FC<StatusPickerProps> = ({
       <PopoverContent
         align={align}
         sideOffset={6}
+        onClick={(e) => e.stopPropagation()}
         className={cn(
           'w-56 p-1 bg-[#141517] border border-white/[0.08] shadow-2xl rounded-lg text-zinc-200 select-none z-50 animate-in fade-in-0 zoom-in-95',
           className

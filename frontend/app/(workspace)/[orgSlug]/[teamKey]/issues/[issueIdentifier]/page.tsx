@@ -12,6 +12,7 @@ import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAt
 import { api } from '@/lib/api';
 import { TopNav } from '@/components/navigation/TopNav';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
+import { PriorityPicker } from '@/components/ui/PriorityPicker';
 import { StateBadge } from '@/components/ui/StateBadge';
 import { StatusPicker } from '@/components/ui/StatusPicker';
 import { IssueSubtasksTree } from '@/components/issues/IssueSubtasksTree';
@@ -518,17 +519,11 @@ export default function IssueDetailPage() {
           {/* Priority */}
           <div>
             <label className="text-[11px] text-zinc-400 block mb-1">Priority</label>
-            <select
-              value={issue.priority}
-              onChange={(e) => handlePriorityChange(e.target.value as IssuePriority)}
-              className="w-full bg-zinc-900 border border-zinc-800 text-xs text-white rounded p-2 focus:border-white focus:outline-none"
-            >
-              <option value="none">None</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
+            <PriorityPicker
+              currentPriority={issue.priority}
+              onSelectPriority={handlePriorityChange}
+              triggerClassName="w-full justify-between h-8 bg-zinc-900 border-zinc-800 hover:border-zinc-700"
+            />
           </div>
 
           {/* Assigned to */}
