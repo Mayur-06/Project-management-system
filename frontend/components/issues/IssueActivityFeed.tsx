@@ -17,6 +17,7 @@ import {
   CalendarClock,
   CirclePlay,
   Tag,
+  ArrowUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -364,10 +365,10 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
           </div>
         )}
 
-        {/* Comment Composer */}
+        {/* Comment Composer Matching Image 4 */}
         <form
           onSubmit={handleSubmitComment}
-          className="rounded-xl bg-[#0f1011] border border-border-subtle focus-within:border-white/[0.15] transition-colors p-3 space-y-2 shadow-xs"
+          className="rounded-xl bg-[#121316] border border-white/[0.08] focus-within:border-white/[0.15] transition-colors p-3 space-y-2 shadow-sm"
         >
           <textarea
             value={commentText}
@@ -377,34 +378,38 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
                 handleSubmitComment(e);
               }
             }}
-            placeholder="Leave a comment... (Ctrl+Enter to post, @ to mention)"
+            placeholder="Leave a comment..."
             rows={2}
-            className="w-full bg-transparent border-0 text-xs text-text-primary placeholder:text-text-quaternary focus:ring-0 focus:outline-none resize-none leading-relaxed"
+            className="w-full bg-transparent border-0 text-xs text-zinc-200 placeholder:text-zinc-500 focus:ring-0 focus:outline-none resize-none leading-relaxed font-sans"
           />
 
           <div className="flex items-center justify-between pt-1 border-t border-white/[0.03]">
-            <span className="text-[10px] text-text-quaternary">
-              Markdown & links supported • <kbd className="px-1 py-0.5 rounded bg-white/[0.05] border border-white/[0.06] text-[9px] font-mono">Ctrl+Enter</kbd>
+            <span className="text-[10px] text-zinc-500 font-mono">
+              Ctrl+Enter to post
             </span>
 
-            <Button
-              type="submit"
-              size="sm"
-              disabled={!commentText.trim() || isSubmitting}
-              className="h-7 px-3 text-xs bg-white text-black hover:bg-zinc-200 font-medium rounded-md shadow-xs disabled:opacity-30 cursor-pointer"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                  <span>Posting...</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-3 h-3 mr-1" />
-                  <span>Comment</span>
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="p-1 rounded text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
+                title="Attach file"
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="submit"
+                disabled={!commentText.trim() || isSubmitting}
+                className="w-6 h-6 rounded-full bg-[#5e6ad2] hover:bg-[#7170ff] text-white flex items-center justify-center transition-colors shadow-xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                title="Post comment"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <ArrowUp className="w-3.5 h-3.5 stroke-[2.5]" />
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

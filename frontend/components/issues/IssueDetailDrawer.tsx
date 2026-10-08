@@ -119,18 +119,20 @@ export const IssueDetailDrawer: React.FC<IssueDetailDrawerProps> = ({
   };
 
   const handleDeleteIssue = async () => {
-    if (!window.confirm(`Are you sure you want to delete ${issue.identifier}: "${issue.title}"?`)) {
-      return;
-    }
+    if (!issue) return;
     setIsDeleting(true);
     try {
       const ok = await api.deleteIssue(issue.id, false);
       if (ok) {
+        toast.success(`Deleted ${issue.identifier}`);
         window.dispatchEvent(new CustomEvent('issueDeleted', { detail: issue.id }));
         onClose();
+      } else {
+        toast.error('Failed to delete issue');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete issue', err);
+      toast.error(err?.message || 'Failed to delete issue');
     } finally {
       setIsDeleting(false);
     }

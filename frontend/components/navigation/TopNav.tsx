@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import {
   Search,
   LayoutGrid,
@@ -20,9 +21,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 interface TopNavProps {
-  title: string;
+  title?: string;
   subtitle?: string;
-  breadcrumbs?: string[];
+  breadcrumbs?: (string | { label: string; href?: string })[];
   viewMode?: 'board' | 'list';
   onToggleViewMode?: (mode: 'board' | 'list') => void;
   groupBy?: 'parent' | 'none';
@@ -31,6 +32,7 @@ interface TopNavProps {
   onSearchChange?: (q: string) => void;
   onOpenNewIssue?: () => void;
   onOpenAIAsk?: () => void;
+  actions?: React.ReactNode;
 }
 
 export const TopNav: React.FC<TopNavProps> = ({
@@ -45,6 +47,7 @@ export const TopNav: React.FC<TopNavProps> = ({
   onSearchChange,
   onOpenNewIssue,
   onOpenAIAsk,
+  actions,
 }) => {
   return (
     <header className="h-13 border-b border-border-subtle bg-canvas-workspace/85 backdrop-blur-md px-5 flex items-center justify-between sticky top-0 z-10 select-none">
@@ -56,16 +59,26 @@ export const TopNav: React.FC<TopNavProps> = ({
               <BreadcrumbList className="text-xs text-text-tertiary gap-1 sm:gap-1.5">
                 {breadcrumbs.map((crumb, idx) => {
                   const isLast = idx === breadcrumbs.length - 1;
+                  const label = typeof crumb === 'string' ? crumb : crumb.label;
+                  const href = typeof crumb === 'string' ? undefined : crumb.href;
+
                   return (
                     <React.Fragment key={idx}>
                       <BreadcrumbItem>
                         {isLast ? (
                           <BreadcrumbPage className="text-text-primary font-medium">
-                            {crumb}
+                            {label}
                           </BreadcrumbPage>
+                        ) : href ? (
+                          <Link
+                            href={href}
+                            className="hover:text-text-primary transition-colors cursor-pointer text-text-tertiary"
+                          >
+                            {label}
+                          </Link>
                         ) : (
                           <BreadcrumbLink className="hover:text-text-primary transition-colors cursor-pointer text-text-tertiary">
-                            {crumb}
+                            {label}
                           </BreadcrumbLink>
                         )}
                       </BreadcrumbItem>
@@ -75,22 +88,25 @@ export const TopNav: React.FC<TopNavProps> = ({
                 })}
               </BreadcrumbList>
             </Breadcrumb>
-            <div className="h-3 w-px bg-border-divider" />
+            {title && <div className="h-3 w-px bg-border-divider" />}
           </>
         )}
 
-        <h1 className="text-xs font-semibold text-text-primary flex items-center gap-2 truncate">
-          <span>{title}</span>
-          {subtitle && (
-            <span className="text-[11px] font-normal text-text-tertiary font-mono">
-              ({subtitle})
-            </span>
-          )}
-        </h1>
+        {title && (
+          <h1 className="text-xs font-semibold text-text-primary flex items-center gap-2 truncate">
+            <span>{title}</span>
+            {subtitle && (
+              <span className="text-[11px] font-normal text-text-tertiary font-mono">
+                ({subtitle})
+              </span>
+            )}
+          </h1>
+        )}
       </div>
 
       {/* Action Controls */}
       <div className="flex items-center gap-2.5 shrink-0">
+        {actions}
         {/* Search Bar */}
         {onSearchChange && (
           <div className="relative flex items-center">

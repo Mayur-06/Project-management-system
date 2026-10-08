@@ -277,6 +277,7 @@ function IssuesContent() {
             states={states}
             issues={filteredIssues}
             users={modalUsers}
+            availableLabels={availableLabels}
             groupBy={groupBy}
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
@@ -304,6 +305,7 @@ function IssuesContent() {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
             onUpdateIssue={handleUpdateIssue}
+            onDeleteIssue={handleDeleteIssue}
           />
         )}
       </div>

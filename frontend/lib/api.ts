@@ -111,9 +111,18 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
         return null;
       }
       const errJson = await response.json().catch(() => null);
-      const detail = errJson?.detail || errJson?.message;
-      if (detail) {
-        throw new Error(detail);
+      const detail = errJson?.detail;
+      const message = errJson?.message;
+      let errorMsg: string | null = null;
+      if (typeof detail === 'string') {
+        errorMsg = detail;
+      } else if (detail && typeof detail === 'object') {
+        errorMsg = detail.message || (Array.isArray(detail) ? detail.map((d: any) => d.msg || JSON.stringify(d)).join(', ') : JSON.stringify(detail));
+      } else if (message) {
+        errorMsg = typeof message === 'string' ? message : JSON.stringify(message);
+      }
+      if (errorMsg) {
+        throw new Error(errorMsg);
       }
       return null;
     }

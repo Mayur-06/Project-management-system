@@ -283,6 +283,7 @@ export default function MyIssuesPage() {
             states={states}
             issues={filteredIssues}
             users={modalUsers}
+            availableLabels={availableLabels}
             groupBy="none"
             onSelectIssue={(issue) => {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
@@ -310,6 +311,7 @@ export default function MyIssuesPage() {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
             onUpdateIssue={handleUpdateIssue}
+            onDeleteIssue={handleDeleteIssue}
           />
         )}
       </div>
