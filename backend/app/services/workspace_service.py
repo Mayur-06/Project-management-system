@@ -285,7 +285,9 @@ class WorkspaceService:
                     raw_name = meta.get("full_name") if isinstance(meta, dict) else None
                     name = raw_name if isinstance(raw_name, str) else raw_email.split("@")[0]
                     return raw_email, name
-        except Exception:
+        except Exception as exc:
+            import traceback
+            print(f"[ERROR resolve_user_info] get_user_by_id failed for {user_id}: {exc}\n{traceback.format_exc()}")
             pass
 
         try:
