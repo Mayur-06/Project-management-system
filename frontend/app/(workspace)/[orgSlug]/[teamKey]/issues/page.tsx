@@ -9,7 +9,6 @@ import { useRealtimeBoard } from '@/hooks/useRealtime';
 import { TopNav } from '@/components/navigation/TopNav';
 import { KanbanBoard } from '@/components/issues/KanbanBoard';
 import { IssueListView } from '@/components/issues/IssueListView';
-import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 
 function IssuesContent() {
   const params = useParams();
@@ -52,7 +51,6 @@ function IssuesContent() {
   };
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -107,28 +105,6 @@ function IssuesContent() {
       }).catch(() => {});
     }
   }, [organization?.id]);
-
-  // Check search params ?create=true (from legacy route redirect)
-  useEffect(() => {
-    if (searchParams.get('create') === 'true') {
-      const stateParam = searchParams.get('stateId');
-      if (stateParam) setInitialStateId(stateParam);
-      setIsNewIssueOpen(true);
-      router.replace(`/${orgSlug}/${teamKey.toLowerCase()}/issues`);
-    }
-  }, [searchParams, orgSlug, teamKey, router]);
-
-  // Listen to openCreateIssue custom event
-  useEffect(() => {
-    const handleOpen = (e: any) => {
-      if (e?.detail?.stateId) {
-        setInitialStateId(e.detail.stateId);
-      }
-      setIsNewIssueOpen(true);
-    };
-    window.addEventListener('openCreateIssue', handleOpen);
-    return () => window.removeEventListener('openCreateIssue', handleOpen);
-  }, []);
 
   // Listen to issueCreated event
   useEffect(() => {
@@ -213,13 +189,16 @@ function IssuesContent() {
 
   const handleUpdateIssue = async (
     issueId: string,
-    updates: Partial<Issue> & { label_ids?: string[] }
+    updates: Partial<Issue> & { label_ids?: string[]; expected_version?: number }
   ) => {
-    // Optimistic update
+    const currentTarget = issues.find((i) => i.id === issueId);
+    const expectedVersion = updates.expected_version ?? currentTarget?.version ?? 1;
+
+    // Optimistic UI update
     setIssues((prev) =>
       prev.map((i) => {
         if (i.id !== issueId) return i;
-        const patched = { ...i, ...updates };
+        const patched = { ...i, ...updates, version: expectedVersion + 1 };
         if (updates.state_id) {
           patched.state = states.find((s) => s.id === updates.state_id) || i.state;
         }
@@ -231,13 +210,22 @@ function IssuesContent() {
     );
 
     try {
-      const updated = await api.updateIssue(issueId, updates);
+      const updated = await api.updateIssue(issueId, {
+        ...updates,
+        expected_version: expectedVersion,
+      });
       if (updated) {
         setIssues((prev) => prev.map((i) => (i.id === issueId ? { ...i, ...updated } : i)));
       }
     } catch (err) {
       console.error('Failed to update issue', err);
-      if (currentTeam?.id) loadData(currentTeam.id);
+      // Automatically recover by fetching fresh issue state
+      const fresh = await api.getIssue(issueId);
+      if (fresh) {
+        setIssues((prev) => prev.map((i) => (i.id === issueId ? fresh : i)));
+      } else if (currentTeam?.id) {
+        loadData(currentTeam.id);
+      }
     }
   };
 
@@ -261,8 +249,7 @@ function IssuesContent() {
         onSearchChange={setSearchQuery}
         onOpenNewIssue={() => {
           const defaultState = states.find((s) => s.is_default) || states[0];
-          setInitialStateId(defaultState?.id || '');
-          setIsNewIssueOpen(true);
+          window.dispatchEvent(new CustomEvent('openCreateIssue', { detail: { stateId: defaultState?.id } }));
         }}
       />
 
@@ -283,12 +270,10 @@ function IssuesContent() {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
             onOpenNewIssueWithState={(stateId) => {
-              setInitialStateId(stateId);
-              setIsNewIssueOpen(true);
+              window.dispatchEvent(new CustomEvent('openCreateIssue', { detail: { stateId } }));
             }}
             onAddSubtask={(_parentId, stateId) => {
-              if (stateId) setInitialStateId(stateId);
-              setIsNewIssueOpen(true);
+              window.dispatchEvent(new CustomEvent('openCreateIssue', { detail: { stateId } }));
             }}
             onMoveIssueState={handleMoveIssueState}
             onUpdateIssue={handleUpdateIssue}
@@ -309,22 +294,6 @@ function IssuesContent() {
           />
         )}
       </div>
-
-      {/* Create Modal Popup */}
-      <CreateIssueModal
-        isOpen={isNewIssueOpen}
-        initialStateId={initialStateId}
-        states={states}
-        users={modalUsers}
-        labels={availableLabels}
-        teamKey={teamKey}
-        teamId={currentTeam?.id}
-        teams={workspaceTeams}
-        onClose={() => setIsNewIssueOpen(false)}
-        onCreated={(newIssue) => {
-          setIssues((prev) => [newIssue, ...prev]);
-        }}
-      />
     </div>
   );
 }

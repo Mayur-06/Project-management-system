@@ -4,7 +4,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { WorkspaceSidebar } from '@/components/sidebar/WorkspaceSidebar';
 import { CommandPalette } from '@/components/command/CommandPalette';
-import { AIAssistantModal } from '@/components/ai/AIAssistantModal';
 import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 import { Issue, Organization, Team, User, WorkspaceMember, WorkflowState } from '@/types';
 import { api } from '@/lib/api';
@@ -24,18 +23,33 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const workspaceUsers: WorkspaceMember[] = parentContext.workspaceUsers || [];
 
   const [isCommandOpen, setIsCommandOpen] = useState(false);
-  const [isAIAskOpen, setIsAIAskOpen] = useState(false);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
+  const [initialStateId, setInitialStateId] = useState<string>('');
+  const [currentTeamStates, setCurrentTeamStates] = useState<WorkflowState[]>([]);
 
-  const handleOpenNewIssue = () => {
+  // Derive currentTeam from the URL teamKey — no extra API call needed
+  const currentTeam = useMemo(
+    () => teams.find((t) => t.key.toUpperCase() === teamKey.toUpperCase()) || teams[0] || null,
+    [teams, teamKey]
+  );
+
+  const handleOpenNewIssue = (stateId?: string) => {
+    if (stateId) {
+      setInitialStateId(stateId);
+    } else {
+      const defaultState = currentTeamStates.find((s) => s.is_default) || currentTeamStates[0];
+      setInitialStateId(defaultState?.id || '');
+    }
     setIsNewIssueOpen(true);
   };
 
   useEffect(() => {
-    const handleOpen = () => setIsNewIssueOpen(true);
+    const handleOpen = (e: any) => {
+      handleOpenNewIssue(e?.detail?.stateId);
+    };
     window.addEventListener('openCreateIssue', handleOpen);
     return () => window.removeEventListener('openCreateIssue', handleOpen);
-  }, []);
+  }, [currentTeamStates]);
 
   const handleOpenAIAsk = () => {
     const targetTeam = (teamKey || teams[0]?.key || 'eng').toLowerCase();
@@ -63,15 +77,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [orgSlug, teamKey, teams]);
-
-  const [currentTeamStates, setCurrentTeamStates] = useState<WorkflowState[]>([]);
-
-  // Derive currentTeam from the URL teamKey — no extra API call needed
-  const currentTeam = useMemo(
-    () => teams.find((t) => t.key.toUpperCase() === teamKey.toUpperCase()) || teams[0] || null,
-    [teams, teamKey]
-  );
+  }, [orgSlug, teamKey, teams, currentTeamStates]);
 
   useEffect(() => {
     if (!currentTeam?.id) return;
@@ -116,16 +122,13 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           teams={teams}
         />
 
-        <AIAssistantModal
-          isOpen={isAIAskOpen}
-          onClose={() => setIsAIAskOpen(false)}
-          currentUser={currentUser}
-          organizationId={organization?.id}
-        />
-
         <CreateIssueModal
           isOpen={isNewIssueOpen}
-          onClose={() => setIsNewIssueOpen(false)}
+          initialStateId={initialStateId}
+          onClose={() => {
+            setIsNewIssueOpen(false);
+            setInitialStateId('');
+          }}
           teamKey={(teamKey || teams[0]?.key || '').toUpperCase()}
           teamId={currentTeam?.id || teams[0]?.id}
           teams={teams}
