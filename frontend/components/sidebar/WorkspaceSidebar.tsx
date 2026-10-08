@@ -24,6 +24,7 @@ import { api } from '@/lib/api';
 import { Organization, Team, User, UserWorkspaceItem } from '@/types';
 import { Check, Building2, ExternalLink } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/UserAvatar';
+import { WorkspaceSidebarSkeleton } from '@/components/skeletons/WorkspaceSidebarSkeleton';
 
 interface WorkspaceSidebarProps {
   currentOrgSlug?: string;
@@ -96,6 +97,10 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       window.location.href = '/login';
     }
   };
+
+  if (!organization && (!teams || teams.length === 0)) {
+    return <WorkspaceSidebarSkeleton />;
+  }
 
   const navItems: { label: string; href: string; icon: React.ReactNode; badge?: string | number }[] = [
     {

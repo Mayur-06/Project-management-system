@@ -11,6 +11,7 @@ import { UserAvatar } from '@/components/ui/UserAvatar';
 import { buildIssueTree, buildSwimlanes, SwimlaneRow } from '@/lib/issueTree';
 import { IssueBreadcrumbPath } from '@/components/issues/IssueBreadcrumbPath';
 import { HorizontalTreeBoard } from '@/components/issues/HorizontalTreeBoard';
+import { Button } from '@/components/ui/button';
 
 interface KanbanBoardProps {
   states: WorkflowState[];
@@ -161,7 +162,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           <div className="flex items-center min-w-0 text-[11px] font-mono text-zinc-400 group-hover:text-zinc-300 transition-colors truncate">
             {ancestors.length > 0 ? (
               <span className="truncate">
-                {issue.identifier} &gt; {ancestors.map((a) => a.title).join(' > ')}
+                {issue.identifier} &gt; {ancestors.map((a: Issue) => a.title).join(' > ')}
               </span>
             ) : (
               <span>{issue.identifier}</span>
@@ -282,22 +283,26 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1">
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => onOpenNewIssueWithState(state.id)}
-                    className="p-1 rounded text-zinc-500 hover:text-white hover:bg-white/[0.06] transition-colors cursor-pointer"
+                    className="h-6 w-6 rounded text-zinc-500 hover:text-white hover:bg-white/[0.06] transition-colors"
                     title="Add Issue to State"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => hideColumn(state.id)}
-                    className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06] transition-colors cursor-pointer text-[10px]"
+                    className="h-6 w-6 rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.06] transition-colors text-[10px]"
                     title="Hide column"
                   >
                     ···
-                  </button>
+                  </Button>
                 </div>
               </div>
 

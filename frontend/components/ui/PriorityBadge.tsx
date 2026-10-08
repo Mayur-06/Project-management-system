@@ -1,6 +1,7 @@
 import React from 'react';
 import { IssuePriority } from '@/types';
 import { SignalPriorityIcon } from '@/components/ui/SignalPriorityIcon';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 interface PriorityBadgeProps {
@@ -47,9 +48,10 @@ export const PriorityBadge: React.FC<PriorityBadgeProps> = ({
   const current = configs[priority] || configs.none;
 
   return (
-    <div
+    <Badge
+      variant="outline"
       className={cn(
-        'inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded border text-xs select-none transition-colors',
+        'inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs select-none transition-colors border font-normal',
         current.bg,
         className
       )}
@@ -57,6 +59,7 @@ export const PriorityBadge: React.FC<PriorityBadgeProps> = ({
     >
       <SignalPriorityIcon priority={priority} size={size} />
       {showLabel && <span className={current.color}>{current.label}</span>}
-    </div>
+    </Badge>
   );
 };
+

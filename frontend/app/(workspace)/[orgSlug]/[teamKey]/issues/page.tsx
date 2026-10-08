@@ -9,6 +9,7 @@ import { useRealtimeBoard } from '@/hooks/useRealtime';
 import { TopNav } from '@/components/navigation/TopNav';
 import { KanbanBoard } from '@/components/issues/KanbanBoard';
 import { IssueListView } from '@/components/issues/IssueListView';
+import { KanbanBoardSkeleton } from '@/components/skeletons/KanbanBoardSkeleton';
 
 function IssuesContent() {
   const params = useParams();
@@ -52,7 +53,7 @@ function IssuesContent() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [initialStateId, setInitialStateId] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   // ─── Active Drag Interruption Guard ───
   const isDraggingRef = useRef(false);
@@ -255,10 +256,14 @@ function IssuesContent() {
 
       {/* Main View Container */}
       <div className="flex-1 overflow-y-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center h-64 text-xs text-zinc-500">
-            Loading team board...
-          </div>
+        {isLoading || !currentTeam || states.length === 0 ? (
+          viewMode === 'board' ? (
+            <KanbanBoardSkeleton />
+          ) : (
+            <div className="flex items-center justify-center h-64 text-xs text-zinc-500">
+              Loading team board...
+            </div>
+          )
         ) : viewMode === 'board' ? (
           <KanbanBoard
             states={states}
@@ -300,7 +305,7 @@ function IssuesContent() {
 
 export default function IssuesPage() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center h-full text-xs text-zinc-500">Loading issues...</div>}>
+    <Suspense fallback={<KanbanBoardSkeleton />}>
       <IssuesContent />
     </Suspense>
   );
