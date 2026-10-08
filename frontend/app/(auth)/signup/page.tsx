@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Sparkles, ArrowRight, Lock, Mail, User, Building2, Layers, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase/client';
-import { api } from '@/lib/api';
+import { api, establishClientSession } from '@/lib/api';
 
 interface FieldErrors {
   name?: string;
@@ -145,15 +145,17 @@ export default function SignupPage() {
         }
       }
 
-      // 2. Sign in immediately to acquire the real Supabase JWT session
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
+      // 2. Sign in via backend signin endpoint to acquire the real Supabase JWT session
+      let token: string | undefined;
+      try {
+        const signinRes = await api.signin(email.trim().toLowerCase(), password);
+        token = signinRes.session.access_token;
+        await establishClientSession(signinRes.session);
+      } catch (signInErr: any) {
+        console.warn('Backend signin attempt failed after signup:', signInErr);
+      }
 
-      let token = signInData?.session?.access_token;
-
-      // If signIn failed, fall back to standard Supabase client signUp
+      // If backend signin didn't produce a token, fallback to standard Supabase client signUp
       if (!token) {
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: email.trim().toLowerCase(),
@@ -178,11 +180,13 @@ export default function SignupPage() {
         token = authData?.session?.access_token;
 
         if (!token) {
-          const retrySign = await supabase.auth.signInWithPassword({
-            email: email.trim().toLowerCase(),
-            password,
-          });
-          token = retrySign.data?.session?.access_token;
+          try {
+            const retrySign = await api.signin(email.trim().toLowerCase(), password);
+            token = retrySign.session.access_token;
+            await establishClientSession(retrySign.session);
+          } catch {
+            // No session established
+          }
         }
       }
 
@@ -190,11 +194,6 @@ export default function SignupPage() {
         setErrorMsg('Account registered! Please log in with your credentials to continue.');
         setLoading(false);
         return;
-      }
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('supabase_access_token', token);
-        document.cookie = `sb-access-token=${token}; path=/; max-age=604800; SameSite=Lax`;
       }
 
       // 3. Check if user already belongs to an invited workspace!

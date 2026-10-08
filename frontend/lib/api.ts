@@ -135,8 +135,64 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
   }
 }
 
+export interface SignInResponse {
+  user: {
+    id: string;
+    email?: string | null;
+    user_metadata?: Record<string, unknown>;
+  };
+  session: {
+    access_token: string;
+    refresh_token: string;
+    token_type?: string;
+    expires_in?: number | null;
+    expires_at?: number | null;
+  };
+}
+
+export async function establishClientSession(session: {
+  access_token: string;
+  refresh_token: string;
+}): Promise<void> {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('supabase_access_token', session.access_token);
+    document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
+    try {
+      await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
+    } catch (err) {
+      console.warn('Supabase setSession hydration error:', err);
+    }
+  }
+}
+
 export const api = {
   // Auth
+  async signin(email: string, password: string): Promise<SignInResponse> {
+    const response = await fetch(`${getApiBase()}/auth/signin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => null);
+      const detail =
+        errJson?.detail ||
+        errJson?.message ||
+        'Authentication failed. Please check your credentials.';
+      throw new Error(detail);
+    }
+
+    return (await response.json()) as SignInResponse;
+  },
+
+  async login(email: string, password: string): Promise<SignInResponse> {
+    return this.signin(email, password);
+  },
+
   async register(name: string, email: string, password: string): Promise<boolean> {
     try {
       const response = await fetch(`${getApiBase()}/auth/signup`, {
