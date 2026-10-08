@@ -9,7 +9,6 @@ import { StatusIcon } from '@/components/ui/StatusIcon';
 import { StateBadge } from '@/components/ui/StateBadge';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 import { buildIssueTree, buildSwimlanes, SwimlaneRow } from '@/lib/issueTree';
-import { IssueBreadcrumbPath } from '@/components/issues/IssueBreadcrumbPath';
 import { HorizontalTreeBoard } from '@/components/issues/HorizontalTreeBoard';
 import { Button } from '@/components/ui/button';
 
