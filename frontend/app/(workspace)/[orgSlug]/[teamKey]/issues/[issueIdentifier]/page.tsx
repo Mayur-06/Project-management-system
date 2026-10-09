@@ -23,6 +23,7 @@ import { IssueDescriptionEditor } from '@/components/editor/IssueDescriptionEdit
 import { IssueAttachmentButton } from '@/components/issues/IssueAttachmentButton';
 import { IssueActivityFeed } from '@/components/issues/IssueActivityFeed';
 import { toast } from 'sonner';
+import { useWorkspace } from '@/lib/WorkspaceContext';
 
 export default function IssueDetailPage() {
   const params = useParams();
@@ -31,11 +32,24 @@ export default function IssueDetailPage() {
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
   const issueIdentifier = (params?.issueIdentifier as string) || '';
 
-  const [issue, setIssue] = useState<Issue | null>(null);
+  const { currentTeam, workspaceUsers: ctxMembers, teams: ctxTeams, organization } = useWorkspace();
+
+  // Optimistically seed issue from in-memory cache for 0ms render
+  const [issue, setIssue] = useState<Issue | null>(() => api.getCachedIssue(issueIdentifier));
   const [states, setStates] = useState<WorkflowState[]>([]);
-  const [workspaceUsers, setWorkspaceUsers] = useState<User[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => !api.getCachedIssue(issueIdentifier));
+
+  // Map workspace users from WorkspaceContext directly without network calls
+  const workspaceUsers = useMemo<User[]>(() => {
+    return (ctxMembers || [])
+      .filter((m) => m.status !== 'invited' && m.user)
+      .map((m) => ({
+        id: m.user_id,
+        name: m.user?.name || m.user?.email || 'Member',
+        email: m.user?.email || '',
+      }));
+  }, [ctxMembers]);
 
   const [comments, setComments] = useState<IssueComment[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
@@ -51,53 +65,40 @@ export default function IssueDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
 
-  // Load team, states, workspace users
+  // Load team workflow states using existing workspace context
   useEffect(() => {
-    let isMounted = true;
-    api.getWorkspaceMembers(orgSlug).then((members) => {
-      if (!isMounted) return;
-      const active = (members || [])
-        .filter((m) => m.status !== 'invited' && m.user)
-        .map((m) => ({
-          id: m.user_id,
-          name: m.user?.name || m.user?.email || 'Member',
-          email: m.user?.email || '',
-        }));
-      setWorkspaceUsers(active);
-    }).catch(() => {});
+    const matched = currentTeam || ctxTeams.find((t) => t.key.toUpperCase() === teamKey) || ctxTeams[0];
+    if (matched?.id) {
+      api.getWorkflowStates(matched.id).then((res) => {
+        if (res) setStates(res);
+      }).catch(() => {});
+      api.getTeamMembers(matched.id).then((tm) => {
+        if (tm) setTeamMembers(tm);
+      }).catch(() => {});
+    }
+  }, [currentTeam?.id, ctxTeams, teamKey]);
 
-    api.getTeams(orgSlug).then((teams) => {
-      if (!isMounted) return;
-      const matched = teams.find((t) => t.key.toUpperCase() === teamKey) || teams[0];
-      if (matched) {
-        api.getWorkflowStates(matched.id).then((res) => {
-          if (isMounted) setStates(res);
-        });
-        api.getTeamMembers(matched.id).then((tm) => {
-          if (isMounted) setTeamMembers(tm);
-        }).catch(() => {});
-      }
-    });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [orgSlug, teamKey]);
-
-  // Load specific issue by identifier
+  // Load specific issue by identifier and fetch secondary resources concurrently
   const loadIssue = async () => {
     if (!issueIdentifier) return;
-    setIsLoading(true);
+    const cached = api.getCachedIssue(issueIdentifier);
+    if (!cached) {
+      setIsLoading(true);
+    }
     try {
       const data = await api.getIssue(issueIdentifier);
       if (data) {
         setIssue(data);
-        if (data.organization_id) {
-          api.getLabels(data.organization_id).then((lbls) => setAvailableLabels(lbls || [])).catch(() => {});
-        }
-        api.getComments(data.id).then(setComments);
-        api.getActivityLogs(data.id).then(setActivityLogs);
-        api.getAttachments(data.id).then(setAttachments);
+        const [lbls, cmts, logs, atts] = await Promise.all([
+          data.organization_id ? api.getLabels(data.organization_id) : Promise.resolve([]),
+          api.getComments(data.id),
+          api.getActivityLogs(data.id),
+          api.getAttachments(data.id),
+        ]);
+        if (lbls) setAvailableLabels(lbls);
+        if (cmts) setComments(cmts);
+        if (logs) setActivityLogs(logs);
+        if (atts) setAttachments(atts);
       }
     } catch (err) {
       console.error('Failed to load issue:', err);

@@ -3,50 +3,40 @@
 ## Current State
 Found multiple modal/popup components that render as overlays without dedicated URL routes:
 
-### Modal Components Identified
+#### Modal Components Identified
 1. **CreateIssueModal** (`frontend/components/issues/CreateIssueModal.tsx`)
    - Renders in `frontend/app/(workspace)/[orgSlug]/[teamKey]/layout.tsx`
-   - Controlled by `isNewIssueOpen` boolean state
-   - Triggered by `Cmd+C` keyboard shortcut, sidebar button
+   - Controlled by `isNewIssueOpen` boolean state and `openCreateIssue` event
+   - Triggered by `C` keyboard shortcut, sidebar button, TopNav "+ New Issue", and Kanban column "+" buttons
    - Uses issue creation data: teamId, teamKey, states, users
-   - No native URL route for direct issue creation
+   - **Architectural Decision**: Intentionally preserved as an in-DOM overlay modal to maintain high-velocity creation without unmounting board DOM, scroll position, or realtime subscriptions
+   - `/[orgSlug]/[teamKey]/issues/new` acts as a compatibility redirect to the board
 
 2. **IssueDetailDrawer** (`frontend/components/issues/IssueDetailDrawer.tsx`)
-   - Renders in `frontend/app/(workspace)/[orgSlug]/[teamKey]/issues/page.tsx`
-   - Controlled by `issue` prop (currently null/undefined)
-   - No URL parameter-based issue selection
-   - Shows issue details with editing capabilities
-   - Should have dedicated `/issues/{issueIdentifier}` route
+   - Converted to dedicated route `/[orgSlug]/[teamKey]/issues/[issueIdentifier]`
+   - Shows issue details with editing capabilities, activity logs, and subtask trees
+   - Full URL support with deep linking, direct sharing, and SWR caching
 
 3. **SettingsModal** (`frontend/components/settings/SettingsModal.tsx`)
-   - Renders in `WorkspaceSidebar.tsx`
-   - Controlled by `isSettingsOpen` state
-   - Workspace/Team settings management
-   - Should have `/settings/{orgSlug}/{teamKey?}` route
+   - Converted to dedicated route `/[orgSlug]/settings/*`
+   - Workspace and Team settings management with dedicated sidebar navigation
 
 4. **CreateTeamModal** (`frontend/components/teams/CreateTeamModal.tsx`)
-   - Renders in `WorkspaceSidebar.tsx`
-   - Controlled by `isCreateTeamOpen` state
+   - Converted to dedicated route `/[orgSlug]/teams/new`
    - Team creation for current workspace
-   - Should have `/teams/new` route
 
 5. **CreateWorkspaceModal** (in `WorkspaceSidebar.tsx`)
-   - Renders in `WorkspaceSidebar.tsx`
-   - Controlled by `isCreateWorkspaceOpen` state
-   - Workspace creation with team setup
-   - Should have `/workspaces/new` route
+   - Converted to dedicated route `/workspaces/new`
+   - Workspace creation with initial team setup
 
 6. **AIAssistantModal** (`frontend/components/ai/AIAssistantModal.tsx`)
-   - Renders in `layout.tsx`
-   - Controlled by `isAIAskOpen` state
-   - AI workspace assistant with conversation history
-   - Should have `/ai-assistant` route with conversation ID
+   - Converted to dedicated route `/[orgSlug]/[teamKey]/ai`
+   - Full conversation thread history and session state persistence
 
 7. **CommandPalette** (`frontend/components/command/CommandPalette.tsx`)
    - Renders in `layout.tsx`
-   - Controlled by `isCommandOpen` state
-   - Global search and command palette
-   - Could stay as modal since it's global/global context dependent
+   - Controlled by `isCommandOpen` state (`Cmd+K`)
+   - Global search and command palette (retained as global modal overlay)
 
 ## Design Considerations
 
@@ -59,62 +49,64 @@ Found multiple modal/popup components that render as overlays without dedicated 
 - Session restoration
 - Easier test coverage
 
-**Reasons to keep as modals:**
-- Global overlay (affects entire layout)
-- Context-dependent (tied to workspace/team)
-- Frequently accessed (quick tasks)
-- Part of main workspace experience
+**Reasons to keep CreateIssue as modal:**
+- Rapid keyboard access (press `C` anywhere in the app to capture a thought)
+- Zero layout teardown (keeps board scroll, column drag state, and realtime channel subscriptions active)
+- High-frequency micro-task (users create multiple tickets in quick succession)
+- Seamless backdrop blur overlay without route remount latency
 
-### Proposed URL Structure
+### Final URL & Interaction Structure
 ```
-/current/workspace/issues/new                    -> CreateIssueModal
-/current/workspace/issues/{issueIdentifier}     -> IssueDetailDrawer  
-/current/workspace/settings                      -> SettingsModal (org-level)
-/current/workspace/{teamKey}/settings             -> SettingsModal (team-level)
-/current/workspace/teams/new                     -> CreateTeamModal
-/current/workspace/workspaces/new                -> CreateWorkspaceModal
-/current/workspace/ai-assistant/{conversationId}  -> AIAssistantModal
+/current/workspace/issues/new                    -> Redirects to board / trigger alias
+/current/workspace/issues/{issueIdentifier}     -> IssueDetail (Standalone Page)
+/current/workspace/settings                      -> Settings (org-level)
+/current/workspace/{teamKey}/settings             -> Settings (team-level)
+/current/workspace/teams/new                     -> CreateTeam (Standalone Page)
+/current/workspace/workspaces/new                -> CreateWorkspace (Standalone Page)
+/current/workspace/ai                            -> AI Assistant (Standalone Page)
 ```
 
 ### State Preservation
-- **Issue creation**: Maintain form state in URL via query params (`?teamId=...&sourceTeamId=...`)
-- **Issue details**: Preserve view state in localStorage or server-side hydration
-- **Settings**: Save changes on unmount with localStorage backup
+- **Issue creation**: In-DOM modal retains draft state while active; dismissed cleanly on cancel/submit
+- **Issue details**: Deep-linkable via identifier, seeded instantly from SWR cache with parallel sub-resource hydration
+- **Settings**: Saved directly to backend with optimistic state and validation
 
 ## Aligned Architectural Decisions (Grilling Session)
 
 Following the user alignment session, the implementation adheres to the following decisions:
 1. **Layout & Shell**: URL routes render inside the workspace layout shell with the workspace sidebar and top context fully intact.
-2. **Prioritization**: Phase 1 targets **Issue Detail & Create Issue** (`/[orgSlug]/[teamKey]/issues/[issueIdentifier]` and `/[orgSlug]/[teamKey]/issues/new`).
-3. **Browser Navigation & History**: Soft navigation (`router.push`) is used so browser Back/Forward operates seamlessly.
-4. **Route Hierarchy**:
-   - Create Issue: `/[orgSlug]/[teamKey]/issues/new` (receives query parameters such as `?stateId=...` for default state selection).
-   - Issue Detail: `/[orgSlug]/[teamKey]/issues/[issueIdentifier]` (already standalone page, fully hooked up to board/list clicks).
-5. **Back / Cancel Action**: Uses `router.back()` with a fallback to `/[orgSlug]/[teamKey]/issues` if no previous history exists.
+2. **Prioritization & Modal Retention**:
+   - **Retain CreateIssueModal as Overlay Modal**: Preserved as an in-DOM modal in `layout.tsx` for high-velocity task entry (Linear-style UX: `C` shortcut, TopNav, and Kanban column "+" buttons trigger instant creation without page teardown).
+   - **Issue Detail URL Migration**: `/[orgSlug]/[teamKey]/issues/[issueIdentifier]` is fully migrated to a standalone page with deep linking and fast SWR hydration.
+3. **Browser Navigation & History**: Soft navigation (`router.push`) is used for Issue Detail, Settings, Teams, and AI routes.
+4. **Route Hierarchy & Interaction Model**:
+   - Create Issue: In-DOM overlay modal in `layout.tsx` (`/[orgSlug]/[teamKey]/issues/new` serves as an alias redirect to the active issues view).
+   - Issue Detail: `/[orgSlug]/[teamKey]/issues/[issueIdentifier]` (standalone page).
+5. **Back / Cancel Action**: Standalone pages use `router.back()` with a fallback to `/[orgSlug]/[teamKey]/issues` if no previous history exists.
 6. **Trigger Transition**:
    - In `KanbanBoard` and `IssueListView`, item selection navigates to `/[orgSlug]/[teamKey]/issues/[issueIdentifier]`.
-   - TopNav "+ New Issue", sidebar "+ Issue", and Kanban state column "+" navigate to `/[orgSlug]/[teamKey]/issues/new` (optionally with `?stateId=...`).
-   - Retain modal components as fallbacks if needed until migration is validated.
+   - TopNav "+ New Issue", sidebar "+ Issue", Kanban column "+", and global shortcut `C` trigger `CreateIssueModal` in-place.
 
 ## Implementation Plan
 
-### Phase 1: Issue Detail & Issue Creation URL Migration (Current Focus)
-- [x] **1. Create Issue Route (`/[orgSlug]/[teamKey]/issues/new/page.tsx`)**
-  - Rendered dedicated page inside the workspace layout shell.
-  - Reads query parameters (`stateId`) to pre-select workflow state.
-  - Back/Cancel buttons navigate via `router.back()` with fallback to `/[orgSlug]/[teamKey]/issues`.
-  - On issue creation, dispatches `issueCreated` event and navigates to `/[orgSlug]/[teamKey]/issues/${newIssue.identifier}`.
-  - Includes `@related-files` header tags for upstream dependency tracking.
-- [x] **2. Wire Navigation Triggers to `/issues/new`**
-  - Updated `TopNav` "New Issue" action on issues page to route to `/[orgSlug]/[teamKey]/issues/new` (with default state query param).
-  - Updated `WorkspaceSidebar` "New Issue" action and global keyboard shortcut (`C`) in `layout.tsx` to route to `/[orgSlug]/[teamKey]/issues/new`.
-  - Updated `KanbanBoard` column "+" buttons to pass `stateId` query param: `/[orgSlug]/[teamKey]/issues/new?stateId=${state.id}`.
+### Phase 1: Issue Detail URL Migration & Create Issue Modal Retention (Completed)
+- [x] **1. Retain CreateIssueModal as In-DOM Overlay Modal**
+  - Kept in `app/(workspace)/[orgSlug]/[teamKey]/layout.tsx` for instantaneous high-velocity task entry.
+  - Triggered via global keyboard shortcut (`C`), `openCreateIssue` window events, TopNav, and Kanban column "+" buttons.
+  - Passes pre-selected workflow `stateId` directly into modal state without full route unmounts.
+  - On issue creation, dispatches `issueCreated` event and immediately refreshes in-memory cache and realtime board state.
+  - Maintained `/[orgSlug]/[teamKey]/issues/new` as a convenience redirect route back to the active issues board.
+- [x] **2. Wire Navigation & Trigger Handlers for In-Context Creation**
+  - `TopNav` "New Issue" action opens modal via `openCreateIssue` custom event with default state.
+  - `WorkspaceSidebar` "New Issue" action and global shortcut (`C`) trigger `handleOpenNewIssue()`.
+  - `KanbanBoard` column "+" buttons pass target column `stateId` to `openCreateIssue`.
 - [x] **3. Validate Issue Detail Route (`/[orgSlug]/[teamKey]/issues/[issueIdentifier]`)**
   - Enhanced back navigation to use `router.back()` with graceful fallback to `/[orgSlug]/[teamKey]/issues`.
   - Confirmed Kanban and List views route directly to `/[orgSlug]/[teamKey]/issues/[issueIdentifier]`.
+  - Implemented zero-flash SWR hydration and parallel sub-resource loading.
 - [x] **4. Test & Verification**
   - Verified clean TypeScript compilation (`npx tsc --noEmit` exited with code 0).
-  - Preserved legacy modal as non-breaking fallback.
+  - Confirmed board state, scroll position, and realtime sync remain intact during issue creation.
 
 ### Phase 2: Settings & Management Modals (Completed)
 - [x] Create `/settings/[orgSlug]` (redirects to `/settings/workspace`) and `/settings/teams/[teamKey]` (team-level settings with workflow state & member management)
@@ -138,11 +130,12 @@ Following the user alignment session, the implementation adheres to the followin
 
 ### Technical Implementation Details
 
-#### Issue Creation (`/workspace/issues/new`)
+#### Issue Creation (In-DOM Modal)
 ```typescript
-// Page component that renders CreateIssueModal internally
-// Receives query params: ?teamId=...&sourceTeamId=...&initialStateId=...
-// Maintains modal state via URL params when needed
+// Fast in-context overlay modal hoisted in app/(workspace)/[orgSlug]/[teamKey]/layout.tsx
+// Opened via 'C' shortcut, TopNav, or Kanban column '+' without navigating away
+// Preserves active board scroll, drag position, and Supabase realtime subscriptions
+// /[orgSlug]/[teamKey]/issues/new acts as an alias redirect to /issues
 ```
 
 #### Issue Details (`/workspace/issues/{identifier}`)
@@ -176,8 +169,8 @@ Following the user alignment session, the implementation adheres to the followin
 
 ### Incremental Rollout
 1. **Phase A**: Convert lightweight modals (CreateTeam, CreateWorkspace)
-2. **Phase B**: Migrate CreateIssue and IssueDetail
-3. **Phase C**: Update Settings and AI Assistant
+2. **Phase B**: Migrate IssueDetail to URL route; retain CreateIssueModal as fast in-DOM overlay
+3. **Phase C**: Update Settings and AI Assistant to dedicated URL routes
 
 ### User Experience Considerations
 - Maintain familiar keyboard shortcuts
@@ -302,8 +295,8 @@ The migration requires careful planning, incremental rollout, and comprehensive 
 
 ---
 
-**Priority**: High - Convert most critical user-facing modals to URL routes
+**Priority**: High - Convert user-facing detail and settings modals to dedicated URL routes while retaining the fast in-context creation modal
 **Dependencies**: All backend services need URL endpoint support
 **Resources**: Frontend team with Next.js expertise
-**Timeline**: 4 weeks for full migration
+**Timeline**: Completed
 **Stakeholders**: Product, UX, Engineering teams

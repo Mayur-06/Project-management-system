@@ -25,13 +25,37 @@ export default function MyIssuesPage() {
     [workspaceUsers]
   );
 
-  const [issues, setIssues] = useState<Issue[]>([]);
+  // Derive resolved team eagerly
+  const resolvedTeam = useMemo(() => {
+    if (currentTeam) return currentTeam;
+    if (teamKey && workspaceTeams.length > 0) {
+      return workspaceTeams.find(t => t.key.toUpperCase() === teamKey) || null;
+    }
+    return null;
+  }, [currentTeam, teamKey, workspaceTeams]);
+
+  // Seed issues synchronously from in-memory cache
+  const [issues, setIssues] = useState<Issue[]>(() => {
+    const teamId = resolvedTeam?.id;
+    if (teamId) {
+      const cached = api.getCachedIssues(teamId);
+      if (cached && cached.length > 0) return cached;
+    }
+    return [];
+  });
   const [states, setStates] = useState<WorkflowState[]>([]);
   const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => {
+    const teamId = resolvedTeam?.id;
+    if (teamId) {
+      const cached = api.getCachedIssues(teamId);
+      if (cached && cached.length > 0) return false;
+    }
+    return false;
+  });
 
   const isDraggingRef = useRef(false);
   const pendingUpdatesRef = useRef<(() => void)[]>([]);
@@ -54,7 +78,10 @@ export default function MyIssuesPage() {
   };
 
   const loadData = async (teamId: string) => {
-    setIsLoading(true);
+    const cached = api.getCachedIssues(teamId);
+    if (!cached || cached.length === 0) {
+      setIsLoading(true);
+    }
     try {
       const [fetchedIssues, fetchedStates, fetchedLabels] = await Promise.all([
         api.getIssues({ teamId }),
@@ -64,7 +91,6 @@ export default function MyIssuesPage() {
       setIssues(fetchedIssues);
       setStates(fetchedStates);
       setAvailableLabels(fetchedLabels || []);
-      // Load initial data
     } catch (err) {
       console.error('Failed to load my issues data:', err);
     } finally {

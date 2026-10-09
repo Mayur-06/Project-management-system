@@ -18,6 +18,20 @@ export default function OrgRootLayout({ children }: { children: React.ReactNode 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceMember[]>([]);
 
+  // Hydrate from localStorage on client mount (runs on first client tick without SSR mismatch)
+  useEffect(() => {
+    try {
+      const cachedOrg = localStorage.getItem(`pms_org_${orgSlug}`);
+      if (cachedOrg) setOrganization(JSON.parse(cachedOrg));
+      const cachedTeams = localStorage.getItem(`pms_teams_${orgSlug}`);
+      if (cachedTeams) setTeams(JSON.parse(cachedTeams));
+      const cachedUser = localStorage.getItem('pms_current_user');
+      if (cachedUser) setCurrentUser(JSON.parse(cachedUser));
+      const cachedMembers = localStorage.getItem(`pms_members_${orgSlug}`);
+      if (cachedMembers) setWorkspaceUsers(JSON.parse(cachedMembers));
+    } catch {}
+  }, [orgSlug]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -29,10 +43,23 @@ export default function OrgRootLayout({ children }: { children: React.ReactNode 
         api.getWorkspaceMembers(orgSlug),
       ]).then(([org, fetchedTeams, members]) => {
         if (!isMounted) return;
-        if (org) setOrganization(org);
-        if (fetchedTeams) setTeams(fetchedTeams);
+        if (org) {
+          setOrganization(org);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`pms_org_${orgSlug}`, JSON.stringify(org));
+          }
+        }
+        if (fetchedTeams) {
+          setTeams(fetchedTeams);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`pms_teams_${orgSlug}`, JSON.stringify(fetchedTeams));
+          }
+        }
         const active = (members || []).filter((m) => m.status !== 'invited' && m.user);
         setWorkspaceUsers(active);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`pms_members_${orgSlug}`, JSON.stringify(active));
+        }
       }).catch((err) => {
         console.error('Failed to load workspace data', err);
       });
@@ -49,13 +76,17 @@ export default function OrgRootLayout({ children }: { children: React.ReactNode 
             localStorage.setItem('supabase_access_token', session.access_token);
           }
         }
-        setCurrentUser({
+        const userProfile = {
           id: user.id,
           email: user.email || 'user@example.com',
           name: (user.user_metadata?.full_name as string) || user.email?.split('@')[0] || 'Workspace User',
           avatar_url: (user.user_metadata?.avatar_url as string) || undefined,
           job_description: (user.user_metadata?.job_description as string) || '',
-        });
+        };
+        setCurrentUser(userProfile);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('pms_current_user', JSON.stringify(userProfile));
+        }
       } else {
         setCurrentUser({
           id: 'anonymous-user',

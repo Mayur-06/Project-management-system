@@ -27,7 +27,24 @@ function IssuesContent() {
     [workspaceUsers]
   );
 
-  const [issues, setIssues] = useState<Issue[]>([]);
+  // Derive resolved team eagerly from URL params matching cached teams or currentTeam
+  const resolvedTeam = useMemo(() => {
+    if (currentTeam) return currentTeam;
+    if (teamKey && workspaceTeams.length > 0) {
+      return workspaceTeams.find(t => t.key.toUpperCase() === teamKey) || null;
+    }
+    return null;
+  }, [currentTeam, teamKey, workspaceTeams]);
+
+  // Seed issues and loading state synchronously from in-memory cache
+  const [issues, setIssues] = useState<Issue[]>(() => {
+    const teamId = resolvedTeam?.id;
+    if (teamId) {
+      const cached = api.getCachedIssues(teamId);
+      if (cached && cached.length > 0) return cached;
+    }
+    return [];
+  });
   const [states, setStates] = useState<WorkflowState[]>([]);
   const [availableLabels, setAvailableLabels] = useState<Label[]>([]);
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
@@ -53,7 +70,14 @@ function IssuesContent() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [initialStateId, setInitialStateId] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => {
+    const teamId = resolvedTeam?.id;
+    if (teamId) {
+      const cached = api.getCachedIssues(teamId);
+      if (cached && cached.length > 0) return false;
+    }
+    return true;
+  });
 
   // ─── Active Drag Interruption Guard ───
   const isDraggingRef = useRef(false);
@@ -78,25 +102,39 @@ function IssuesContent() {
 
   // ─── Load issues and workflow states once team is known ───────
   const loadData = async (teamId: string) => {
-    setIsLoading(true);
-    const [fetchedIssues, fetchedStates] = await Promise.all([
-      api.getIssues({ teamId }),
-      api.getWorkflowStates(teamId),
-    ]);
-    setIssues(fetchedIssues);
-    setStates(fetchedStates);
-    if (fetchedStates.length > 0 && !initialStateId) {
-      const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
-      setInitialStateId(defaultState.id);
+    const cached = api.getCachedIssues(teamId);
+    if (!cached || cached.length === 0) {
+      setIsLoading(true);
     }
-    setIsLoading(false);
+    try {
+      const [fetchedIssues, fetchedStates] = await Promise.all([
+        api.getIssues({ teamId }),
+        api.getWorkflowStates(teamId),
+      ]);
+      setIssues(fetchedIssues);
+      setStates(fetchedStates);
+      if (fetchedStates.length > 0 && !initialStateId) {
+        const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
+        setInitialStateId(defaultState.id);
+      }
+    } catch (err) {
+      console.error('Failed to load issues data:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
-    if (currentTeam?.id) {
-      loadData(currentTeam.id);
+    const targetTeamId = resolvedTeam?.id;
+    if (targetTeamId) {
+      const cached = api.getCachedIssues(targetTeamId);
+      if (cached && cached.length > 0) {
+        setIssues(cached);
+        setIsLoading(false);
+      }
+      loadData(targetTeamId);
     }
-  }, [currentTeam?.id]);
+  }, [resolvedTeam?.id]);
 
   // Load organization labels
   useEffect(() => {
