@@ -30,6 +30,7 @@ import { StateBadge } from '@/components/ui/StateBadge';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { supabase } from '@/lib/supabase/client';
 import { useWorkspace } from '@/lib/WorkspaceContext';
+import { InboxSkeleton } from '@/components/skeletons/InboxSkeleton';
 
 import { Button } from '@/components/ui/button';
 
@@ -321,10 +322,7 @@ export default function InboxPage() {
 
       <div className="flex-1 overflow-y-auto px-6 py-5 max-w-4xl w-full mx-auto space-y-3">
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 text-text-muted gap-2">
-            <Loader2 className="w-6 h-6 animate-spin text-text-secondary" />
-            <span className="text-xs font-mono">Loading activity feed...</span>
-          </div>
+          <InboxSkeleton />
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 border border-dashed border-border-subtle rounded-xl bg-panel-dark/40 text-center px-4">
             <Inbox className="w-10 h-10 text-text-muted mb-3" />

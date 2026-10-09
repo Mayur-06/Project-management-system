@@ -202,16 +202,31 @@ export default function MyIssuesPage() {
       optimisticRank = `0|0${nClean}:`;
     }
 
+    const target = issues.find((i) => i.id === issueId);
+    const targetState = states.find((s) => s.id === newStateId) || target?.state;
+
     setIssues((prev) =>
       prev.map((i) =>
-        i.id === issueId ? { ...i, state_id: newStateId, sort_order: optimisticRank } : i
+        i.id === issueId
+          ? { ...i, state_id: newStateId, state: targetState, sort_order: optimisticRank }
+          : i
       )
     );
 
     const updated = await api.reorderIssue(issueId, newStateId, prevRank, nextRank);
     if (updated) {
       setIssues((prev) =>
-        prev.map((i) => (i.id === issueId ? { ...i, sort_order: updated.sort_order } : i))
+        prev.map((i) =>
+          i.id === issueId
+            ? {
+                ...i,
+                sort_order: updated.sort_order,
+                state_id: updated.state_id || newStateId,
+                state: targetState,
+                version: updated.version || i.version,
+              }
+            : i
+        )
       );
     }
   };

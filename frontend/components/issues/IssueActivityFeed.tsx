@@ -18,6 +18,9 @@ import {
   CirclePlay,
   Tag,
   ArrowUp,
+  Trash2,
+  Check,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -28,7 +31,10 @@ interface IssueActivityFeedProps {
   activityLogs: ActivityLog[];
   states?: WorkflowState[];
   users?: (User | { id: string; user_id?: string; user?: User; name?: string; email?: string; avatar_url?: string } | any)[];
+  currentUserId?: string;
   onAddComment: (commentText: string) => Promise<void> | void;
+  onUpdateComment?: (commentId: string, commentText: string) => Promise<void> | void;
+  onDeleteComment?: (commentId: string) => Promise<void> | void;
   className?: string;
 }
 
@@ -91,11 +97,18 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
   activityLogs,
   states = [],
   users = [],
+  currentUserId,
   onAddComment,
+  onUpdateComment,
+  onDeleteComment,
   className,
 }) => {
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null);
 
   // Map state ID to WorkflowState object
   const statesMap = useMemo(() => {
@@ -126,12 +139,61 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
     }
   };
 
+  const handleStartEdit = (comment: IssueComment) => {
+    setEditingCommentId(comment.id);
+    setEditingText(comment.body_text);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCommentId(null);
+    setEditingText('');
+  };
+
+  const handleSaveEdit = async (commentId: string) => {
+    if (!onUpdateComment || !editingText.trim() || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await onUpdateComment(commentId, editingText.trim());
+      setEditingCommentId(null);
+      setEditingText('');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDelete = async (commentId: string) => {
+    if (!onDeleteComment || deletingCommentId) return;
+    if (!window.confirm('Are you sure you want to delete this comment?')) return;
+    setDeletingCommentId(commentId);
+    try {
+      await onDeleteComment(commentId);
+    } finally {
+      setDeletingCommentId(null);
+    }
+  };
+
   const renderActivityItem = (log: ActivityLog) => {
     const actorName = log.actor?.name || log.actor?.email || 'Team member';
     const timeAgo = formatRelativeTime(log.created_at);
     const changes = log.changes || {};
 
-    // 1. State change (Linear StatusIcon matching screenshot)
+    // 1. Issue created (Creator UserAvatar) - Prioritized before change checks
+    if (log.action === 'issue_created') {
+      return (
+        <div key={log.id} className="flex items-center gap-2.5 text-xs text-text-tertiary">
+          <div className="w-4 h-4 flex items-center justify-center shrink-0">
+            <UserAvatar name={log.actor?.name} email={log.actor?.email} avatarUrl={log.actor?.avatar_url} size="xs" />
+          </div>
+          <div className="flex-1 truncate">
+            <span className="text-text-secondary font-normal">{actorName}</span>{' '}
+            <span>created the issue</span>
+          </div>
+          <span className="text-[11px] text-text-quaternary shrink-0">&middot; {timeAgo}</span>
+        </div>
+      );
+    }
+
+    // 2. State change (Linear StatusIcon matching screenshot)
     if (changes.state_id || log.action === 'state_changed') {
       const oldState = changes.state_id?.old ? statesMap.get(changes.state_id.old) : null;
       const newState = changes.state_id?.new ? statesMap.get(changes.state_id.new) : null;
@@ -162,9 +224,9 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
       );
     }
 
-    // 2. Title change (Pencil icon matching screenshot)
-    if (changes.title) {
-      const newTitle = changes.title.new || '';
+    // 3. Title change (Pencil icon matching screenshot) - strictly check that changes.title is an object with new value
+    if (changes.title && typeof changes.title === 'object' && changes.title.new) {
+      const newTitle = changes.title.new;
       return (
         <div key={log.id} className="flex items-center gap-2.5 text-xs text-text-tertiary">
           <div className="w-4 h-4 flex items-center justify-center shrink-0">
@@ -180,8 +242,8 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
       );
     }
 
-    // 3. Priority change (Actor UserAvatar matching screenshot)
-    if (changes.priority) {
+    // 4. Priority change (Actor UserAvatar matching screenshot)
+    if (changes.priority && typeof changes.priority === 'object') {
       const newPri = changes.priority.new || 'none';
       const oldPri = changes.priority.old || 'none';
       return (
@@ -201,8 +263,8 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
       );
     }
 
-    // 4. Assignee change (Actor UserAvatar matching screenshot)
-    if (changes.assignee_id) {
+    // 5. Assignee change (Actor UserAvatar matching screenshot)
+    if (changes.assignee_id && typeof changes.assignee_id === 'object') {
       const newAssignee = changes.assignee_id.new
         ? usersMap.get(changes.assignee_id.new)?.name || usersMap.get(changes.assignee_id.new)?.email || 'teammate'
         : 'unassigned';
@@ -221,8 +283,8 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
       );
     }
 
-    // 5. Due date change or set (Red CalendarClock matching screenshot)
-    if (changes.due_date || log.action?.includes('due_date')) {
+    // 6. Due date change or set (Red CalendarClock matching screenshot)
+    if ((changes.due_date && typeof changes.due_date === 'object') || log.action?.includes('due_date')) {
       const oldDate = changes.due_date?.old;
       const newDate = changes.due_date?.new;
       return (
@@ -251,7 +313,7 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
       );
     }
 
-    // 6. Cycle change / removed (CirclePlay matching screenshot)
+    // 7. Cycle change / removed (CirclePlay matching screenshot)
     if (changes.cycle_id || log.action?.includes('cycle')) {
       return (
         <div key={log.id} className="flex items-center gap-2.5 text-xs text-text-tertiary">
@@ -267,7 +329,7 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
       );
     }
 
-    // 7. Labels change (Tag / colored bullet matching screenshot)
+    // 8. Labels change (Tag / colored bullet matching screenshot)
     if (changes.labels || log.action?.includes('label')) {
       return (
         <div key={log.id} className="flex items-center gap-2.5 text-xs text-text-tertiary">
@@ -277,22 +339,6 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
           <div className="flex-1 truncate">
             <span className="text-text-secondary font-normal">{actorName}</span>{' '}
             <span>updated labels</span>
-          </div>
-          <span className="text-[11px] text-text-quaternary shrink-0">&middot; {timeAgo}</span>
-        </div>
-      );
-    }
-
-    // 8. Issue created (Creator UserAvatar matching screenshot)
-    if (log.action === 'issue_created') {
-      return (
-        <div key={log.id} className="flex items-center gap-2.5 text-xs text-text-tertiary">
-          <div className="w-4 h-4 flex items-center justify-center shrink-0">
-            <UserAvatar name={log.actor?.name} email={log.actor?.email} avatarUrl={log.actor?.avatar_url} size="xs" />
-          </div>
-          <div className="flex-1 truncate">
-            <span className="text-text-secondary font-normal">{actorName}</span>{' '}
-            <span>created the issue</span>
           </div>
           <span className="text-[11px] text-text-quaternary shrink-0">&middot; {timeAgo}</span>
         </div>
@@ -316,7 +362,7 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
 
   return (
     <div className={cn('space-y-5 font-sans pt-4 border-t border-border-subtle', className)}>
-      {/* Activity Section Header (Subscribe mechanics removed per user request) */}
+      {/* Activity Section Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-text-primary tracking-tight">Activity</h3>
       </div>
@@ -333,20 +379,23 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
         {comments.length > 0 && (
           <div className="rounded-xl bg-[#0f1011] border border-white/[0.06] overflow-hidden divide-y divide-white/[0.04]">
             {comments.map((comment) => {
-              const authorName = comment.user?.name || comment.user?.email || 'Workspace Member';
+              const authorUser = comment.user || usersMap.get(comment.user_id);
+              const authorName = authorUser?.name || authorUser?.email || 'Workspace Member';
               const timeAgo = formatRelativeTime(comment.created_at);
               const isEdited =
                 comment.updated_at &&
                 new Date(comment.updated_at).getTime() - new Date(comment.created_at).getTime() > 10000;
+              const isAuthor = Boolean(currentUserId && comment.user_id === currentUserId);
+              const isEditingThis = editingCommentId === comment.id;
 
               return (
-                <div key={comment.id} className="p-3.5 space-y-1.5">
+                <div key={comment.id} className="p-3.5 space-y-1.5 group">
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <UserAvatar
-                        name={comment.user?.name}
-                        email={comment.user?.email}
-                        avatarUrl={comment.user?.avatar_url}
+                        name={authorUser?.name}
+                        email={authorUser?.email}
+                        avatarUrl={authorUser?.avatar_url}
                         size="sm"
                       />
                       <span className="font-semibold text-text-primary">{authorName}</span>
@@ -354,18 +403,77 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
                         {timeAgo} {isEdited && <span className="opacity-70">(edited)</span>}
                       </span>
                     </div>
+
+                    {isAuthor && !isEditingThis && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {onUpdateComment && (
+                          <button
+                            type="button"
+                            onClick={() => handleStartEdit(comment)}
+                            className="p-1 rounded text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+                            title="Edit comment"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        )}
+                        {onDeleteComment && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(comment.id)}
+                            disabled={deletingCommentId === comment.id}
+                            className="p-1 rounded text-zinc-400 hover:text-rose-400 hover:bg-white/[0.08] transition-colors cursor-pointer disabled:opacity-40"
+                            title="Delete comment"
+                          >
+                            {deletingCommentId === comment.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3 h-3" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <div className="text-xs text-text-secondary leading-relaxed pl-7 break-words whitespace-pre-wrap">
-                    {renderFormattedBody(comment.body_text)}
-                  </div>
+                  {isEditingThis ? (
+                    <div className="pl-7 pt-1 space-y-2">
+                      <textarea
+                        value={editingText}
+                        onChange={(e) => setEditingText(e.target.value)}
+                        rows={2}
+                        className="w-full bg-white/[0.04] border border-white/[0.1] focus:border-[#5e6ad2] rounded p-2 text-xs text-white placeholder-zinc-500 outline-none resize-none leading-relaxed"
+                      />
+                      <div className="flex items-center gap-2 justify-end">
+                        <button
+                          type="button"
+                          onClick={handleCancelEdit}
+                          disabled={isUpdating}
+                          className="px-2 py-1 text-xs text-zinc-400 hover:text-white cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSaveEdit(comment.id)}
+                          disabled={!editingText.trim() || isUpdating}
+                          className="px-2.5 py-1 rounded bg-[#5e6ad2] hover:bg-[#7170ff] text-white text-xs font-medium cursor-pointer disabled:opacity-40 flex items-center gap-1"
+                        >
+                          {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-text-secondary leading-relaxed pl-7 break-words whitespace-pre-wrap">
+                      {renderFormattedBody(comment.body_text)}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
 
-        {/* Comment Composer Matching Image 4 */}
+        {/* Comment Composer */}
         <form
           onSubmit={handleSubmitComment}
           className="rounded-xl bg-[#121316] border border-white/[0.08] focus-within:border-white/[0.15] transition-colors p-3 space-y-2 shadow-sm"

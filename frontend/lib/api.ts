@@ -655,6 +655,27 @@ export const api = {
     });
   },
 
+  async updateComment(commentId: string, bodyText: string): Promise<IssueComment | null> {
+    return await fetchWithAuth<IssueComment>(`/comments/${commentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        body_text: bodyText,
+        body_json: { type: 'doc', content: [] },
+      }),
+    });
+  },
+
+  async deleteComment(commentId: string, hard = true): Promise<boolean> {
+    try {
+      await fetchWithAuth(`/comments/${commentId}?hard=${hard}`, {
+        method: 'DELETE',
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   // Activity
   async getActivityLogs(issueId: string): Promise<ActivityLog[]> {
     const data = await fetchWithAuth<ActivityLog[]>(`/issues/${issueId}/activity`);
@@ -754,7 +775,7 @@ export const api = {
     fileName: string,
     fileSize: number,
     mimeType: string
-  ): Promise<{ attachment_id: string; issue_id: string; upload_url: string; storage_path: string; file_name: string } | null> {
+  ): Promise<{ attachment_id: string; issue_id: string; upload_url: string; storage_path: string; file_name: string; file_url?: string } | null> {
     return await fetchWithAuth(`/attachments/upload-url`, {
       method: 'POST',
       body: JSON.stringify({
@@ -799,7 +820,7 @@ export const api = {
     onEvent: (event: { type: string; data: any }) => void,
     signal?: AbortSignal
   ): Promise<void> {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
+    const token = await getValidToken();
     const response = await fetch(`${API_BASE}/ai/chat/stream`, {
       method: 'POST',
       headers: {
@@ -817,6 +838,7 @@ export const api = {
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
+    let currentEvent = 'message';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -826,7 +848,6 @@ export const api = {
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
 
-      let currentEvent = 'message';
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed.startsWith('event:')) {
@@ -839,6 +860,8 @@ export const api = {
           } catch {
             onEvent({ type: currentEvent, data: jsonStr });
           }
+        } else if (trimmed === '') {
+          currentEvent = 'message';
         }
       }
     }

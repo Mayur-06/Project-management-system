@@ -445,8 +445,8 @@ class IssueService:
     def update_issue(cls, issue_id: str, data: IssueUpdate, user_id: str, db: Client) -> IssueResponse:
         current_issue = cls._verify_issue_access(issue_id, user_id, db)
 
-        # Optimistic Concurrency Control (OCC)
-        if current_issue["version"] != data.expected_version:
+        # Optimistic Concurrency Control (OCC) - only enforced when expected_version is provided
+        if data.expected_version is not None and current_issue["version"] != data.expected_version:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
@@ -503,8 +503,11 @@ class IssueService:
         if data.client_session_id:
             update_dict["last_modified_by_session"] = data.client_session_id
 
-        # Atomic OCC update: predicate on both id and expected version
-        res = db.table("issues").update(update_dict).eq("id", issue_id).eq("version", data.expected_version).execute()
+        # Atomic update: predicate on version if expected_version is provided, else unconditional LWW
+        query = db.table("issues").update(update_dict).eq("id", issue_id)
+        if data.expected_version is not None:
+            query = query.eq("version", data.expected_version)
+        res = query.execute()
         if not res.data:
             # Re-read to provide fresh state on concurrent conflict
             fresh = db.table("issues").select("*").eq("id", issue_id).limit(1).execute()
@@ -627,6 +630,24 @@ class IssueService:
         res = db.table("issues").update(update_payload).eq("id", issue_id).execute()
         if not res.data:
             raise HTTPException(status_code=500, detail="Failed to reorder issue")
+
+        if target_state_id != current_issue.get("state_id"):
+            try:
+                db.table("activity_logs").insert({
+                    "organization_id": current_issue["organization_id"],
+                    "issue_id": issue_id,
+                    "actor_id": user_id,
+                    "action": "issue_updated",
+                    "changes": {
+                        "state_id": {
+                            "old": current_issue.get("state_id"),
+                            "new": target_state_id,
+                        }
+                    },
+                }).execute()
+            except Exception:
+                pass
+
         return IssueResponse(**res.data[0])
 
     @classmethod
@@ -812,13 +833,25 @@ class IssueService:
                     reactions_map[cid][emoji] = []
                 reactions_map[cid][emoji].append(uid)
 
+        # Resolve comment authors
+        user_cache: Dict[str, IssueAssigneeUser] = {}
+        for c in comments:
+            uid = c.get("user_id")
+            if uid and uid not in user_cache:
+                try:
+                    email, name = WorkspaceService.resolve_user_info(uid, db)
+                    user_cache[uid] = IssueAssigneeUser(id=uid, email=email, name=name)
+                except Exception:
+                    user_cache[uid] = IssueAssigneeUser(id=uid, name="Workspace Member")
+
         result = []
         for c in comments:
             rx_list = [
                 CommentReactionResponse(emoji=emoji, count=len(uids), user_ids=uids)
                 for emoji, uids in reactions_map[c["id"]].items()
             ]
-            result.append(CommentResponse(**c, reactions=rx_list))
+            author = user_cache.get(c.get("user_id"))
+            result.append(CommentResponse(**c, reactions=rx_list, user=author))
         return result
 
     @classmethod
@@ -843,7 +876,14 @@ class IssueService:
             "changes": {"comment_id": created["id"]},
         }).execute()
 
-        return CommentResponse(**created, reactions=[])
+        author = None
+        try:
+            email, name = WorkspaceService.resolve_user_info(user_id, db)
+            author = IssueAssigneeUser(id=user_id, email=email, name=name)
+        except Exception:
+            author = IssueAssigneeUser(id=user_id, name="Workspace Member")
+
+        return CommentResponse(**created, reactions=[], user=author)
 
     @classmethod
     def update_comment(cls, comment_id: str, data: CommentUpdate, user_id: str, db: Client) -> CommentResponse:
@@ -862,24 +902,38 @@ class IssueService:
             "updated_at": now_iso,
         }).eq("id", comment_id).execute()
 
-        return CommentResponse(**res.data[0], reactions=[])
+        author = None
+        try:
+            email, name = WorkspaceService.resolve_user_info(user_id, db)
+            author = IssueAssigneeUser(id=user_id, email=email, name=name)
+        except Exception:
+            author = IssueAssigneeUser(id=user_id, name="Workspace Member")
+
+        return CommentResponse(**res.data[0], reactions=[], user=author)
 
     @classmethod
-    def delete_comment(cls, comment_id: str, user_id: str, db: Client) -> None:
+    def delete_comment(cls, comment_id: str, user_id: str, db: Client, hard: bool = False) -> None:
         c_res = db.table("issue_comments").select("id, user_id, issue_id").eq("id", comment_id).is_("deleted_at", "null").limit(1).execute()
         if not c_res.data:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
         comment = c_res.data[0]
 
-        # Verify author or org admin
+        # Only comment author or organization admin/owner can delete comment
         if comment["user_id"] != user_id:
             issue = cls._verify_issue_access(comment["issue_id"], user_id, db)
             mem = db.table("workspace_members").select("role").eq("organization_id", issue["organization_id"]).eq("user_id", user_id).limit(1).execute()
-            if not mem.data or mem.data[0]["role"] != "admin":
+            if not mem.data or mem.data[0].get("role") not in ["admin", "owner"]:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only comment author or admin can delete comment")
 
-        now_iso = datetime.now(timezone.utc).isoformat()
-        db.table("issue_comments").update({"deleted_at": now_iso}).eq("id", comment_id).execute()
+        if hard:
+            try:
+                db.table("comment_reactions").delete().eq("comment_id", comment_id).execute()
+            except Exception:
+                pass
+            db.table("issue_comments").delete().eq("id", comment_id).execute()
+        else:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            db.table("issue_comments").update({"deleted_at": now_iso}).eq("id", comment_id).execute()
 
     @classmethod
     def toggle_reaction(cls, comment_id: str, emoji: str, user_id: str, db: Client) -> List[CommentReactionResponse]:

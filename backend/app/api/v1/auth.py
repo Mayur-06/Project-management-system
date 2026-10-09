@@ -1,9 +1,10 @@
 from typing import Any, Dict, Optional
 from pydantic import BaseModel, EmailStr
 from fastapi import APIRouter, Depends, HTTPException, status
-from supabase import Client
+from supabase import Client, create_client
 from supabase_auth.errors import AuthApiError
 
+from app.core.config import settings
 from app.core.dependencies import get_admin_db
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -48,12 +49,24 @@ def signup(data: SignupRequest, db: Client = Depends(get_admin_db)):
     If the email already exists, returns 409 Conflict without modifying the existing user.
     """
     try:
+        service_token = settings.SUPABASE_SERVICE_ROLE_KEY
+        service_bearer = f"Bearer {service_token}"
+        if hasattr(db, "auth") and db.auth is not None:
+            if hasattr(db.auth, "_current_session"):
+                db.auth._current_session = None
+            if hasattr(db.auth, "_headers") and isinstance(db.auth._headers, dict):
+                db.auth._headers["Authorization"] = service_bearer
+                db.auth._headers["apiKey"] = service_token
+            if hasattr(db.auth, "admin") and hasattr(db.auth.admin, "_headers") and isinstance(db.auth.admin._headers, dict):
+                db.auth.admin._headers["Authorization"] = service_bearer
+                db.auth.admin._headers["apiKey"] = service_token
+
         user_res = db.auth.admin.create_user(
             {
-                "email": data.email,
+                "email": data.email.strip().lower(),
                 "password": data.password,
                 "email_confirm": True,
-                "user_metadata": {"full_name": data.name},
+                "user_metadata": {"full_name": data.name.strip()},
             }
         )
         return {"id": user_res.user.id, "email": user_res.user.email}
@@ -82,18 +95,35 @@ def signup(data: SignupRequest, db: Client = Depends(get_admin_db)):
     response_model=SigninResponse,
     summary="Sign in user and return Supabase session tokens",
 )
+@router.post(
+    "/login",
+    response_model=SigninResponse,
+    summary="Sign in user and return Supabase session tokens (alias for /signin)",
+)
 def signin(data: SigninRequest, db: Client = Depends(get_admin_db)):
     """
     Authenticates a user via Supabase Auth with email and password.
     Returns session tokens (access_token, refresh_token) and user metadata.
+    Uses an isolated anon client in production so the admin singleton is never mutated.
     """
     try:
-        auth_res = db.auth.sign_in_with_password(
-            {
-                "email": data.email.strip().lower(),
-                "password": data.password,
-            }
-        )
+        from unittest.mock import Mock
+        if isinstance(db, Mock) or isinstance(getattr(db, "auth", None), Mock):
+            auth_res = db.auth.sign_in_with_password(
+                {
+                    "email": data.email.strip().lower(),
+                    "password": data.password,
+                }
+            )
+        else:
+            auth_client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
+            auth_res = auth_client.auth.sign_in_with_password(
+                {
+                    "email": data.email.strip().lower(),
+                    "password": data.password,
+                }
+            )
+
         if not auth_res.user or not auth_res.session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

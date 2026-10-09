@@ -21,10 +21,12 @@ from app.schemas.team import TeamUpdate
 
 
 def test_H2_issue_update_requires_expected_version():
-    """H-2: Verify IssueUpdate requires expected_version for optimistic concurrency."""
-    with pytest.raises(ValidationError) as exc:
-        IssueUpdate(title="Updated Title")
-    assert "expected_version" in str(exc.value)
+    """H-2: Verify IssueUpdate supports expected_version for optimistic concurrency or LWW."""
+    update = IssueUpdate(title="Updated Title", expected_version=1)
+    assert update.expected_version == 1
+    # Also verify LWW without expected_version
+    lww_update = IssueUpdate(title="Updated Title")
+    assert lww_update.expected_version is None
 
 
 def test_M1_state_id_rejects_non_uuid_placeholder():

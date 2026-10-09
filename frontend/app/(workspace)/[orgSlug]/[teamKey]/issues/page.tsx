@@ -212,16 +212,32 @@ function IssuesContent() {
       optimisticRank = `0${nextRank}`;
     }
 
+    const targetState = states.find((s) => s.id === newStateId) || target.state;
+
     // Optimistic UI update
     setIssues((prev) =>
-      prev.map((i) => (i.id === issueId ? { ...i, state_id: newStateId, sort_order: optimisticRank } : i))
+      prev.map((i) =>
+        i.id === issueId
+          ? { ...i, state_id: newStateId, state: targetState, sort_order: optimisticRank }
+          : i
+      )
     );
 
     // Persist to server
     const updated = await api.reorderIssue(issueId, newStateId, prevRank, nextRank);
     if (updated) {
       setIssues((prev) =>
-        prev.map((i) => (i.id === issueId ? { ...i, sort_order: updated.sort_order } : i))
+        prev.map((i) =>
+          i.id === issueId
+            ? {
+                ...i,
+                sort_order: updated.sort_order,
+                state_id: updated.state_id || newStateId,
+                state: targetState,
+                version: updated.version || i.version,
+              }
+            : i
+        )
       );
     }
   };

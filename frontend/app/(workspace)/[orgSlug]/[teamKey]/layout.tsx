@@ -52,8 +52,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   }, [currentTeamStates]);
 
   const handleOpenAIAsk = () => {
-    const targetTeam = (teamKey || teams[0]?.key || 'eng').toLowerCase();
-    router.push(`/${orgSlug}/${targetTeam}/ai`);
+    router.push(`/${orgSlug}/ai`);
   };
 
   // Global Keyboard Shortcuts (Cmd+K for palette, C for new issue, Cmd+J for AI Assistant)

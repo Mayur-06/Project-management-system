@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Issue, IssueComment, ActivityLog, IssuePriority, WorkflowState, IssueAttachment, User, Label } from '@/types';
 import { api } from '@/lib/api';
+import { supabase } from '@/lib/supabase/client';
 import { TopNav } from '@/components/navigation/TopNav';
 import { PriorityPicker } from '@/components/ui/PriorityPicker';
 import { StatusPicker } from '@/components/ui/StatusPicker';
@@ -22,6 +23,7 @@ import { IssueTitleEditor } from '@/components/issues/IssueTitleEditor';
 import { IssueDescriptionEditor } from '@/components/editor/IssueDescriptionEditor';
 import { IssueAttachmentButton } from '@/components/issues/IssueAttachmentButton';
 import { IssueActivityFeed } from '@/components/issues/IssueActivityFeed';
+import { IssueDetailSkeleton } from '@/components/skeletons/IssueDetailSkeleton';
 import { toast } from 'sonner';
 import { useWorkspace } from '@/lib/WorkspaceContext';
 
@@ -32,7 +34,7 @@ export default function IssueDetailPage() {
   const teamKey = (params?.teamKey as string)?.toUpperCase() || '';
   const issueIdentifier = (params?.issueIdentifier as string) || '';
 
-  const { currentTeam, workspaceUsers: ctxMembers, teams: ctxTeams, organization } = useWorkspace();
+  const { currentTeam, workspaceUsers: ctxMembers, teams: ctxTeams, organization, currentUser } = useWorkspace();
 
   // Optimistically seed issue from in-memory cache for 0ms render
   const [issue, setIssue] = useState<Issue | null>(() => api.getCachedIssue(issueIdentifier));
@@ -111,6 +113,70 @@ export default function IssueDetailPage() {
     loadIssue();
   }, [issueIdentifier]);
 
+  // Real-time Supabase WebSocket listener on activity_logs, issue_comments, and issues
+  useEffect(() => {
+    if (!issue?.id) return;
+
+    const channel = supabase
+      .channel(`issue_detail_${issue.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'activity_logs',
+          filter: `issue_id=eq.${issue.id}`,
+        },
+        async () => {
+          try {
+            const logs = await api.getActivityLogs(issue.id);
+            if (logs) setActivityLogs(logs);
+          } catch (err) {
+            console.error('Failed to sync realtime activity logs:', err);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'issue_comments',
+          filter: `issue_id=eq.${issue.id}`,
+        },
+        async () => {
+          try {
+            const cmts = await api.getComments(issue.id);
+            if (cmts) setComments(cmts);
+          } catch (err) {
+            console.error('Failed to sync realtime comments:', err);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'issues',
+          filter: `id=eq.${issue.id}`,
+        },
+        async () => {
+          try {
+            const fresh = await api.getIssue(issue.id);
+            if (fresh) setIssue(fresh);
+          } catch (err) {
+            console.error('Failed to sync realtime issue:', err);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [issue?.id]);
+
   const activeStates = states;
 
   const assignableUsers = useMemo(() => {
@@ -127,19 +193,31 @@ export default function IssueDetailPage() {
     return Array.from(map.values());
   }, [workspaceUsers, teamMembers]);
 
+  const latestVersionRef = React.useRef<number>(issue?.version ?? 1);
+  useEffect(() => {
+    if (issue?.version !== undefined) {
+      latestVersionRef.current = issue.version;
+    }
+  }, [issue?.version]);
+
   // Handlers for mutations
   const handleTitleChange = async (newTitle: string) => {
     if (!issue || newTitle === issue.title) return;
     setIssue((prev) => (prev ? { ...prev, title: newTitle } : prev));
     try {
-      const updated = await api.updateIssue(issue.id, { title: newTitle, expected_version: issue.version ?? 1 });
+      const updated = await api.updateIssue(issue.id, { title: newTitle, expected_version: latestVersionRef.current });
       if (updated) {
+        latestVersionRef.current = updated.version;
         setIssue(updated);
+        api.getActivityLogs(issue.id).then((logs) => { if (logs) setActivityLogs(logs); }).catch(() => {});
       }
     } catch (err) {
       console.error('Failed to update title:', err);
       const fresh = await api.getIssue(issue.id);
-      if (fresh) setIssue(fresh);
+      if (fresh) {
+        latestVersionRef.current = fresh.version;
+        setIssue(fresh);
+      }
     }
   };
 
@@ -150,15 +228,14 @@ export default function IssueDetailPage() {
       const updated = await api.updateIssue(issue.id, {
         description_text,
         description_json,
-        expected_version: issue.version ?? 1,
       });
       if (updated) {
-        setIssue(updated);
+        latestVersionRef.current = updated.version;
+        setIssue((prev) => (prev ? { ...prev, ...updated } : prev));
+        api.getActivityLogs(issue.id).then((logs) => { if (logs) setActivityLogs(logs); }).catch(() => {});
       }
     } catch (err) {
       console.error('Failed to update description:', err);
-      const fresh = await api.getIssue(issue.id);
-      if (fresh) setIssue(fresh);
     }
   };
 
@@ -167,14 +244,19 @@ export default function IssueDetailPage() {
     const newState = activeStates.find((s) => s.id === newStateId);
     setIssue((prev) => (prev ? { ...prev, state_id: newStateId, state: newState } : prev));
     try {
-      const updated = await api.updateIssue(issue.id, { state_id: newStateId, expected_version: issue.version ?? 1 });
+      const updated = await api.updateIssue(issue.id, { state_id: newStateId, expected_version: latestVersionRef.current });
       if (updated) {
+        latestVersionRef.current = updated.version;
         setIssue(updated);
+        api.getActivityLogs(issue.id).then((logs) => { if (logs) setActivityLogs(logs); }).catch(() => {});
       }
     } catch (err) {
       console.error('Failed to update status:', err);
       const fresh = await api.getIssue(issue.id);
-      if (fresh) setIssue(fresh);
+      if (fresh) {
+        latestVersionRef.current = fresh.version;
+        setIssue(fresh);
+      }
     }
   };
 
@@ -182,14 +264,19 @@ export default function IssueDetailPage() {
     if (!issue || newPriority === issue.priority) return;
     setIssue((prev) => (prev ? { ...prev, priority: newPriority } : prev));
     try {
-      const updated = await api.updateIssue(issue.id, { priority: newPriority, expected_version: issue.version ?? 1 });
+      const updated = await api.updateIssue(issue.id, { priority: newPriority, expected_version: latestVersionRef.current });
       if (updated) {
+        latestVersionRef.current = updated.version;
         setIssue(updated);
+        api.getActivityLogs(issue.id).then((logs) => { if (logs) setActivityLogs(logs); }).catch(() => {});
       }
     } catch (err) {
       console.error('Failed to update priority:', err);
       const fresh = await api.getIssue(issue.id);
-      if (fresh) setIssue(fresh);
+      if (fresh) {
+        latestVersionRef.current = fresh.version;
+        setIssue(fresh);
+      }
     }
   };
 
@@ -200,15 +287,20 @@ export default function IssueDetailPage() {
     try {
       const updated = await api.updateIssue(issue.id, {
         assignee_id: newAssigneeId || undefined,
-        expected_version: issue.version ?? 1,
+        expected_version: latestVersionRef.current,
       });
       if (updated) {
+        latestVersionRef.current = updated.version;
         setIssue(updated);
+        api.getActivityLogs(issue.id).then((logs) => { if (logs) setActivityLogs(logs); }).catch(() => {});
       }
     } catch (err) {
       console.error('Failed to update assignee:', err);
       const fresh = await api.getIssue(issue.id);
-      if (fresh) setIssue(fresh);
+      if (fresh) {
+        latestVersionRef.current = fresh.version;
+        setIssue(fresh);
+      }
     }
   };
 
@@ -335,6 +427,7 @@ export default function IssueDetailPage() {
       const newComment = await api.addComment(issue.id, text);
       if (newComment) {
         setComments((prev) => [...prev, newComment]);
+        api.getActivityLogs(issue.id).then((logs) => { if (logs) setActivityLogs(logs); }).catch(() => {});
         toast.success('Comment posted');
       }
     } catch (err: any) {
@@ -343,12 +436,36 @@ export default function IssueDetailPage() {
     }
   };
 
+  const handleUpdateComment = async (commentId: string, text: string) => {
+    try {
+      const updated = await api.updateComment(commentId, text);
+      if (updated) {
+        setComments((prev) =>
+          prev.map((c) => (c.id === commentId ? { ...c, ...updated } : c))
+        );
+        toast.success('Comment updated');
+      }
+    } catch (err: any) {
+      console.error('Failed to update comment:', err);
+      toast.error(err?.message || 'Failed to update comment');
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!issue) return;
+    try {
+      await api.deleteComment(commentId, true);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      api.getActivityLogs(issue.id).then((logs) => { if (logs) setActivityLogs(logs); }).catch(() => {});
+      toast.success('Comment deleted');
+    } catch (err: any) {
+      console.error('Failed to delete comment:', err);
+      toast.error(err?.message || 'Failed to delete comment');
+    }
+  };
+
   if (isLoading || !issue) {
-    return (
-      <div className="flex-1 flex items-center justify-center h-full bg-black">
-        <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />
-      </div>
-    );
+    return <IssueDetailSkeleton />;
   }
 
   const subtasks = issue.subtasks || [];
@@ -508,7 +625,10 @@ export default function IssueDetailPage() {
             activityLogs={activityLogs}
             states={states}
             users={assignableUsers}
+            currentUserId={currentUser?.id}
             onAddComment={handleAddComment}
+            onUpdateComment={handleUpdateComment}
+            onDeleteComment={handleDeleteComment}
           />
         </div>
 

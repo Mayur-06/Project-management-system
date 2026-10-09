@@ -21,6 +21,7 @@ class AttachmentUploadResponse(BaseModel):
     upload_url: str
     storage_path: str
     file_name: str
+    file_url: Optional[str] = None
 
 
 class AttachmentResponse(BaseModel):
@@ -31,6 +32,7 @@ class AttachmentResponse(BaseModel):
     file_size: int
     mime_type: str
     storage_path: str
+    file_url: Optional[str] = None
     created_at: datetime
 
 

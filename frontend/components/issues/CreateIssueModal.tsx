@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
-  AlertCircle,
   Tag,
   Paperclip,
   User as UserIcon,
@@ -174,28 +173,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     }
   }, [selectedTeamId, activeStates, stateId]);
 
-  // Real-time debounced duplicate check
-  const [duplicateMatches, setDuplicateMatches] = useState<
-    { id: string; title: string; similarity: number; identifier?: string }[]
-  >([]);
-  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (title.trim().length < 10) {
-      setDuplicateMatches([]);
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setIsCheckingDuplicates(true);
-      const res = await api.checkDuplicates(title);
-      setDuplicateMatches(res?.duplicates || []);
-      setIsCheckingDuplicates(false);
-    }, 400);
-
-    return () => clearTimeout(timer);
-  }, [title]);
 
   // Sync stateId when initialStateId or modal opens
   useEffect(() => {
@@ -217,9 +195,16 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     setSubmitError(null);
     try {
       const resolvedTeamId = selectedTeamId || teamId || states[0]?.team_id;
-      const targetState = stateId || activeStates[0]?.id;
+      let targetState = stateId || activeStates[0]?.id;
+      if (!targetState && resolvedTeamId) {
+        const freshStates = await api.getWorkflowStates(resolvedTeamId);
+        if (freshStates && freshStates.length > 0) {
+          setTeamWorkflowStates(freshStates);
+          targetState = (freshStates.find((s) => s.is_default) || freshStates[0])?.id;
+        }
+      }
       if (!targetState) {
-        throw new Error('No workflow state available for selected team.');
+        throw new Error('No workflow state available for selected team. Please verify team settings.');
       }
       const created = await api.createIssue({
         team_id: resolvedTeamId,
@@ -333,28 +318,6 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
             />
           </div>
 
-          {/* Potential Duplicate Match Notice */}
-          {duplicateMatches.length > 0 && (
-            <div className="mx-6 my-2 p-2.5 bg-amber-950/30 border border-amber-800/60 rounded-md space-y-1.5 font-sans">
-              <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-400">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>Similar issues detected ({duplicateMatches.length}):</span>
-              </div>
-              <div className="space-y-1">
-                {duplicateMatches.slice(0, 3).map((m) => (
-                  <div
-                    key={m.id}
-                    className="text-xs text-zinc-300 flex items-center justify-between p-1 rounded bg-zinc-950/50"
-                  >
-                    <span className="truncate pr-2">{m.title}</span>
-                    <span className="text-[10px] text-amber-400 font-mono shrink-0">
-                      {Math.round(m.similarity * 100)}% match
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Issue Description Textarea - Clean borderless */}
           <div className="px-6 pt-1 pb-4">

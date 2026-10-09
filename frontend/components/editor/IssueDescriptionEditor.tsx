@@ -44,6 +44,25 @@ export const IssueDescriptionEditor: React.FC<IssueDescriptionEditorProps> = ({
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Trigger auto-save
+  const triggerSave = useCallback(
+    async (editorInstance: any) => {
+      if (!editorInstance) return;
+      const text = editorInstance.getText();
+      const json = editorInstance.getJSON();
+
+      setSaveStatus('saving');
+      try {
+        await onSave({ description_text: text, description_json: json });
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('Failed to save description:', err);
+        setSaveStatus('unsaved');
+      }
+    },
+    [onSave]
+  );
+
   // Helper to upload image and insert into TipTap editor
   const handleUploadImage = useCallback(
     async (file: File, editorInstance: any) => {
@@ -72,23 +91,46 @@ export const IssueDescriptionEditor: React.FC<IssueDescriptionEditorProps> = ({
           throw new Error('Could not obtain upload URL');
         }
 
-        // Upload binary to Supabase Storage
-        const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
-        const uploadRes = await fetch(uploadTicket.upload_url, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': file.type || 'application/octet-stream',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: file,
-        });
+        // Upload binary to Supabase Storage signed upload URL
+        // Supabase signed upload endpoint accepts multipart/form-data
+        let uploadOk = false;
+        try {
+          const formData = new FormData();
+          formData.append('cacheControl', '3600');
+          formData.append('', file);
 
-        if (!uploadRes.ok) {
-          throw new Error('Storage upload failed');
+          const uploadRes = await fetch(uploadTicket.upload_url, {
+            method: 'PUT',
+            body: formData,
+          });
+          uploadOk = uploadRes.ok;
+          if (!uploadOk) {
+            console.warn('FormData upload status:', uploadRes.status);
+          }
+        } catch (fdErr) {
+          console.warn('FormData upload error:', fdErr);
         }
 
-        // Get public/signed URL or download path
-        const imageUrl = uploadTicket.upload_url.split('?')[0];
+        if (!uploadOk) {
+          const uploadResRaw = await fetch(uploadTicket.upload_url, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': file.type || 'image/png',
+            },
+            body: file,
+          });
+          uploadOk = uploadResRaw.ok;
+          if (!uploadOk) {
+            const errDetail = await uploadResRaw.text().catch(() => '');
+            throw new Error(`Storage upload failed with status ${uploadResRaw.status} ${errDetail}`);
+          }
+        }
+
+        // Use persistent public URL
+        const baseStorageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://zteuxlfrleyctdkyuzvb.supabase.co';
+        const imageUrl =
+          uploadTicket.file_url ||
+          `${baseStorageUrl}/storage/v1/object/public/attachments/${uploadTicket.storage_path}`;
 
         editorInstance
           ?.chain()
@@ -96,41 +138,34 @@ export const IssueDescriptionEditor: React.FC<IssueDescriptionEditorProps> = ({
           .setImage({ src: imageUrl, alt: file.name })
           .run();
 
-        toast.success('Image pasted successfully', { id: toastId });
+        // Immediately auto-save so image persists in description across reloads
+        triggerSave(editorInstance);
+        toast.success('Image uploaded successfully', { id: toastId });
       } catch (err: any) {
         console.error('Image upload error:', err);
-        // Fallback: local blob preview if cloud storage is unavailable
-        const localBlob = URL.createObjectURL(file);
-        editorInstance
-          ?.chain()
-          .focus()
-          .setImage({ src: localBlob, alt: file.name })
-          .run();
-        toast.warning('Image embedded as local preview', { id: toastId });
+        // Fallback: Read as base64 Data URL so the screenshot preview is persistently preserved in description JSON/text
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          if (dataUrl) {
+            editorInstance
+              ?.chain()
+              .focus()
+              .setImage({ src: dataUrl, alt: file.name })
+              .run();
+            triggerSave(editorInstance);
+            toast.warning('Image embedded into description', { id: toastId });
+          }
+        };
+        reader.onerror = () => {
+          toast.error('Failed to process image', { id: toastId });
+        };
+        reader.readAsDataURL(file);
       } finally {
         setIsUploadingImage(false);
       }
     },
-    [issueId]
-  );
-
-  // Trigger auto-save
-  const triggerSave = useCallback(
-    async (editorInstance: any) => {
-      if (!editorInstance) return;
-      const text = editorInstance.getText();
-      const json = editorInstance.getJSON();
-
-      setSaveStatus('saving');
-      try {
-        await onSave({ description_text: text, description_json: json });
-        setSaveStatus('saved');
-      } catch (err) {
-        console.error('Failed to save description:', err);
-        setSaveStatus('unsaved');
-      }
-    },
-    [onSave]
+    [issueId, triggerSave]
   );
 
   const initialContent = React.useMemo(() => {

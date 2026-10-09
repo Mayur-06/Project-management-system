@@ -102,12 +102,15 @@ class Phase4Service:
             # Fallback to direct authenticated Supabase storage object path
             upload_url = f"{base_url}/storage/v1/object/attachments/{storage_path}"
 
+        public_file_url = f"{base_url}/storage/v1/object/public/attachments/{storage_path}"
+
         return AttachmentUploadResponse(
             attachment_id=attachment_id,
             issue_id=data.issue_id,
             upload_url=upload_url,
             storage_path=storage_path,
             file_name=data.file_name,
+            file_url=public_file_url,
         )
 
     @classmethod
@@ -184,7 +187,35 @@ class Phase4Service:
             .order("created_at", desc=True)
             .execute()
         )
-        return [AttachmentResponse(**item) for item in (res.data or [])]
+        attachments = res.data or []
+        result = []
+        base_url = settings.SUPABASE_URL.rstrip("/")
+        for item in attachments:
+            file_url = None
+            if item.get("storage_path"):
+                try:
+                    sign_res = db.storage.from_("attachments").create_signed_url(item["storage_path"], 3600 * 24 * 7)
+                    if isinstance(sign_res, dict):
+                        file_url = sign_res.get("signedURL") or sign_res.get("signedUrl") or sign_res.get("signed_url") or sign_res.get("url")
+                    elif hasattr(sign_res, "signed_url"):
+                        file_url = sign_res.signed_url
+                    elif hasattr(sign_res, "url"):
+                        file_url = sign_res.url
+                except Exception:
+                    file_url = None
+                if not file_url:
+                    try:
+                        pub_res = db.storage.from_("attachments").get_public_url(item["storage_path"])
+                        if isinstance(pub_res, str):
+                            file_url = pub_res
+                        elif isinstance(pub_res, dict):
+                            file_url = pub_res.get("publicURL") or pub_res.get("publicUrl")
+                    except Exception:
+                        pass
+                if not file_url:
+                    file_url = f"{base_url}/storage/v1/object/public/attachments/{item['storage_path']}"
+            result.append(AttachmentResponse(**item, file_url=file_url))
+        return result
 
     # ==============================================================================
     # 2. AI Duplicate Detection (Vector Search / pgvector)

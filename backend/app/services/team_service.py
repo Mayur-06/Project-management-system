@@ -97,7 +97,6 @@ class TeamService:
                     "organization_id": org_id,
                     "name": data.name,
                     "key": key_upper,
-                    "cycle_duration_weeks": data.cycle_duration_weeks or 2,
                     "issue_counter": 0,
                 }
             )
@@ -219,8 +218,6 @@ class TeamService:
                         detail=f"Team key '{new_key}' is already used by another team in this workspace",
                     )
                 update_dict["key"] = new_key
-        if data.cycle_duration_weeks is not None:
-            update_dict["cycle_duration_weeks"] = data.cycle_duration_weeks
 
         if update_dict:
             res = db.table("teams").update(update_dict).eq("id", team_id).execute()
