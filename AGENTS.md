@@ -25,6 +25,7 @@ This document serves as the global fallback system prompt, execution rubric, and
 - **Context Exclusion:** Never read, scan, index, or modify files inside `.next/`, `node_modules/`, `out/`, `build/`, or `.git/`.
   - Treat all build outputs, packaged artifacts, and version control internals as strictly out-of-scope for agent context and tool inspection.
   - Filter directory listing and grep routines to bypass these directories to protect token budgets and prevent context pollution.
+- **Unused Code & File Cleanup:** After completing any implementation, refactor, bug fix, or migration, always remove any unused code, dead imports, obsolete components, leftover helpers, and deprecated files across all related files. Never leave orphaned code, dead call sites, or superseded files behind in the workspace.
 - **Precedence Rule:** Explicitly note that localized rules files located within the `.antigravity/rules/` directory take absolute priority over this global fallback file.
   - When localized rule configurations or directory-specific instructions conflict with instructions in `AGENTS.md`, agents must prioritize the localized rules.
   - Global guidelines in this file serve as defaults when no scoped override exists.

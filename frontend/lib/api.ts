@@ -203,6 +203,82 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
   return promise;
 }
 
+// ─────────────────────────────────────────────────────────────
+// SWR In-Memory Cache
+// ─────────────────────────────────────────────────────────────
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+const memoryCache = new Map<string, CacheEntry<unknown>>();
+const issueLookupCache = new Map<string, Issue>();
+const issuesByTeamCache = new Map<string, Issue[]>();
+
+const DEFAULT_SWR_TTL_MS = 30_000; // 30s fresh window
+const MAX_STALE_TTL_MS = 5 * 60_000; // 5min stale revalidation window
+
+export function getCachedData<T>(key: string): T | null {
+  const entry = memoryCache.get(key);
+  if (!entry) return null;
+  return entry.data as T;
+}
+
+export function setCachedData<T>(key: string, data: T): void {
+  memoryCache.set(key, { data, timestamp: Date.now() });
+}
+
+export function invalidateCache(pattern?: string): void {
+  if (!pattern) {
+    memoryCache.clear();
+    issueLookupCache.clear();
+    issuesByTeamCache.clear();
+    return;
+  }
+  for (const key of Array.from(memoryCache.keys())) {
+    if (key.includes(pattern)) {
+      memoryCache.delete(key);
+    }
+  }
+}
+
+/**
+ * Executes a GET request with Stale-While-Revalidate semantics.
+ * If data is cached and within fresh TTL, returns cached data immediately (0ms).
+ * If data is stale, returns cached data immediately while revalidating in the background.
+ * If data is not cached, fetches synchronously and caches.
+ */
+async function fetchWithAuthSWR<T>(endpoint: string, options: RequestInit = {}, ttlMs: number = DEFAULT_SWR_TTL_MS): Promise<T | null> {
+  const cacheKey = `SWR:${endpoint}`;
+  const now = Date.now();
+  const entry = memoryCache.get(cacheKey) as CacheEntry<T> | undefined;
+
+  if (entry) {
+    const age = now - entry.timestamp;
+    if (age < ttlMs) {
+      // 0ms instant cache hit
+      return entry.data;
+    }
+
+    if (age < MAX_STALE_TTL_MS) {
+      // Stale-while-revalidate: return stale data immediately, revalidate in background
+      fetchWithAuth<T>(endpoint, options).then((freshData) => {
+        if (freshData !== null) {
+          memoryCache.set(cacheKey, { data: freshData, timestamp: Date.now() });
+        }
+      }).catch(() => {});
+      return entry.data;
+    }
+  }
+
+  // Cold fetch
+  const freshData = await fetchWithAuth<T>(endpoint, options);
+  if (freshData !== null) {
+    memoryCache.set(cacheKey, { data: freshData, timestamp: Date.now() });
+  }
+  return freshData;
+}
+
 export interface SignInResponse {
   user: {
     id: string;
@@ -327,18 +403,22 @@ export const api = {
   },
 
   async getWorkspace(orgSlug: string): Promise<Organization | null> {
-    return await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`);
+    return await fetchWithAuthSWR<Organization>(`/workspaces/${orgSlug}`);
   },
 
   async updateWorkspace(orgSlug: string, updates: Partial<Organization>): Promise<Organization | null> {
-    return await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`, {
+    const res = await fetchWithAuth<Organization>(`/workspaces/${orgSlug}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
+    if (res) {
+      invalidateCache(`/workspaces/${orgSlug}`);
+    }
+    return res;
   },
 
   async getWorkspaceMembers(orgSlug: string): Promise<WorkspaceMember[]> {
-    const data = await fetchWithAuth<WorkspaceMember[]>(`/workspaces/${orgSlug}/members`);
+    const data = await fetchWithAuthSWR<WorkspaceMember[]>(`/workspaces/${orgSlug}/members`);
     return data || [];
   },
 
@@ -397,38 +477,46 @@ export const api = {
     const options: RequestInit = authToken
       ? { headers: { Authorization: `Bearer ${authToken}` } }
       : {};
-    const data = await fetchWithAuth<Team[]>(`/workspaces/${orgSlug}/teams`, options);
+    const data = await fetchWithAuthSWR<Team[]>(`/workspaces/${orgSlug}/teams`, options);
     return data || [];
   },
 
   async updateTeam(teamId: string, updates: Partial<Team>): Promise<Team | null> {
-    return await fetchWithAuth<Team>(`/teams/${teamId}`, {
+    const res = await fetchWithAuth<Team>(`/teams/${teamId}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),
     });
+    if (res) {
+      invalidateCache(`/teams/${teamId}`);
+      invalidateCache('/teams');
+    }
+    return res;
   },
 
   async getTeamMembers(teamId: string): Promise<any[]> {
-    const data = await fetchWithAuth<any[]>(`/teams/${teamId}/members`);
+    const data = await fetchWithAuthSWR<any[]>(`/teams/${teamId}/members`);
     return data || [];
   },
 
   async addTeamMember(teamId: string, userId: string): Promise<any | null> {
-    return await fetchWithAuth<any>(`/teams/${teamId}/members`, {
+    const res = await fetchWithAuth<any>(`/teams/${teamId}/members`, {
       method: 'POST',
       body: JSON.stringify({ user_id: userId }),
     });
+    invalidateCache(`/teams/${teamId}/members`);
+    return res;
   },
 
   async removeTeamMember(teamId: string, userId: string): Promise<boolean> {
     await fetchWithAuth<any>(`/teams/${teamId}/members/${userId}`, {
       method: 'DELETE',
     });
+    invalidateCache(`/teams/${teamId}/members`);
     return true;
   },
 
   async getWorkflowStates(teamId: string): Promise<WorkflowState[]> {
-    const data = await fetchWithAuth<WorkflowState[]>(`/teams/${teamId}/states`);
+    const data = await fetchWithAuthSWR<WorkflowState[]>(`/teams/${teamId}/states`);
     return data || [];
   },
 
@@ -439,8 +527,19 @@ export const api = {
     if (params?.stateId) query.append('state_id', params.stateId);
 
     const qs = query.toString();
-    const data = await fetchWithAuth<Issue[]>(`/issues${qs ? `?${qs}` : ''}`);
-    return data || [];
+    const endpoint = `/issues${qs ? `?${qs}` : ''}`;
+    const data = await fetchWithAuthSWR<Issue[]>(endpoint);
+    const issues = data || [];
+
+    // Seed individual lookups
+    for (const item of issues) {
+      if (item.id) issueLookupCache.set(item.id, item);
+      if (item.identifier) issueLookupCache.set(item.identifier.toUpperCase(), item);
+    }
+    if (params?.teamId) {
+      issuesByTeamCache.set(params.teamId, issues);
+    }
+    return issues;
   },
 
   async getInbox(orgSlug: string, offset = 0, limit = 50): Promise<InboxItem[] | null> {
@@ -448,23 +547,40 @@ export const api = {
   },
 
   async getIssue(idOrKey: string): Promise<Issue | null> {
-    return await fetchWithAuth<Issue>(`/issues/${idOrKey}`);
+    const cached = issueLookupCache.get(idOrKey) || issueLookupCache.get(idOrKey.toUpperCase());
+    const data = await fetchWithAuthSWR<Issue>(`/issues/${idOrKey}`);
+    const result = data || cached || null;
+    if (result) {
+      if (result.id) issueLookupCache.set(result.id, result);
+      if (result.identifier) issueLookupCache.set(result.identifier.toUpperCase(), result);
+    }
+    return result;
   },
 
   async createIssue(issue: Partial<Issue> & { label_ids?: string[] }): Promise<Issue | null> {
     const sessionId = getClientSessionId();
-    return await fetchWithAuth<Issue>(`/issues`, {
+    const created = await fetchWithAuth<Issue>(`/issues`, {
       method: 'POST',
       body: JSON.stringify({ ...issue, client_session_id: sessionId }),
     });
+    if (created) {
+      this.setCachedIssue(created);
+      invalidateCache('/issues');
+    }
+    return created;
   },
 
   async updateIssue(id: string, updates: Partial<Issue> & { expected_version?: number; label_ids?: string[] }): Promise<Issue | null> {
     const sessionId = getClientSessionId();
-    return await fetchWithAuth<Issue>(`/issues/${id}`, {
+    const updated = await fetchWithAuth<Issue>(`/issues/${id}`, {
       method: 'PATCH',
       body: JSON.stringify({ ...updates, client_session_id: sessionId }),
     });
+    if (updated) {
+      this.setCachedIssue(updated);
+      invalidateCache('/issues');
+    }
+    return updated;
   },
 
   async reorderIssue(
@@ -474,7 +590,7 @@ export const api = {
     next_position?: string
   ): Promise<Issue | null> {
     const sessionId = getClientSessionId();
-    return await fetchWithAuth<Issue>(`/issues/${id}/reorder`, {
+    const reordered = await fetchWithAuth<Issue>(`/issues/${id}/reorder`, {
       method: 'PUT',
       body: JSON.stringify({
         state_id,
@@ -483,6 +599,11 @@ export const api = {
         client_session_id: sessionId,
       }),
     });
+    if (reordered) {
+      this.setCachedIssue(reordered);
+      invalidateCache('/issues');
+    }
+    return reordered;
   },
 
   async createSubtask(
@@ -508,6 +629,10 @@ export const api = {
           },
         }
       );
+      if (response.ok) {
+        issueLookupCache.delete(id);
+        invalidateCache('/issues');
+      }
       return response.ok;
     } catch {
       return false;
@@ -528,6 +653,27 @@ export const api = {
         body_json: { type: 'doc', content: [] },
       }),
     });
+  },
+
+  async updateComment(commentId: string, bodyText: string): Promise<IssueComment | null> {
+    return await fetchWithAuth<IssueComment>(`/comments/${commentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        body_text: bodyText,
+        body_json: { type: 'doc', content: [] },
+      }),
+    });
+  },
+
+  async deleteComment(commentId: string, hard = true): Promise<boolean> {
+    try {
+      await fetchWithAuth(`/comments/${commentId}?hard=${hard}`, {
+        method: 'DELETE',
+      });
+      return true;
+    } catch {
+      return false;
+    }
   },
 
   // Activity
@@ -602,7 +748,7 @@ export const api = {
 
   // Labels
   async getLabels(organizationId: string): Promise<Label[]> {
-    const data = await fetchWithAuth<Label[]>(`/labels?organization_id=${encodeURIComponent(organizationId)}`);
+    const data = await fetchWithAuthSWR<Label[]>(`/labels?organization_id=${encodeURIComponent(organizationId)}`);
     return data || [];
   },
 
@@ -629,7 +775,7 @@ export const api = {
     fileName: string,
     fileSize: number,
     mimeType: string
-  ): Promise<{ attachment_id: string; issue_id: string; upload_url: string; storage_path: string; file_name: string } | null> {
+  ): Promise<{ attachment_id: string; issue_id: string; upload_url: string; storage_path: string; file_name: string; file_url?: string } | null> {
     return await fetchWithAuth(`/attachments/upload-url`, {
       method: 'POST',
       body: JSON.stringify({
@@ -674,7 +820,7 @@ export const api = {
     onEvent: (event: { type: string; data: any }) => void,
     signal?: AbortSignal
   ): Promise<void> {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
+    const token = await getValidToken();
     const response = await fetch(`${API_BASE}/ai/chat/stream`, {
       method: 'POST',
       headers: {
@@ -692,6 +838,7 @@ export const api = {
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
+    let currentEvent = 'message';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -701,7 +848,6 @@ export const api = {
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
 
-      let currentEvent = 'message';
       for (const line of lines) {
         const trimmed = line.trim();
         if (trimmed.startsWith('event:')) {
@@ -714,8 +860,42 @@ export const api = {
           } catch {
             onEvent({ type: currentEvent, data: jsonStr });
           }
+        } else if (trimmed === '') {
+          currentEvent = 'message';
         }
       }
     }
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // Synchronous Cache Accessors
+  // ─────────────────────────────────────────────────────────────
+  getCachedIssue(idOrIdentifier: string): Issue | null {
+    if (!idOrIdentifier) return null;
+    return issueLookupCache.get(idOrIdentifier) || issueLookupCache.get(idOrIdentifier.toUpperCase()) || null;
+  },
+
+  setCachedIssue(issue: Issue): void {
+    if (!issue) return;
+    if (issue.id) issueLookupCache.set(issue.id, issue);
+    if (issue.identifier) issueLookupCache.set(issue.identifier.toUpperCase(), issue);
+
+    if (issue.team_id && issuesByTeamCache.has(issue.team_id)) {
+      const list = issuesByTeamCache.get(issue.team_id)!;
+      const idx = list.findIndex((i) => i.id === issue.id || (i.identifier && i.identifier === issue.identifier));
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...issue };
+      } else {
+        list.unshift(issue);
+      }
+    }
+  },
+
+  getCachedIssues(teamId: string): Issue[] | null {
+    return issuesByTeamCache.get(teamId) || null;
+  },
+
+  invalidateCache(pattern?: string): void {
+    invalidateCache(pattern);
   },
 };

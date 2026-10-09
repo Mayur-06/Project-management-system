@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -24,7 +24,6 @@ import { api } from '@/lib/api';
 import { Organization, Team, User, UserWorkspaceItem } from '@/types';
 import { Check, Building2, ExternalLink } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/UserAvatar';
-import { WorkspaceSidebarSkeleton } from '@/components/skeletons/WorkspaceSidebarSkeleton';
 
 interface WorkspaceSidebarProps {
   currentOrgSlug?: string;
@@ -53,7 +52,30 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const [userWorkspaces, setUserWorkspaces] = useState<UserWorkspaceItem[]>([]);
 
   const [orgState, setOrgState] = useState<Organization | null>(organization || null);
-  const orgName = orgState?.name || organization?.name || currentOrgSlug.toUpperCase();
+
+  useEffect(() => {
+    if (organization) {
+      setOrgState(organization);
+    } else if (currentOrgSlug) {
+      try {
+        const cached = localStorage.getItem(`pms_org_${currentOrgSlug}`);
+        if (cached) setOrgState(JSON.parse(cached));
+      } catch {}
+    }
+  }, [organization, currentOrgSlug]);
+
+  const orgName = useMemo(() => {
+    if (orgState?.name) return orgState.name;
+    if (organization?.name) return organization.name;
+    if (currentOrgSlug) {
+      return currentOrgSlug
+        .split('-')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+    }
+    return 'Workspace';
+  }, [orgState?.name, organization?.name, currentOrgSlug]);
+
   const activeTeam = teams.find((t) => t.key.toUpperCase() === currentTeamKey.toUpperCase()) || teams[0] || null;
   const effectiveTeamKey = (currentTeamKey || activeTeam?.key || '').toLowerCase();
 
@@ -98,10 +120,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     }
   };
 
-  if (!organization && (!teams || teams.length === 0)) {
-    return <WorkspaceSidebarSkeleton />;
-  }
-
   const navItems: { label: string; href: string; icon: React.ReactNode; badge?: string | number }[] = [
     {
       label: 'Inbox',
@@ -115,7 +133,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     },
     {
       label: 'AI Assistant',
-      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/ai` : `/${currentOrgSlug}/ai`,
+      href: `/${currentOrgSlug}/ai`,
       icon: <Sparkles className="w-4 h-4 text-zinc-300" />,
     },
     {
@@ -131,14 +149,20 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       <div className="flex flex-col relative">
         <div className="p-3 border-b border-border-subtle flex items-center justify-between">
           <button
+            suppressHydrationWarning
             onClick={() => setIsWorkspaceDropdownOpen((prev) => !prev)}
             className="flex items-center gap-2.5 w-full hover:bg-zinc-900/60 p-1 rounded-md transition-colors text-left cursor-pointer"
           >
-            <div className="w-6 h-6 rounded bg-white text-black flex items-center justify-center font-bold text-xs shadow-xs shrink-0">
+            <div
+              suppressHydrationWarning
+              className="w-6 h-6 rounded bg-white text-black flex items-center justify-center font-bold text-xs shadow-xs shrink-0"
+            >
               {orgName.charAt(0)}
             </div>
             <div className="flex items-center justify-between flex-1 min-w-0">
-              <span className="font-semibold text-white truncate text-xs">{orgName}</span>
+              <span suppressHydrationWarning className="font-semibold text-white truncate text-xs">
+                {orgName}
+              </span>
               <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform ${isWorkspaceDropdownOpen ? 'rotate-180' : ''}`} />
             </div>
           </button>
@@ -229,7 +253,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         </div>
 
         {/* Teams Section */}
-        {teams.length > 0 && (
+        {teams.length > 0 ? (
           <div className="px-2 py-3 space-y-0.5 border-t border-border-subtle">
             <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 flex items-center justify-between">
               <span>Teams</span>
@@ -301,12 +325,17 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               );
             })}
           </div>
+        ) : (
+          <div className="px-3 py-3 space-y-2 border-t border-border-subtle">
+            <div className="h-3 w-16 bg-zinc-800/40 rounded animate-pulse" />
+            <div className="h-6 w-full bg-zinc-900/30 rounded animate-pulse" />
+          </div>
         )}
       </div>
 
       {/* User Footer */}
-      <div className="p-3 border-t border-[#1a1c21] flex items-center justify-between bg-[#0a0b0c]">
-        <div className="flex items-center gap-2.5 overflow-hidden">
+      <div suppressHydrationWarning className="p-3 border-t border-[#1a1c21] flex items-center justify-between bg-[#0a0b0c]">
+        <div suppressHydrationWarning className="flex items-center gap-2.5 overflow-hidden">
           <UserAvatar
             name={currentUser?.name}
             email={currentUser?.email}
@@ -314,10 +343,10 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             size="lg"
           />
           <div className="flex flex-col min-w-0">
-            <span className="text-xs font-medium text-zinc-200 truncate">
+            <span suppressHydrationWarning className="text-xs font-medium text-zinc-200 truncate">
               {currentUser?.name || 'Workspace User'}
             </span>
-            <span className="text-[10px] text-zinc-500 truncate">{currentUser?.email || ''}</span>
+            <span suppressHydrationWarning className="text-[10px] text-zinc-500 truncate">{currentUser?.email || ''}</span>
           </div>
         </div>
         <div className="flex items-center gap-1">

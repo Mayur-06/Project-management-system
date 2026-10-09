@@ -17,6 +17,11 @@ from app.schemas.workspace import (
 )
 
 
+from app.core.database import get_supabase_admin
+
+_USER_INFO_CACHE: Dict[str, tuple[str, str]] = {}
+
+
 class WorkspaceService:
     @staticmethod
     def reconcile_user_invitations(user_id: str, email: Optional[str], db: Client) -> None:
@@ -271,28 +276,47 @@ class WorkspaceService:
         return OrganizationResponse(**org)
 
     @staticmethod
-    def resolve_user_info(user_id: str, db: Client) -> tuple[str, str]:
+    def resolve_user_info(user_id: str, db: Optional[Client] = None) -> tuple[str, str]:
         """
         Resolves real email and display name for a user_id from Supabase Auth admin
-        or workspace invitations, with graceful fallback.
+        or workspace invitations, with in-memory caching and graceful fallback.
         """
+        if not user_id:
+            return "user@workspace.internal", "Member"
+
+        if user_id in _USER_INFO_CACHE:
+            return _USER_INFO_CACHE[user_id]
+
+        target_client = db or get_supabase_admin()
         try:
-            admin_user = db.auth.admin.get_user_by_id(user_id)
+            admin_user = target_client.auth.admin.get_user_by_id(user_id)
             if admin_user and hasattr(admin_user, "user") and admin_user.user:
                 raw_email = getattr(admin_user.user, "email", None)
                 if isinstance(raw_email, str) and "@" in raw_email:
                     meta = getattr(admin_user.user, "user_metadata", {})
                     raw_name = meta.get("full_name") if isinstance(meta, dict) else None
                     name = raw_name if isinstance(raw_name, str) else raw_email.split("@")[0]
+                    _USER_INFO_CACHE[user_id] = (raw_email, name)
                     return raw_email, name
-        except Exception as exc:
-            import traceback
-            print(f"[ERROR resolve_user_info] get_user_by_id failed for {user_id}: {exc}\n{traceback.format_exc()}")
-            pass
+        except Exception:
+            # If target_client was a user client without admin rights, fallback to authoritative admin client
+            try:
+                admin_user = get_supabase_admin().auth.admin.get_user_by_id(user_id)
+                if admin_user and hasattr(admin_user, "user") and admin_user.user:
+                    raw_email = getattr(admin_user.user, "email", None)
+                    if isinstance(raw_email, str) and "@" in raw_email:
+                        meta = getattr(admin_user.user, "user_metadata", {})
+                        raw_name = meta.get("full_name") if isinstance(meta, dict) else None
+                        name = raw_name if isinstance(raw_name, str) else raw_email.split("@")[0]
+                        _USER_INFO_CACHE[user_id] = (raw_email, name)
+                        return raw_email, name
+            except Exception:
+                pass
 
+        lookup_db = db or get_supabase_admin()
         try:
             inv_res = (
-                db.table("workspace_invitations")
+                lookup_db.table("workspace_invitations")
                 .select("email")
                 .or_(f"id.eq.{user_id},invited_by.eq.{user_id}")
                 .limit(1)
@@ -301,11 +325,15 @@ class WorkspaceService:
             if inv_res.data and isinstance(inv_res.data, list) and len(inv_res.data) > 0:
                 raw_email = inv_res.data[0].get("email")
                 if isinstance(raw_email, str) and "@" in raw_email:
-                    return raw_email, raw_email.split("@")[0]
+                    result = (raw_email, raw_email.split("@")[0])
+                    _USER_INFO_CACHE[user_id] = result
+                    return result
         except Exception:
             pass
 
-        return f"user-{str(user_id)[:6]}@workspace.internal", f"Member {str(user_id)[:4]}"
+        fallback = (f"user-{str(user_id)[:6]}@workspace.internal", f"Member {str(user_id)[:4]}")
+        _USER_INFO_CACHE[user_id] = fallback
+        return fallback
 
     @classmethod
     def list_workspace_members(

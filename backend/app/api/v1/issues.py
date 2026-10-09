@@ -248,14 +248,15 @@ async def update_comment(
 @router.delete(
     "/comments/{comment_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Soft-delete a comment (author or admin)",
+    summary="Delete a comment (soft or hard delete by author)",
 )
 async def delete_comment(
     comment_id: str,
+    hard: bool = Query(False, description="Whether to permanently hard-delete the comment"),
     current_user: AuthenticatedUser = Depends(get_current_user),
     db: Client = Depends(get_admin_db),
 ):
-    IssueService.delete_comment(comment_id, current_user.id, db)
+    IssueService.delete_comment(comment_id, current_user.id, db, hard=hard)
 
 
 @router.post(

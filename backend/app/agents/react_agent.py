@@ -23,7 +23,7 @@ from app.agents.tools.workspace_tools import (
 )
 from app.core.ai_client import generate_llm_completion, stream_llm_completion
 
-COPILOT_SYSTEM_PROMPT = """You are an elite, modern engineering and product copilot embedded in a high-velocity project workspace (like Linear).
+COPILOT_SYSTEM_PROMPT = """You are an elite, modern engineering and product copilot embedded in a high-velocity project workspace.
 You act as a Principal / Staff Engineer and Product Lead.
 Core Principles:
 1. Provide sharp, high-impact, practical, and direct answers.
@@ -146,7 +146,7 @@ class LinearAskAgent:
                     f"If cycle metrics data is empty or null, inform the user concisely that no active cycle is configured for this team. "
                     f"Otherwise provide a friendly 1-2 sentence engineering sprint velocity summary."
                 ),
-                system_instruction="You are Linear Ask, an ultra-fast engineering project assistant."
+                system_instruction="You are Workspace Copilot, an ultra-fast engineering project assistant."
             )
             if llm_summary:
                 summary = llm_summary.strip()
@@ -258,7 +258,7 @@ class LinearAskAgent:
             # Dynamic LLM synthesis if API key is provided
             llm_summary = generate_llm_completion(
                 prompt=f"User asked: '{query}'\nTool results from issues database: {json.dumps(tool_res)}\nSummarize these results clearly and concisely for the user.",
-                system_instruction="You are Linear Ask, a helpful, ultra-concise assistant for a modern engineering project management system."
+                system_instruction="You are Workspace Copilot, a helpful, ultra-concise assistant for a modern engineering project management system."
             )
             if llm_summary:
                 summary = llm_summary.strip()

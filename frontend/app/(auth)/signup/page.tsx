@@ -137,12 +137,7 @@ export default function SignupPage() {
       try {
         await api.register(name.trim(), email.trim(), password);
       } catch (backendErr: any) {
-        console.warn('Backend admin signup fallback:', backendErr);
-        if (backendErr?.message && !backendErr.message.toLowerCase().includes('already registered')) {
-          setErrorMsg(backendErr.message);
-          setLoading(false);
-          return;
-        }
+        console.warn('Backend admin signup fallback to direct signup:', backendErr);
       }
 
       // 2. Sign in via backend signin endpoint to acquire the real Supabase JWT session
@@ -240,13 +235,17 @@ export default function SignupPage() {
 
       // 5. Create initial default team with workflow states
       let createdTeam: any = null;
-      try {
-        createdTeam = await api.createTeam(createdOrg.slug, {
-          name: cleanTeamName,
-          key: cleanKey,
-        });
-      } catch (teamErr: any) {
-        console.warn('Team creation error:', teamErr);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          createdTeam = await api.createTeam(createdOrg.slug, {
+            name: cleanTeamName,
+            key: cleanKey,
+          });
+          if (createdTeam?.id) break;
+        } catch (teamErr: any) {
+          console.warn(`Team creation attempt ${attempt + 1} failed:`, teamErr);
+          await new Promise((r) => setTimeout(r, 600));
+        }
       }
 
       const finalKey = (createdTeam?.key || cleanKey).toLowerCase();

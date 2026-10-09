@@ -47,7 +47,7 @@ class IssueUpdate(BaseModel):
     completed_at: Optional[datetime] = None
     canceled_at: Optional[datetime] = None
     # Concurrency control & echo suppression
-    expected_version: int
+    expected_version: Optional[int] = None
     client_session_id: Optional[str] = None
 
 
@@ -169,6 +169,7 @@ class CommentResponse(BaseModel):
     id: str
     issue_id: str
     user_id: str
+    user: Optional[IssueAssigneeUser] = None
     body_json: Dict[str, Any]
     body_text: str
     created_at: datetime

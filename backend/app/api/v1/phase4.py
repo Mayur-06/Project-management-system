@@ -118,7 +118,7 @@ async def resume_breakdown(
 
 
 # ==============================================================================
-# 4. Linear Ask: ReAct Workspace Assistant (SSE Stream)
+# 4. Workspace Copilot: ReAct Assistant (SSE Stream)
 # ==============================================================================
 
 from app.agents.react_agent import LinearAskAgent
@@ -128,7 +128,7 @@ from fastapi import Request
 
 @router.post(
     "/ai/chat/stream",
-    summary="Server-Sent Events (SSE) stream for Linear Ask ReAct agent with tool execution",
+    summary="Server-Sent Events (SSE) stream for Workspace Copilot ReAct agent with tool execution",
 )
 async def chat_stream(
     request: Request,
@@ -157,7 +157,7 @@ async def chat_stream(
 @router.post(
     "/ai/chat/action/confirm",
     response_model=ChatActionConfirmResponse,
-    summary="Executes confirmed Human-in-the-Loop mutating action from Linear Ask ReAct agent",
+    summary="Executes confirmed Human-in-the-Loop mutating action from Workspace Copilot ReAct agent",
 )
 async def confirm_chat_action(
     payload: ChatActionConfirmRequest,

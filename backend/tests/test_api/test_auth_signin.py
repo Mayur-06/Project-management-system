@@ -79,3 +79,33 @@ def test_signin_invalid_email_format_returns_422(client):
         json={"email": "not-a-valid-email", "password": "some_password"},
     )
     assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+
+def test_login_alias_success(client, mock_db):
+    """Verify /auth/login functions as a transparent alias to /auth/signin."""
+    mock_user = MagicMock()
+    mock_user.id = "user-1234-uuid"
+    mock_user.email = "test@example.com"
+    mock_user.user_metadata = {"full_name": "Test Tester"}
+
+    mock_session = MagicMock()
+    mock_session.access_token = "access-token-xyz"
+    mock_session.refresh_token = "refresh-token-abc"
+    mock_session.token_type = "bearer"
+    mock_session.expires_in = 3600
+    mock_session.expires_at = 1700003600
+
+    mock_auth_res = MagicMock()
+    mock_auth_res.user = mock_user
+    mock_auth_res.session = mock_session
+
+    mock_db.auth.sign_in_with_password.return_value = mock_auth_res
+
+    res = client.post(
+        "/api/v1/auth/login",
+        json={"email": "test@example.com", "password": "password123"},
+    )
+
+    assert res.status_code == status.HTTP_200_OK
+    assert res.json()["session"]["access_token"] == "access-token-xyz"
+
