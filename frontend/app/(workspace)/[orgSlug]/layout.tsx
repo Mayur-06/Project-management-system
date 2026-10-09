@@ -35,67 +35,75 @@ export default function OrgRootLayout({ children }: { children: React.ReactNode 
   useEffect(() => {
     let isMounted = true;
 
-    // 1. Parallel workspace-level data fetching (starts immediately without waiting for auth session state)
-    if (orgSlug) {
-      Promise.all([
-        api.getWorkspace(orgSlug),
-        api.getTeams(orgSlug),
-        api.getWorkspaceMembers(orgSlug),
-      ]).then(([org, fetchedTeams, members]) => {
-        if (!isMounted) return;
-        if (org) {
-          setOrganization(org);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(`pms_org_${orgSlug}`, JSON.stringify(org));
-          }
-        }
-        if (fetchedTeams) {
-          setTeams(fetchedTeams);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem(`pms_teams_${orgSlug}`, JSON.stringify(fetchedTeams));
-          }
-        }
-        const active = (members || []).filter((m) => m.status !== 'invited' && m.user);
-        setWorkspaceUsers(active);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(`pms_members_${orgSlug}`, JSON.stringify(active));
-        }
-      }).catch((err) => {
-        console.error('Failed to load workspace data', err);
-      });
-    }
+    const initWorkspace = async () => {
+      // 1. Resolve auth session first to ensure token is ready
+      let token = typeof window !== 'undefined' ? localStorage.getItem('supabase_access_token') : null;
 
-    // 2. Concurrently resolve and hydrate user session & memoized token
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!isMounted) return;
-      const user = session?.user;
-      if (user) {
-        if (session.access_token) {
-          setMemoizedToken(session.access_token, session.expires_at);
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('supabase_access_token', session.access_token);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        const user = session?.user;
+        if (user) {
+          if (session.access_token) {
+            token = session.access_token;
+            setMemoizedToken(session.access_token, session.expires_at);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('supabase_access_token', session.access_token);
+            }
           }
+          const userProfile: User = {
+            id: user.id,
+            email: user.email || 'user@example.com',
+            name: (user.user_metadata?.full_name as string) || user.email?.split('@')[0] || 'Workspace User',
+            avatar_url: (user.user_metadata?.avatar_url as string) || undefined,
+            job_description: (user.user_metadata?.job_description as string) || '',
+          };
+          setCurrentUser(userProfile);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('pms_current_user', JSON.stringify(userProfile));
+          }
+        } else {
+          // If unauthenticated, short-circuit and do not make layout calls
+          return;
         }
-        const userProfile = {
-          id: user.id,
-          email: user.email || 'user@example.com',
-          name: (user.user_metadata?.full_name as string) || user.email?.split('@')[0] || 'Workspace User',
-          avatar_url: (user.user_metadata?.avatar_url as string) || undefined,
-          job_description: (user.user_metadata?.job_description as string) || '',
-        };
-        setCurrentUser(userProfile);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('pms_current_user', JSON.stringify(userProfile));
-        }
-      } else {
-        setCurrentUser({
-          id: 'anonymous-user',
-          email: 'member@workspace.com',
-          name: 'Workspace Member',
-          job_description: '',
-        });
+      } catch (err) {
+        console.error('Failed to resolve auth session', err);
+        return;
       }
-    }).catch(() => {});
+
+      // 2. Fetch workspace resources only after authenticating
+      if (orgSlug && token) {
+        try {
+          const [org, fetchedTeams, members] = await Promise.all([
+            api.getWorkspace(orgSlug),
+            api.getTeams(orgSlug),
+            api.getWorkspaceMembers(orgSlug),
+          ]);
+          if (!isMounted) return;
+          if (org) {
+            setOrganization(org);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`pms_org_${orgSlug}`, JSON.stringify(org));
+            }
+          }
+          if (fetchedTeams) {
+            setTeams(fetchedTeams);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(`pms_teams_${orgSlug}`, JSON.stringify(fetchedTeams));
+            }
+          }
+          const active = (members || []).filter((m) => m.status !== 'invited' && m.user);
+          setWorkspaceUsers(active);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`pms_members_${orgSlug}`, JSON.stringify(active));
+          }
+        } catch (err) {
+          console.error('Failed to load workspace data', err);
+        }
+      }
+    };
+
+    initWorkspace();
 
     return () => {
       isMounted = false;

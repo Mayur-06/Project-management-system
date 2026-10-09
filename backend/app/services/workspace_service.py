@@ -284,34 +284,38 @@ class WorkspaceService:
         if not user_id:
             return "user@workspace.internal", "Member"
 
-        if user_id in _USER_INFO_CACHE:
-            return _USER_INFO_CACHE[user_id]
+        cached = _USER_INFO_CACHE.get(user_id)
+        if cached and not cached[0].endswith("@workspace.internal") and not cached[1].startswith("Member "):
+            return cached
 
-        target_client = db or get_supabase_admin()
-        try:
-            admin_user = target_client.auth.admin.get_user_by_id(user_id)
-            if admin_user and hasattr(admin_user, "user") and admin_user.user:
-                raw_email = getattr(admin_user.user, "email", None)
-                if isinstance(raw_email, str) and "@" in raw_email:
-                    meta = getattr(admin_user.user, "user_metadata", {})
-                    raw_name = meta.get("full_name") if isinstance(meta, dict) else None
-                    name = raw_name if isinstance(raw_name, str) else raw_email.split("@")[0]
-                    _USER_INFO_CACHE[user_id] = (raw_email, name)
-                    return raw_email, name
-        except Exception:
-            # If target_client was a user client without admin rights, fallback to authoritative admin client
+        # 1. Try db if provided (supports unit test mocks)
+        if db and hasattr(db, "auth") and hasattr(db.auth, "admin"):
             try:
-                admin_user = get_supabase_admin().auth.admin.get_user_by_id(user_id)
+                admin_user = db.auth.admin.get_user_by_id(user_id)
                 if admin_user and hasattr(admin_user, "user") and admin_user.user:
                     raw_email = getattr(admin_user.user, "email", None)
                     if isinstance(raw_email, str) and "@" in raw_email:
-                        meta = getattr(admin_user.user, "user_metadata", {})
-                        raw_name = meta.get("full_name") if isinstance(meta, dict) else None
-                        name = raw_name if isinstance(raw_name, str) else raw_email.split("@")[0]
+                        meta = getattr(admin_user.user, "user_metadata", {}) or {}
+                        raw_name = meta.get("full_name") or meta.get("name")
+                        name = raw_name if isinstance(raw_name, str) and raw_name.strip() else raw_email.split("@")[0]
                         _USER_INFO_CACHE[user_id] = (raw_email, name)
                         return raw_email, name
             except Exception:
                 pass
+
+        # 2. Authoritative system admin client fallback for production
+        try:
+            admin_user = get_supabase_admin().auth.admin.get_user_by_id(user_id)
+            if admin_user and hasattr(admin_user, "user") and admin_user.user:
+                raw_email = getattr(admin_user.user, "email", None)
+                if isinstance(raw_email, str) and "@" in raw_email:
+                    meta = getattr(admin_user.user, "user_metadata", {}) or {}
+                    raw_name = meta.get("full_name") or meta.get("name")
+                    name = raw_name if isinstance(raw_name, str) and raw_name.strip() else raw_email.split("@")[0]
+                    _USER_INFO_CACHE[user_id] = (raw_email, name)
+                    return raw_email, name
+        except Exception:
+            pass
 
         lookup_db = db or get_supabase_admin()
         try:
@@ -371,6 +375,19 @@ class WorkspaceService:
             .order("created_at")
             .execute()
         )
+
+        # Batch preload user information to eliminate sequential N+1 HTTP calls
+        try:
+            admin_client = get_supabase_admin()
+            admin_users = admin_client.auth.admin.list_users(per_page=1000)
+            for u in admin_users:
+                u_email = getattr(u, "email", None)
+                if u_email and isinstance(u_email, str) and "@" in u_email:
+                    u_meta = getattr(u, "user_metadata", {}) or {}
+                    u_name = u_meta.get("full_name") or u_meta.get("name") or u_email.split("@")[0]
+                    _USER_INFO_CACHE[u.id] = (u_email, u_name)
+        except Exception:
+            pass
 
         results: List[WorkspaceMemberResponse] = []
         for m in (members_res.data or []):

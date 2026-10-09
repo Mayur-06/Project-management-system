@@ -13,6 +13,7 @@ import { Loader2, Check, AlertCircle, Plus, Trash2, Users } from 'lucide-react';
 import { Team } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
+import { toast } from 'sonner';
 
 export default function TeamSettingsPage() {
   const params = useParams();
@@ -33,8 +34,6 @@ export default function TeamSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingMember, setIsAddingMember] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -61,7 +60,7 @@ export default function TeamSettingsPage() {
       })
       .catch((err) => {
         console.error('Failed to load team data', err);
-        setError('Failed to load team information.');
+        toast.error('Failed to load team information.');
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -77,8 +76,6 @@ export default function TeamSettingsPage() {
     if (!activeTeam || isSaving) return;
 
     setIsSaving(true);
-    setError(null);
-    setSaveSuccess(false);
 
     try {
       const updated = await api.updateTeam(activeTeam.id, {
@@ -88,8 +85,7 @@ export default function TeamSettingsPage() {
 
       if (updated) {
         setActiveTeam(updated);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 2500);
+        toast.success('Team settings saved successfully.');
 
         // If key changed, redirect to new URL
         if (updated.key.toUpperCase() !== teamKey) {
@@ -97,7 +93,7 @@ export default function TeamSettingsPage() {
         }
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to update team settings.');
+      toast.error(err?.message || 'Failed to update team settings.');
     } finally {
       setIsSaving(false);
     }
@@ -106,16 +102,16 @@ export default function TeamSettingsPage() {
   const handleAddMember = async () => {
     if (!activeTeam || !selectedUserToAdd || isAddingMember) return;
     setIsAddingMember(true);
-    setError(null);
 
     try {
       const added = await api.addTeamMember(activeTeam.id, selectedUserToAdd);
       if (added) {
         setTeamMembers((prev) => [...prev.filter((m) => m.user_id !== selectedUserToAdd), added]);
         setSelectedUserToAdd('');
+        toast.success('Member added to team.');
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to add team member.');
+      toast.error(err?.message || 'Failed to add team member.');
     } finally {
       setIsAddingMember(false);
     }
@@ -126,8 +122,9 @@ export default function TeamSettingsPage() {
     try {
       await api.removeTeamMember(activeTeam.id, userId);
       setTeamMembers((prev) => prev.filter((m) => (m.user_id || m.id) !== userId));
+      toast.success('Member removed from team.');
     } catch (err: any) {
-      setError(err?.message || 'Failed to remove team member.');
+      toast.error(err?.message || 'Failed to remove team member.');
     }
   };
 
@@ -166,20 +163,6 @@ export default function TeamSettingsPage() {
           Manage team name, identifier key, and assigned team members.
         </p>
       </div>
-
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-950/50 border border-red-800 text-xs text-red-200">
-          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {saveSuccess && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-950/50 border border-emerald-800 text-xs text-emerald-200">
-          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>Team settings saved successfully.</span>
-        </div>
-      )}
 
       {/* General Team Info Form */}
       <section className="bg-[#13161c]/40 border border-zinc-800/80 rounded-xl p-6 space-y-5">

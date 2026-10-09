@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { Loader2, Check, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
+import { toast } from 'sonner';
 
 export default function WorkspaceSettingsPage() {
   const params = useParams();
@@ -13,8 +14,6 @@ export default function WorkspaceSettingsPage() {
   
   const [orgName, setOrgName] = useState(organization?.name || '');
   const [isSaving, setIsSaving] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (organization?.name) {
@@ -30,17 +29,14 @@ export default function WorkspaceSettingsPage() {
     if (!organization?.slug || !orgName.trim() || isSaving) return;
 
     setIsSaving(true);
-    setSaveSuccess(false);
-    setSaveError(null);
 
     try {
       const updatedOrg = await api.updateWorkspace(organization.slug, { name: orgName.trim() });
       if (updatedOrg) {
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 2500);
+        toast.success('Workspace settings updated successfully');
       }
     } catch (err: any) {
-      setSaveError(err?.message || 'Failed to update workspace settings');
+      toast.error(err?.message || 'Failed to update workspace settings');
     } finally {
       setIsSaving(false);
     }
@@ -102,21 +98,7 @@ export default function WorkspaceSettingsPage() {
 
         {/* Save Footer */}
         {isAdmin && (
-          <div className="flex items-center justify-between pt-2">
-            <div className="flex items-center gap-2">
-              {saveError && (
-                <div className="flex items-center gap-1.5 text-xs text-red-400">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>{saveError}</span>
-                </div>
-              )}
-              {saveSuccess && (
-                <div className="flex items-center gap-1.5 text-xs text-emerald-400">
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Workspace updated successfully</span>
-                </div>
-              )}
-            </div>
+          <div className="flex items-center justify-end pt-2">
 
             <button
               type="submit"

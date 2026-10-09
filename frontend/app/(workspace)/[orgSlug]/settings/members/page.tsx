@@ -16,6 +16,7 @@ import {
 import { WorkspaceMember, Team } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
+import { toast } from 'sonner';
 
 export default function MembersSettingsPage() {
   const params = useParams();
@@ -28,8 +29,6 @@ export default function MembersSettingsPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'member' | 'admin'>('member');
   const [isInviting, setIsInviting] = useState(false);
-  const [inviteSuccess, setInviteSuccess] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const currentMember = workspaceUsers.find((m) => m.user?.email === currentUser?.email);
@@ -81,8 +80,6 @@ export default function MembersSettingsPage() {
     if (!inviteEmail.trim() || !effectiveOrgSlug || isInviting || !isAdmin) return;
     
     setIsInviting(true);
-    setInviteError(null);
-    setInviteSuccess(false);
 
     try {
       const invited = await api.inviteMember(effectiveOrgSlug, inviteEmail.trim(), inviteRole);
@@ -92,11 +89,10 @@ export default function MembersSettingsPage() {
           return [...filtered, invited];
         });
         setInviteEmail('');
-        setInviteSuccess(true);
-        setTimeout(() => setInviteSuccess(false), 2500);
+        toast.success('Invite dispatched! Member added to workspace.');
       }
     } catch (err: any) {
-      setInviteError(err?.message || 'Failed to invite member');
+      toast.error(err?.message || 'Failed to invite member');
     } finally {
       setIsInviting(false);
     }
@@ -196,20 +192,6 @@ export default function MembersSettingsPage() {
               )}
             </button>
           </form>
-
-          {inviteError && (
-            <p className="text-xs text-red-400 flex items-center gap-1.5">
-              <AlertCircle className="w-3.5 h-3.5" />
-              <span>{inviteError}</span>
-            </p>
-          )}
-
-          {inviteSuccess && (
-            <p className="text-xs text-emerald-400 flex items-center gap-1.5">
-              <Check className="w-3.5 h-3.5" />
-              <span>Invite dispatched! Member added to workspace.</span>
-            </p>
-          )}
         </div>
       )}
 
