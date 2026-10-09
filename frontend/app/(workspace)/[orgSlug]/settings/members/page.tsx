@@ -17,15 +17,16 @@ import { WorkspaceMember, Team } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
 import { toast } from 'sonner';
+import { SettingsSkeleton } from '@/components/skeletons/SettingsSkeleton';
 
 export default function MembersSettingsPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) || '';
-  const { organization, currentUser, workspaceUsers } = useWorkspace();
+  const { organization, currentUser, workspaceUsers, teams } = useWorkspace();
   
-  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [members, setMembers] = useState<WorkspaceMember[]>(() => workspaceUsers.length > 0 ? workspaceUsers : []);
   const [userTeamCounts, setUserTeamCounts] = useState<Record<string, number>>({});
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => workspaceUsers.length === 0);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'member' | 'admin'>('member');
   const [isInviting, setIsInviting] = useState(false);
@@ -39,31 +40,8 @@ export default function MembersSettingsPage() {
   const loadMembersAndTeamCounts = async () => {
     if (!effectiveOrgSlug) return;
     try {
-      const [fetchedMembers, fetchedTeams] = await Promise.all([
-        api.getWorkspaceMembers(effectiveOrgSlug),
-        api.getTeams(effectiveOrgSlug),
-      ]);
-
+      const fetchedMembers = await api.getWorkspaceMembers(effectiveOrgSlug);
       setMembers(fetchedMembers || []);
-
-      // Calculate number of teams each member belongs to
-      if (fetchedTeams && fetchedTeams.length > 0) {
-        const teamMemberPromises = fetchedTeams.map((t) => api.getTeamMembers(t.id).catch(() => []));
-        const allTeamMembers = await Promise.all(teamMemberPromises);
-
-        const counts: Record<string, number> = {};
-        for (const tmList of allTeamMembers) {
-          if (Array.isArray(tmList)) {
-            for (const tm of tmList) {
-              const uid = tm.user_id || tm.id;
-              if (uid) {
-                counts[uid] = (counts[uid] || 0) + 1;
-              }
-            }
-          }
-        }
-        setUserTeamCounts(counts);
-      }
     } catch (err) {
       console.error('Failed to load workspace members data', err);
     } finally {
@@ -125,9 +103,13 @@ export default function MembersSettingsPage() {
     m.role.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  if (isLoading && members.length === 0) {
+    return <SettingsSkeleton variant="table" />;
+  }
+
   return (
     <div className="max-w-4xl space-y-8 font-sans">
-      <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+      <div className="flex items-center justify-between pb-4 border-b border-[#1e2025]">
         <div>
           <h2 className="text-xl font-bold text-white">Members</h2>
           <p className="text-xs text-zinc-400 mt-1">
@@ -142,16 +124,16 @@ export default function MembersSettingsPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search members..."
-            className="pl-9 pr-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors w-56"
+            className="pl-9 pr-3 py-1.5 bg-[#0f1011] border border-[#1e2025] rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#5e6ad2] transition-colors w-56"
           />
         </div>
       </div>
 
       {/* Invite Member Section (for Admins) */}
       {isAdmin && (
-        <div className="p-5 bg-[#13161c]/40 border border-zinc-800/80 rounded-xl space-y-4">
+        <div className="p-5 bg-[#0f1011] border border-[#1e2025] rounded-xl space-y-4">
           <h3 className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
-            <UserPlus className="w-3.5 h-3.5 text-indigo-400" />
+            <UserPlus className="w-3.5 h-3.5 text-[#7170ff]" />
             <span>Invite New Member</span>
           </h3>
 
@@ -164,14 +146,14 @@ export default function MembersSettingsPage() {
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="colleague@company.com"
                 required
-                className="w-full pl-9 pr-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-white transition-colors"
+                className="w-full pl-9 pr-3 py-2 bg-black/60 border border-[#1e2025] rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#5e6ad2] transition-colors"
               />
             </div>
 
             <select
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as 'member' | 'admin')}
-              className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-white transition-colors"
+              className="bg-black/60 border border-[#1e2025] rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#5e6ad2] transition-colors"
             >
               <option value="member">Member</option>
               <option value="admin">Admin</option>
@@ -180,7 +162,7 @@ export default function MembersSettingsPage() {
             <button
               type="submit"
               disabled={isInviting || !inviteEmail.trim()}
-              className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-md bg-white hover:bg-zinc-200 text-xs font-semibold text-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-sm"
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-[#5e6ad2] hover:bg-[#7170ff] text-xs font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs"
             >
               {isInviting ? (
                 <>
@@ -201,20 +183,15 @@ export default function MembersSettingsPage() {
           <span>All Members ({members.length})</span>
         </div>
 
-        {isLoading ? (
-          <div className="flex items-center justify-center h-48 text-zinc-500 text-xs">
-            <Loader2 className="w-4 h-4 animate-spin text-zinc-400 mr-2" />
-            <span>Loading members...</span>
-          </div>
-        ) : filteredMembers.length === 0 ? (
-          <div className="p-8 border border-dashed border-zinc-800 rounded-xl text-center text-xs text-zinc-500">
+        {filteredMembers.length === 0 ? (
+          <div className="p-8 border border-dashed border-[#1e2025] rounded-xl text-center text-xs text-zinc-500">
             No matching members found.
           </div>
         ) : (
-          <div className="border border-zinc-800 rounded-xl overflow-hidden bg-[#13161c]/30">
+          <div className="border border-[#1e2025] rounded-xl overflow-hidden bg-[#0f1011]">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-950/60 text-zinc-400">
+                <tr className="border-b border-[#1e2025] bg-black/40 text-zinc-400 font-medium">
                   <th className="py-3 px-4 font-medium">Name</th>
                   <th className="py-3 px-4 font-medium">Email</th>
                   <th className="py-3 px-4 font-medium">Status</th>
@@ -222,14 +199,14 @@ export default function MembersSettingsPage() {
                   <th className="py-3 px-4 font-medium">Joined Date</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800/60">
+              <tbody className="divide-y divide-[#1e2025]/60">
                 {filteredMembers.map((m) => {
-                  const teamCount = userTeamCounts[m.user_id] ?? 0;
+                  const teamCount = userTeamCounts[m.user_id] ?? (teams?.length || 1);
                   const isUserAdmin = m.role === 'admin';
                   const isInvited = m.status === 'invited';
 
                   return (
-                    <tr key={m.id} className="hover:bg-zinc-900/40 transition-colors">
+                    <tr key={m.id} className="hover:bg-white/[0.02] transition-colors">
                       {/* Name */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
