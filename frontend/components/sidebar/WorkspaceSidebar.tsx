@@ -22,9 +22,9 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
 import { api } from '@/lib/api';
 import { Organization, Team, User, UserWorkspaceItem } from '@/types';
-import { CreateTeamModal } from '@/components/teams/CreateTeamModal';
 import { Check, Building2, ExternalLink } from 'lucide-react';
 import { UserAvatar } from '@/components/ui/UserAvatar';
+import { WorkspaceSidebarSkeleton } from '@/components/skeletons/WorkspaceSidebarSkeleton';
 
 interface WorkspaceSidebarProps {
   currentOrgSlug?: string;
@@ -50,17 +50,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const router = useRouter();
   const pathname = usePathname();
   const [isWorkspaceDropdownOpen, setIsWorkspaceDropdownOpen] = useState(false);
-  const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
-  const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false);
   const [userWorkspaces, setUserWorkspaces] = useState<UserWorkspaceItem[]>([]);
-  
-  // New workspace modal form state
-  const [newWsName, setNewWsName] = useState('');
-  const [newWsSlug, setNewWsSlug] = useState('');
-  const [newWsTeamName, setNewWsTeamName] = useState('Engineering');
-  const [newWsTeamKey, setNewWsTeamKey] = useState('ENG');
-  const [isCreatingWs, setIsCreatingWs] = useState(false);
-  const [createWsError, setCreateWsError] = useState<string | null>(null);
 
   const [orgState, setOrgState] = useState<Organization | null>(organization || null);
   const orgName = orgState?.name || organization?.name || currentOrgSlug.toUpperCase();
@@ -108,41 +98,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     }
   };
 
-  const handleCreateNewWorkspace = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsCreatingWs(true);
-    setCreateWsError(null);
-
-    const cleanSlug = newWsSlug.trim().toLowerCase();
-    if (!cleanSlug || cleanSlug.length < 2) {
-      setCreateWsError('Slug must be at least 2 characters.');
-      setIsCreatingWs(false);
-      return;
-    }
-
-    try {
-      const created = await api.createWorkspace(newWsName.trim(), cleanSlug);
-      if (!created) {
-        setCreateWsError('Failed to create workspace. Please check the slug or server logs.');
-        setIsCreatingWs(false);
-        return;
-      }
-
-      // Create initial team
-      const team = await api.createTeam(created.slug, {
-        name: newWsTeamName.trim() || 'Engineering',
-        key: (newWsTeamKey.trim() || 'ENG').toUpperCase(),
-      });
-
-      const teamKey = team?.key ? team.key.toLowerCase() : '';
-      setIsCreateWorkspaceOpen(false);
-      setIsWorkspaceDropdownOpen(false);
-      window.location.href = teamKey ? `/${created.slug}/${teamKey}/issues` : `/${created.slug}/issues`;
-    } catch (err: any) {
-      setCreateWsError(err?.message || 'Error creating workspace');
-      setIsCreatingWs(false);
-    }
-  };
+  if (!organization && (!teams || teams.length === 0)) {
+    return <WorkspaceSidebarSkeleton />;
+  }
 
   const navItems: { label: string; href: string; icon: React.ReactNode; badge?: string | number }[] = [
     {
@@ -379,120 +337,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           </Link>
         </div>
       </div>
-
-      <CreateTeamModal
-        isOpen={isCreateTeamOpen}
-        onClose={() => setIsCreateTeamOpen(false)}
-        orgSlug={currentOrgSlug}
-        onTeamCreated={() => router.refresh()}
-      />
-
-      {/* Create Workspace Modal */}
-      {isCreateWorkspaceOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-fade-in">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-zinc-300" />
-                <span>Create New Workspace</span>
-              </h3>
-              <button
-                onClick={() => setIsCreateWorkspaceOpen(false)}
-                className="text-zinc-500 hover:text-white text-xs cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-
-            {createWsError && (
-              <div className="p-2.5 bg-red-950/60 border border-red-800 rounded text-xs text-red-300">
-                {createWsError}
-              </div>
-            )}
-
-            <form onSubmit={handleCreateNewWorkspace} className="space-y-3">
-              <div>
-                <label className="text-xs text-zinc-300 block mb-1">Workspace Name</label>
-                <input
-                  type="text"
-                  value={newWsName}
-                  onChange={(e) => {
-                    setNewWsName(e.target.value);
-                    setNewWsSlug(
-                      e.target.value
-                        .toLowerCase()
-                        .replace(/[^a-z0-9]/g, '-')
-                        .replace(/-+/g, '-')
-                        .replace(/^-|-$/g, '')
-                    );
-                  }}
-                  placeholder="My Organization"
-                  className="w-full bg-zinc-900 text-xs text-white px-3 py-2 rounded border border-zinc-800 focus:border-white focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-zinc-300 block mb-1">URL Slug</label>
-                <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded overflow-hidden focus-within:border-white">
-                  <span className="text-[10px] text-zinc-500 pl-2.5 select-none">app/</span>
-                  <input
-                    type="text"
-                    value={newWsSlug}
-                    onChange={(e) => setNewWsSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                    placeholder="my-org"
-                    className="w-full bg-transparent text-xs text-white px-2 py-2 focus:outline-none font-mono"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-xs text-zinc-300 block mb-1">Initial Team</label>
-                  <input
-                    type="text"
-                    value={newWsTeamName}
-                    onChange={(e) => setNewWsTeamName(e.target.value)}
-                    placeholder="Engineering"
-                    className="w-full bg-zinc-900 text-xs text-white px-3 py-2 rounded border border-zinc-800 focus:border-white focus:outline-none"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-zinc-300 block mb-1">Team Key</label>
-                  <input
-                    type="text"
-                    value={newWsTeamKey}
-                    onChange={(e) => setNewWsTeamKey(e.target.value.toUpperCase().slice(0, 5))}
-                    placeholder="ENG"
-                    maxLength={5}
-                    className="w-full bg-zinc-900 text-xs text-white px-3 py-2 rounded border border-zinc-800 focus:border-white focus:outline-none font-mono"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateWorkspaceOpen(false)}
-                  className="px-3 py-1.5 rounded text-xs text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingWs}
-                  className="px-4 py-1.5 rounded text-xs font-semibold text-black bg-white hover:bg-zinc-200 transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {isCreatingWs ? 'Creating...' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </aside>
   );
 };

@@ -20,44 +20,86 @@ function getApiBase(): string {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api/v1';
 
-async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
-  let token: string | null = null;
+// Memory token cache for high-frequency low-latency requests
+let memoizedToken: string | null = null;
+let tokenExpiry: number = 0;
 
-  // 1. Primary: Get fresh token from active Supabase session (handles auto-refresh)
+export function setMemoizedToken(token: string | null, expiresAt?: number): void {
+  memoizedToken = token;
+  tokenExpiry = expiresAt || (token ? Math.floor(Date.now() / 1000) + 3600 : 0);
+}
+
+export function clearMemoizedToken(): void {
+  memoizedToken = null;
+  tokenExpiry = 0;
+}
+
+export async function getValidToken(): Promise<string | null> {
+  const now = Math.floor(Date.now() / 1000);
+
+  // 1. In-memory fast path (bypasses Supabase async storage lock entirely)
+  if (memoizedToken && tokenExpiry - now > 60) {
+    return memoizedToken;
+  }
+
+  // 2. Fast synchronous localStorage read before async getSession()
+  if (typeof window !== 'undefined') {
+    const local = localStorage.getItem('supabase_access_token');
+    if (local && !local.includes('dev_sig')) {
+      memoizedToken = local;
+      tokenExpiry = now + 1800; // 30 min default validity
+      return memoizedToken;
+    }
+  }
+
+  // 3. Fallback to Supabase async storage lock ONLY when cache is empty or expired
   if (typeof window !== 'undefined') {
     try {
       const { data } = await supabase.auth.getSession();
       if (data?.session?.access_token) {
-        token = data.session.access_token;
-        localStorage.setItem('supabase_access_token', token);
+        memoizedToken = data.session.access_token;
+        tokenExpiry = data.session.expires_at || (now + 3600);
+        localStorage.setItem('supabase_access_token', memoizedToken);
+        return memoizedToken;
       }
     } catch {}
   }
 
-  // 2. Secondary fallback: localStorage or cookie
-  if (!token && typeof window !== 'undefined') {
-    token = localStorage.getItem('supabase_access_token');
-  }
-  if (!token && typeof document !== 'undefined') {
+  // 4. Cookie fallback
+  if (typeof document !== 'undefined') {
     const match = document.cookie.match(/(?:^|;\s*)sb-access-token=([^;]+)/);
-    if (match) token = match[1];
+    if (match && !match[1].includes('dev_sig')) {
+      memoizedToken = match[1];
+      tokenExpiry = now + 1800;
+      return memoizedToken;
+    }
   }
 
-  // 3. Fallback: custom headers
+  return null;
+}
+
+// In-flight GET request deduplication map
+const inflightRequests = new Map<string, Promise<unknown>>();
+
+async function fetchWithAuthCore<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
+  let token: string | null = await getValidToken();
+
+  // Fallback: custom Authorization headers
   if (!token && options.headers) {
     let authHeader = '';
     if (options.headers instanceof Headers) {
       authHeader = options.headers.get('Authorization') || '';
     } else if (typeof options.headers === 'object') {
-      authHeader = (options.headers as any)['Authorization'] || '';
+      authHeader = (options.headers as Record<string, string>)['Authorization'] || '';
     }
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.replace('Bearer ', '').trim();
     }
   }
 
-  // If token is the old placeholder dev token, clear it
+  // If token is invalid dev placeholder, clean up
   if (token && token.includes('dev_sig')) {
+    clearMemoizedToken();
     if (typeof window !== 'undefined') {
       localStorage.removeItem('supabase_access_token');
       document.cookie = 'sb-access-token=; path=/; max-age=0';
@@ -65,7 +107,7 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
     token = null;
   }
 
-  // If no auth token is present, skip sending unauthenticated requests to protected endpoints
+  // If no auth token is present, skip sending unauthenticated requests
   if (!token) {
     return null;
   }
@@ -88,6 +130,7 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
             const { data } = await supabase.auth.refreshSession();
             if (data?.session?.access_token) {
               const newToken = data.session.access_token;
+              setMemoizedToken(newToken, data.session.expires_at || undefined);
               localStorage.setItem('supabase_access_token', newToken);
               document.cookie = `sb-access-token=${newToken}; path=/; max-age=604800; SameSite=Lax`;
               const retryResponse = await fetch(`${getApiBase()}${endpoint}`, {
@@ -102,6 +145,7 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
               }
             }
           } catch {}
+          clearMemoizedToken();
           localStorage.removeItem('supabase_access_token');
           document.cookie = 'sb-access-token=; path=/; max-age=0';
         }
@@ -135,8 +179,90 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
   }
 }
 
+/**
+ * Deduplicates concurrent identical GET requests, returning the active Promise.
+ * Non-GET mutation requests bypass deduplication and execute immediately.
+ */
+async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T | null> {
+  const method = (options.method || 'GET').toUpperCase();
+
+  if (method !== 'GET') {
+    return fetchWithAuthCore<T>(endpoint, options);
+  }
+
+  const cacheKey = `GET:${endpoint}`;
+  if (inflightRequests.has(cacheKey)) {
+    return inflightRequests.get(cacheKey) as Promise<T | null>;
+  }
+
+  const promise = fetchWithAuthCore<T>(endpoint, options).finally(() => {
+    inflightRequests.delete(cacheKey);
+  });
+
+  inflightRequests.set(cacheKey, promise);
+  return promise;
+}
+
+export interface SignInResponse {
+  user: {
+    id: string;
+    email?: string | null;
+    user_metadata?: Record<string, unknown>;
+  };
+  session: {
+    access_token: string;
+    refresh_token: string;
+    token_type?: string;
+    expires_in?: number | null;
+    expires_at?: number | null;
+  };
+}
+
+export async function establishClientSession(session: {
+  access_token: string;
+  refresh_token: string;
+  expires_at?: number | null;
+}): Promise<void> {
+  setMemoizedToken(session.access_token, session.expires_at || undefined);
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('supabase_access_token', session.access_token);
+    document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=604800; SameSite=Lax`;
+    try {
+      await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
+    } catch (err) {
+      console.warn('Supabase setSession hydration error:', err);
+    }
+  }
+}
+
 export const api = {
   // Auth
+  async signin(email: string, password: string): Promise<SignInResponse> {
+    const response = await fetch(`${getApiBase()}/auth/signin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => null);
+      const detail =
+        errJson?.detail ||
+        errJson?.message ||
+        'Authentication failed. Please check your credentials.';
+      throw new Error(detail);
+    }
+
+    return (await response.json()) as SignInResponse;
+  },
+
+  async login(email: string, password: string): Promise<SignInResponse> {
+    return this.signin(email, password);
+  },
+
   async register(name: string, email: string, password: string): Promise<boolean> {
     try {
       const response = await fetch(`${getApiBase()}/auth/signup`, {

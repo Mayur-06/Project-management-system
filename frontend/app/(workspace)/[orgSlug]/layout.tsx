@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter, usePathname } from 'next/navigation';
 import { Organization, Team, User, WorkspaceMember } from '@/types';
-import { api } from '@/lib/api';
+import { api, setMemoizedToken } from '@/lib/api';
 import { WorkspaceContext, WorkspaceContextValue } from '@/lib/WorkspaceContext';
 import { supabase } from '@/lib/supabase/client';
 
@@ -21,13 +21,33 @@ export default function OrgRootLayout({ children }: { children: React.ReactNode 
   useEffect(() => {
     let isMounted = true;
 
-    // Resolve auth session first
+    // 1. Parallel workspace-level data fetching (starts immediately without waiting for auth session state)
+    if (orgSlug) {
+      Promise.all([
+        api.getWorkspace(orgSlug),
+        api.getTeams(orgSlug),
+        api.getWorkspaceMembers(orgSlug),
+      ]).then(([org, fetchedTeams, members]) => {
+        if (!isMounted) return;
+        if (org) setOrganization(org);
+        if (fetchedTeams) setTeams(fetchedTeams);
+        const active = (members || []).filter((m) => m.status !== 'invited' && m.user);
+        setWorkspaceUsers(active);
+      }).catch((err) => {
+        console.error('Failed to load workspace data', err);
+      });
+    }
+
+    // 2. Concurrently resolve and hydrate user session & memoized token
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return;
       const user = session?.user;
       if (user) {
-        if (session.access_token && typeof window !== 'undefined') {
-          localStorage.setItem('supabase_access_token', session.access_token);
+        if (session.access_token) {
+          setMemoizedToken(session.access_token, session.expires_at);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('supabase_access_token', session.access_token);
+          }
         }
         setCurrentUser({
           id: user.id,
@@ -44,23 +64,7 @@ export default function OrgRootLayout({ children }: { children: React.ReactNode 
           job_description: '',
         });
       }
-    }).then(() => {
-      if (!orgSlug) return;
-      // Parallel workspace-level fetches
-      Promise.all([
-        api.getWorkspace(orgSlug),
-        api.getTeams(orgSlug),
-        api.getWorkspaceMembers(orgSlug),
-      ]).then(([org, fetchedTeams, members]) => {
-        if (!isMounted) return;
-        if (org) setOrganization(org);
-        if (fetchedTeams) setTeams(fetchedTeams);
-        const active = (members || []).filter((m) => m.status !== 'invited' && m.user);
-        setWorkspaceUsers(active);
-      }).catch((err) => {
-        console.error('Failed to load workspace data', err);
-      });
-    });
+    }).catch(() => {});
 
     return () => {
       isMounted = false;

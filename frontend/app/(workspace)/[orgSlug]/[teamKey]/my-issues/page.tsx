@@ -9,7 +9,6 @@ import { useRealtimeBoard } from '@/hooks/useRealtime';
 import { TopNav } from '@/components/navigation/TopNav';
 import { KanbanBoard } from '@/components/issues/KanbanBoard';
 import { IssueListView } from '@/components/issues/IssueListView';
-import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 import { Button } from '@/components/ui/button';
 import { UserCheck, Plus, Layers } from 'lucide-react';
 
@@ -32,8 +31,6 @@ export default function MyIssuesPage() {
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
-  const [initialStateId, setInitialStateId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const isDraggingRef = useRef(false);
@@ -67,10 +64,7 @@ export default function MyIssuesPage() {
       setIssues(fetchedIssues);
       setStates(fetchedStates);
       setAvailableLabels(fetchedLabels || []);
-      if (fetchedStates.length > 0) {
-        const defaultState = fetchedStates.find((s) => s.is_default) || fetchedStates[0];
-        setInitialStateId(defaultState.id);
-      }
+      // Load initial data
     } catch (err) {
       console.error('Failed to load my issues data:', err);
     } finally {
@@ -234,8 +228,9 @@ export default function MyIssuesPage() {
         onSearchChange={setSearchQuery}
         onOpenNewIssue={() => {
           const defaultState = states.find((s) => s.is_default) || states[0];
-          setInitialStateId(defaultState?.id || '');
-          setIsNewIssueOpen(true);
+          window.dispatchEvent(
+            new CustomEvent('openCreateIssue', { detail: { stateId: defaultState?.id } })
+          );
         }}
       />
 
@@ -268,8 +263,9 @@ export default function MyIssuesPage() {
                 size="sm"
                 onClick={() => {
                   const defaultState = states.find((s) => s.is_default) || states[0];
-                  const query = defaultState?.id ? `?stateId=${defaultState.id}` : '';
-                  router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/new${query}`);
+                  window.dispatchEvent(
+                    new CustomEvent('openCreateIssue', { detail: { stateId: defaultState?.id } })
+                  );
                 }}
                 className="gap-1.5 text-xs font-medium bg-brand-primary hover:bg-brand-hover text-white shadow-xs"
               >
@@ -289,12 +285,14 @@ export default function MyIssuesPage() {
               router.push(`/${orgSlug}/${teamKey.toLowerCase()}/issues/${issue.identifier}`);
             }}
             onOpenNewIssueWithState={(stateId) => {
-              setInitialStateId(stateId);
-              setIsNewIssueOpen(true);
+              window.dispatchEvent(
+                new CustomEvent('openCreateIssue', { detail: { stateId } })
+              );
             }}
             onAddSubtask={(_parentId, stateId) => {
-              if (stateId) setInitialStateId(stateId);
-              setIsNewIssueOpen(true);
+              window.dispatchEvent(
+                new CustomEvent('openCreateIssue', { detail: { stateId } })
+              );
             }}
             onMoveIssueState={handleMoveIssueState}
             onUpdateIssue={handleUpdateIssue}
@@ -316,21 +314,6 @@ export default function MyIssuesPage() {
         )}
       </div>
 
-      {/* Create Modal */}
-      <CreateIssueModal
-        isOpen={isNewIssueOpen}
-        initialStateId={initialStateId}
-        states={states}
-        users={modalUsers}
-        labels={availableLabels}
-        teamKey={teamKey}
-        teamId={currentTeam?.id}
-        teams={workspaceTeams}
-        onClose={() => setIsNewIssueOpen(false)}
-        onCreated={(newIssue) => {
-          setIssues((prev) => [newIssue, ...prev]);
-        }}
-      />
     </div>
   );
 }

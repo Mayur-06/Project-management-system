@@ -197,6 +197,18 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
     return () => clearTimeout(timer);
   }, [title]);
 
+  // Sync stateId when initialStateId or modal opens
+  useEffect(() => {
+    if (isOpen) {
+      if (initialStateId) {
+        setStateId(initialStateId);
+      } else if (teamWorkflowStates.length > 0) {
+        const defaultSt = teamWorkflowStates.find((s) => s.is_default) || teamWorkflowStates[0];
+        if (defaultSt) setStateId(defaultSt.id);
+      }
+    }
+  }, [isOpen, initialStateId, teamWorkflowStates]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || isSubmitting) return;
@@ -234,6 +246,8 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  if (!isOpen) return null;
 
   const selectedTeamMeta = teams.find((t) => t.id === selectedTeamId);
   const currentTeamKey = selectedTeamMeta?.key || teamKey || 'TEAM';

@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ArrowRight, Lock, Mail, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 
-import { supabase } from '@/lib/supabase/client';
-import { api } from '@/lib/api';
+import { api, establishClientSession } from '@/lib/api';
+import type { UserWorkspaceItem } from '@/types';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -69,11 +69,8 @@ export default function LoginPage() {
     try {
       console.log('[Login] Attempting sign-in for:', email.trim());
 
-      const authPromise = supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-      const authTimeout = new Promise<{ data: any; error: any }>((_, reject) =>
+      const authPromise = api.signin(email.trim().toLowerCase(), password);
+      const authTimeout = new Promise<never>((_, reject) =>
         setTimeout(
           () =>
             reject(
@@ -85,39 +82,23 @@ export default function LoginPage() {
         )
       );
 
-      const { data, error } = await Promise.race([authPromise, authTimeout]);
+      const signinRes = await Promise.race([authPromise, authTimeout]);
 
-      if (error) {
-        console.warn('[Login] Authentication error:', error);
-        let msg = error.message;
-        if (msg.toLowerCase().includes('invalid login credentials')) {
-          msg = 'Invalid email or password. Please verify your credentials and try again.';
-        } else if (msg.toLowerCase().includes('email not confirmed')) {
-          msg = 'Your email is not verified yet. Please check your inbox or accept your team invitation.';
-        }
-        setErrorMsg(msg);
-        setLoading(false);
-        return;
-      }
-
-      console.log('[Login] Sign-in successful. User ID:', data?.user?.id);
+      console.log('[Login] Sign-in successful. User ID:', signinRes?.user?.id);
       setStatusText('Connecting to workspace...');
 
-      const token = data?.session?.access_token;
-      if (token && typeof window !== 'undefined') {
-        localStorage.setItem('supabase_access_token', token);
-        document.cookie = `sb-access-token=${token}; path=/; max-age=604800; SameSite=Lax`;
-      }
+      const token = signinRes.session.access_token;
+      await establishClientSession(signinRes.session);
 
       // Query the user's accessible workspaces
-      let myWorkspaces: any[] = [];
+      let myWorkspaces: UserWorkspaceItem[] = [];
       try {
         const wsPromise = api.getMyWorkspaces(token);
-        const wsTimeout = new Promise<any[]>((resolve) =>
+        const wsTimeout = new Promise<UserWorkspaceItem[]>((resolve) =>
           setTimeout(() => resolve([]), 6000)
         );
         myWorkspaces = (await Promise.race([wsPromise, wsTimeout])) || [];
-      } catch (wsErr: any) {
+      } catch (wsErr: unknown) {
         console.warn('[Login] Error fetching workspaces after login:', wsErr);
         if (wsErr instanceof Error && wsErr.message === 'Unauthorized') {
           setErrorMsg('Session expired. Please try logging in again.');
@@ -143,18 +124,13 @@ export default function LoginPage() {
         setStatusText('Entering workspace...');
         console.log('[Login] Redirecting to:', targetUrl);
 
-        // Navigate directly to workspace page
-        window.location.href = targetUrl;
+        // Client-side SPA navigation preserving in-memory tokens
+        router.replace(targetUrl);
       } else {
         // No workspaces yet — go to workspace creation
         setStatusText('Setting up workspace...');
         console.log('[Login] No workspaces found, redirecting to signup...');
         router.replace('/signup');
-        setTimeout(() => {
-          if (typeof window !== 'undefined') {
-            window.location.href = '/signup';
-          }
-        }, 800);
       }
     } catch (err: any) {
       console.error('[Login] Caught error during sign-in flow:', err);

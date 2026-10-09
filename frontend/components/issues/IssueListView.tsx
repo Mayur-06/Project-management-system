@@ -288,7 +288,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
                                   : [...currentIds, labelId];
                                 await onUpdateIssue(issue.id, {
                                   label_ids: nextIds,
-                                  expected_version: issue.version,
+                                  expected_version: issue.version ?? 1,
                                 });
                               }}
                               triggerClassName="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/[0.08] text-zinc-500 hover:text-zinc-300 transition-opacity"
@@ -302,7 +302,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
                           onToggleLabel={async (labelId) => {
                             await onUpdateIssue(issue.id, {
                               label_ids: [labelId],
-                              expected_version: issue.version,
+                              expected_version: issue.version ?? 1,
                             });
                           }}
                           triggerClassName="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-white/[0.08] text-zinc-500 hover:text-zinc-300 transition-opacity"

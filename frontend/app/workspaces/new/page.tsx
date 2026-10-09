@@ -79,7 +79,7 @@ export default function NewWorkspacePage() {
       });
 
       const effectiveKey = initialTeam?.key ? initialTeam.key.toLowerCase() : cleanTeamKey.toLowerCase();
-      window.location.href = `/${created.slug}/${effectiveKey}/issues`;
+      router.push(`/${created.slug}/${effectiveKey}/issues`);
     } catch (err: any) {
       setError(err?.message || 'Error creating workspace.');
       setIsSubmitting(false);

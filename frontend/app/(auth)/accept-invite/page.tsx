@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Lock, User, Mail, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
-import { api } from '@/lib/api';
+import { api, establishClientSession } from '@/lib/api';
 
 export default function AcceptInvitePage() {
   const router = useRouter();
@@ -66,21 +66,19 @@ export default function AcceptInvitePage() {
         throw new Error(updateError.message || 'Failed to set password. Invitation link may be expired.');
       }
 
-      // Step C: Sign in with the newly established password to ensure valid fresh JWT
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password,
-      });
-
-      let token = signInData?.session?.access_token;
-      if (!token) {
+      // Step C: Sign in via backend signin endpoint to ensure valid fresh session
+      try {
+        const signinRes = await api.signin(cleanEmail, password);
+        await establishClientSession(signinRes.session);
+      } catch (signInErr: any) {
+        console.warn('Backend signin fallback in accept-invite:', signInErr);
+        // Fallback to active session if available
         const currentSession = await supabase.auth.getSession();
-        token = currentSession.data.session?.access_token;
-      }
-
-      if (token && typeof window !== 'undefined') {
-        localStorage.setItem('supabase_access_token', token);
-        document.cookie = `sb-access-token=${token}; path=/; max-age=604800; SameSite=Lax`;
+        const token = currentSession.data.session?.access_token;
+        if (token && typeof window !== 'undefined') {
+          localStorage.setItem('supabase_access_token', token);
+          document.cookie = `sb-access-token=${token}; path=/; max-age=604800; SameSite=Lax`;
+        }
       }
 
       setSuccessMsg('Password created successfully! Joining your workspace...');

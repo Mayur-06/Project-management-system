@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
-import { api } from '@/lib/api';
+import { api, setMemoizedToken } from '@/lib/api';
 
 export default function RootPage() {
   const router = useRouter();
@@ -31,7 +31,7 @@ export default function RootPage() {
       const hardTimeoutId = setTimeout(() => {
         if (isMounted) {
           console.warn('Root init timed out — redirecting to /login');
-          window.location.replace('/login');
+          router.replace('/login');
         }
       }, 6000);
 
@@ -65,10 +65,13 @@ export default function RootPage() {
             localStorage.removeItem('supabase_access_token');
             document.cookie = 'sb-access-token=; path=/; max-age=0';
           }
-          if (isMounted) window.location.replace('/login');
+          if (isMounted) router.replace('/login');
           clearTimeout(hardTimeoutId);
           return;
         }
+
+        // Prime the hot in-memory token cache for subsequent layout fetches
+        setMemoizedToken(token);
 
         // Store token in cookie for middleware
         if (typeof window !== 'undefined') {
@@ -90,7 +93,7 @@ export default function RootPage() {
               localStorage.removeItem('supabase_access_token');
               document.cookie = 'sb-access-token=; path=/; max-age=0';
             }
-            if (isMounted) window.location.replace('/login');
+            if (isMounted) router.replace('/login');
             clearTimeout(hardTimeoutId);
             return;
           }
@@ -110,16 +113,16 @@ export default function RootPage() {
           const safeTeamKey = teamKey || 'eng';
           const destination = `/${firstOrg.organization.slug}/${safeTeamKey}/issues`;
           clearTimeout(hardTimeoutId);
-          window.location.replace(destination);
+          router.replace(destination);
         } else {
           // Authenticated but no workspace yet
           clearTimeout(hardTimeoutId);
-          window.location.replace('/signup');
+          router.replace('/signup');
         }
       } catch (err) {
         console.error('Root init error:', err);
         clearTimeout(hardTimeoutId);
-        if (isMounted) window.location.replace('/login');
+        if (isMounted) router.replace('/login');
       }
     }
 
@@ -153,7 +156,7 @@ export default function RootPage() {
         <span>•</span>
         <button
           onClick={() => {
-            window.location.replace('/signup');
+            router.replace('/signup');
           }}
           className="hover:text-zinc-300 underline cursor-pointer"
         >
