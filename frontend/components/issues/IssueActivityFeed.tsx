@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface IssueActivityFeedProps {
   issue: Issue;
@@ -163,10 +164,12 @@ export const IssueActivityFeed: React.FC<IssueActivityFeedProps> = ({
 
   const handleDelete = async (commentId: string) => {
     if (!onDeleteComment || deletingCommentId) return;
-    if (!window.confirm('Are you sure you want to delete this comment?')) return;
     setDeletingCommentId(commentId);
     try {
       await onDeleteComment(commentId);
+      toast.success('Comment deleted');
+    } catch {
+      toast.error('Failed to delete comment');
     } finally {
       setDeletingCommentId(null);
     }

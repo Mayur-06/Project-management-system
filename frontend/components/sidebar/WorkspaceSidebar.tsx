@@ -123,7 +123,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const navItems: { label: string; href: string; icon: React.ReactNode; badge?: string | number }[] = [
     {
       label: 'Inbox',
-      href: effectiveTeamKey ? `/${currentOrgSlug}/${effectiveTeamKey}/inbox` : `/${currentOrgSlug}/inbox`,
+      href: `/${currentOrgSlug}/inbox`,
       icon: <Inbox className="w-4 h-4 text-zinc-300" />,
     },
     {
@@ -227,6 +227,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           {navItems.map((item) => {
             const isActive = item.label === 'Settings'
               ? pathname?.includes('/settings')
+              : item.label === 'Inbox'
+              ? pathname?.includes('/inbox')
               : pathname?.startsWith(item.href);
             return (
               <Link

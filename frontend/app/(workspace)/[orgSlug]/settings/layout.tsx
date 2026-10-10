@@ -233,15 +233,6 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleBackToWorkspace}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-zinc-400 hover:text-white hover:bg-zinc-900 border border-zinc-800 transition-colors cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Workspace</span>
-            </button>
-          </div>
         </header>
 
         <div className="max-w-4xl w-full mx-auto p-6 md:p-8 flex-1">

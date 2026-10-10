@@ -13,6 +13,8 @@ import { Loader2, Check, AlertCircle, Plus, Trash2, Users } from 'lucide-react';
 import { Team } from '@/types';
 import { api } from '@/lib/api';
 import { useWorkspace } from '@/lib/WorkspaceContext';
+import { toast } from 'sonner';
+import { SettingsSkeleton } from '@/components/skeletons/SettingsSkeleton';
 
 export default function TeamSettingsPage() {
   const params = useParams();
@@ -33,8 +35,6 @@ export default function TeamSettingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isAddingMember, setIsAddingMember] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -61,7 +61,7 @@ export default function TeamSettingsPage() {
       })
       .catch((err) => {
         console.error('Failed to load team data', err);
-        setError('Failed to load team information.');
+        toast.error('Failed to load team information.');
       })
       .finally(() => {
         if (isMounted) setIsLoading(false);
@@ -77,8 +77,6 @@ export default function TeamSettingsPage() {
     if (!activeTeam || isSaving) return;
 
     setIsSaving(true);
-    setError(null);
-    setSaveSuccess(false);
 
     try {
       const updated = await api.updateTeam(activeTeam.id, {
@@ -88,8 +86,7 @@ export default function TeamSettingsPage() {
 
       if (updated) {
         setActiveTeam(updated);
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 2500);
+        toast.success('Team settings saved successfully.');
 
         // If key changed, redirect to new URL
         if (updated.key.toUpperCase() !== teamKey) {
@@ -97,7 +94,7 @@ export default function TeamSettingsPage() {
         }
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to update team settings.');
+      toast.error(err?.message || 'Failed to update team settings.');
     } finally {
       setIsSaving(false);
     }
@@ -106,16 +103,16 @@ export default function TeamSettingsPage() {
   const handleAddMember = async () => {
     if (!activeTeam || !selectedUserToAdd || isAddingMember) return;
     setIsAddingMember(true);
-    setError(null);
 
     try {
       const added = await api.addTeamMember(activeTeam.id, selectedUserToAdd);
       if (added) {
         setTeamMembers((prev) => [...prev.filter((m) => m.user_id !== selectedUserToAdd), added]);
         setSelectedUserToAdd('');
+        toast.success('Member added to team.');
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to add team member.');
+      toast.error(err?.message || 'Failed to add team member.');
     } finally {
       setIsAddingMember(false);
     }
@@ -126,8 +123,9 @@ export default function TeamSettingsPage() {
     try {
       await api.removeTeamMember(activeTeam.id, userId);
       setTeamMembers((prev) => prev.filter((m) => (m.user_id || m.id) !== userId));
+      toast.success('Member removed from team.');
     } catch (err: any) {
-      setError(err?.message || 'Failed to remove team member.');
+      toast.error(err?.message || 'Failed to remove team member.');
     }
   };
 
@@ -137,12 +135,7 @@ export default function TeamSettingsPage() {
   );
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-48 text-zinc-500 text-xs">
-        <Loader2 className="w-4 h-4 animate-spin text-zinc-400 mr-2" />
-        <span>Loading team settings...</span>
-      </div>
-    );
+    return <SettingsSkeleton variant="team" />;
   }
 
   if (!activeTeam) {
@@ -155,10 +148,10 @@ export default function TeamSettingsPage() {
 
   return (
     <div className="max-w-4xl space-y-8 font-sans">
-      <div className="pb-4 border-b border-zinc-800">
+      <div className="pb-4 border-b border-[#1e2025]">
         <div className="flex items-center gap-2">
           <h2 className="text-xl font-bold text-white">{activeTeam.name}</h2>
-          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800">
+          <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-[#1e2025]">
             {activeTeam.key}
           </span>
         </div>
@@ -167,23 +160,9 @@ export default function TeamSettingsPage() {
         </p>
       </div>
 
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-950/50 border border-red-800 text-xs text-red-200">
-          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {saveSuccess && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-950/50 border border-emerald-800 text-xs text-emerald-200">
-          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>Team settings saved successfully.</span>
-        </div>
-      )}
-
       {/* General Team Info Form */}
-      <section className="bg-[#13161c]/40 border border-zinc-800/80 rounded-xl p-6 space-y-5">
-        <div className="flex items-center justify-between pb-2 border-b border-zinc-800/80">
+      <section className="bg-[#0f1011] border border-[#1e2025] rounded-xl p-6 space-y-5">
+        <div className="flex items-center justify-between pb-2 border-b border-[#1e2025]">
           <div>
             <h3 className="text-sm font-semibold text-white">General Information</h3>
             <p className="text-[11px] text-zinc-400 mt-0.5">Manage team identifier and prefix key.</p>
@@ -206,7 +185,7 @@ export default function TeamSettingsPage() {
               disabled={!isAdmin}
               value={teamName}
               onChange={(e) => setTeamName(e.target.value)}
-              className="w-full text-xs bg-zinc-900 text-white px-3 py-2 rounded-lg border border-zinc-800 focus:outline-none focus:border-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full text-xs bg-black/60 text-white px-3 py-2 rounded-lg border border-[#1e2025] focus:outline-none focus:border-[#5e6ad2] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             />
           </div>
 
@@ -219,7 +198,7 @@ export default function TeamSettingsPage() {
               maxLength={6}
               value={newTeamKey}
               onChange={(e) => setNewTeamKey(e.target.value.toUpperCase())}
-              className="w-full text-xs bg-zinc-900 text-white px-3 py-2 rounded-lg border border-zinc-800 font-mono focus:outline-none focus:border-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full text-xs bg-black/60 text-white px-3 py-2 rounded-lg border border-[#1e2025] font-mono focus:outline-none focus:border-[#5e6ad2] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             />
             <p className="text-[11px] text-zinc-500">
               Issues created under this team will prefix identifiers with this key (e.g. {newTeamKey}-101).
@@ -230,7 +209,7 @@ export default function TeamSettingsPage() {
             <button
               type="submit"
               disabled={isSaving}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-semibold text-black bg-white hover:bg-zinc-200 disabled:opacity-40 transition-colors cursor-pointer shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium text-white bg-[#5e6ad2] hover:bg-[#7170ff] disabled:opacity-40 transition-colors cursor-pointer shadow-xs"
             >
               {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>Save Team Settings</span>
@@ -240,7 +219,7 @@ export default function TeamSettingsPage() {
       </section>
 
       {/* Team Members Section */}
-      <section className="bg-[#13161c]/40 border border-zinc-800/80 rounded-xl p-6 space-y-5">
+      <section className="bg-[#0f1011] border border-[#1e2025] rounded-xl p-6 space-y-5">
         <div>
           <h3 className="text-sm font-semibold text-white flex items-center gap-2">
             <Users className="w-4 h-4 text-zinc-400" />
@@ -255,7 +234,7 @@ export default function TeamSettingsPage() {
             <select
               value={selectedUserToAdd}
               onChange={(e) => setSelectedUserToAdd(e.target.value)}
-              className="flex-1 text-xs bg-zinc-900 text-zinc-200 px-3 py-2 rounded-lg border border-zinc-800 focus:outline-none focus:border-white transition-colors"
+              className="flex-1 text-xs bg-black/60 text-zinc-200 px-3 py-2 rounded-lg border border-[#1e2025] focus:outline-none focus:border-[#5e6ad2] transition-colors"
             >
               <option value="">Select workspace user...</option>
               {availableUsers.map((u) => (
@@ -268,7 +247,7 @@ export default function TeamSettingsPage() {
               type="button"
               onClick={handleAddMember}
               disabled={!selectedUserToAdd || isAddingMember}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-black bg-white hover:bg-zinc-200 disabled:opacity-40 transition-colors cursor-pointer shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium text-white bg-[#5e6ad2] hover:bg-[#7170ff] disabled:opacity-40 transition-colors cursor-pointer shadow-xs"
             >
               {isAddingMember ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
               <span>Add</span>
@@ -277,14 +256,14 @@ export default function TeamSettingsPage() {
         )}
 
         {/* Members List */}
-        <div className="divide-y divide-zinc-800 border border-zinc-800 rounded-lg overflow-hidden bg-zinc-950/40">
+        <div className="divide-y divide-[#1e2025] border border-[#1e2025] rounded-xl overflow-hidden bg-black/40">
           {teamMembers.length === 0 ? (
             <div className="p-4 text-xs text-zinc-500 text-center">No members assigned to this team yet.</div>
           ) : (
             teamMembers.map((tm) => (
-              <div key={tm.id || tm.user_id} className="flex items-center justify-between px-4 py-3 hover:bg-zinc-900/30 transition-colors">
+              <div key={tm.id || tm.user_id} className="flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-[11px] font-bold text-zinc-200">
+                  <div className="w-7 h-7 rounded-full bg-zinc-900 border border-[#1e2025] flex items-center justify-center text-[11px] font-bold text-zinc-200">
                     {(tm.user?.name || tm.user?.email || 'M').charAt(0).toUpperCase()}
                   </div>
                   <div>
