@@ -21,7 +21,8 @@ import {
   CheckCircle2,
   User,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  ChevronLeft,
 } from 'lucide-react';
 import { InboxItem, Team } from '@/types';
 import { api } from '@/lib/api';
@@ -30,6 +31,16 @@ import { useWorkspace } from '@/lib/WorkspaceContext';
 import { StateBadge } from '@/components/ui/StateBadge';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { UserAvatar } from '@/components/ui/UserAvatar';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 function formatShortTime(dateString: string): string {
@@ -106,7 +117,7 @@ function LinearBrandIcon({ className = 'w-6 h-6' }: { className?: string }) {
   );
 }
 
-const PAGE_SIZE = 50;
+const BATCH_SIZE = 100;
 
 export default function WorkspaceInboxPage() {
   const params = useParams();
@@ -122,6 +133,8 @@ export default function WorkspaceInboxPage() {
   const [readIds, setReadIds] = useState<Set<string>>(() => new Set());
   const [filterUnreadOnly, setFilterUnreadOnly] = useState(false);
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Load read notifications from localStorage
   useEffect(() => {
@@ -155,7 +168,7 @@ export default function WorkspaceInboxPage() {
         if (isInitial) setIsLoading(true);
         else setLoadingMore(true);
 
-        const data = await api.getInbox(orgSlug, offset, PAGE_SIZE);
+        const data = await api.getInbox(orgSlug, offset, BATCH_SIZE);
         const fetched = data || [];
 
         if (offset === 0) {
@@ -168,7 +181,21 @@ export default function WorkspaceInboxPage() {
           });
         }
 
-        setHasMore(fetched.length >= PAGE_SIZE);
+        const moreAvailable = fetched.length >= BATCH_SIZE;
+        setHasMore(moreAvailable);
+
+        // If more items exist in DB on initial load, fetch the next batch so full history is available
+        if (isInitial && moreAvailable) {
+          const nextData = await api.getInbox(orgSlug, BATCH_SIZE, BATCH_SIZE);
+          if (nextData && nextData.length > 0) {
+            setItems((prev) => {
+              const existingIds = new Set(prev.map((i) => i.id));
+              const fresh = nextData.filter((i) => !existingIds.has(i.id));
+              return [...prev, ...fresh];
+            });
+            setHasMore(nextData.length >= BATCH_SIZE);
+          }
+        }
       } catch (err) {
         console.error('Failed to fetch inbox activity:', err);
       } finally {
@@ -199,7 +226,7 @@ export default function WorkspaceInboxPage() {
         },
         async () => {
           try {
-            const freshData = await api.getInbox(orgSlug, 0, PAGE_SIZE);
+            const freshData = await api.getInbox(orgSlug, 0, BATCH_SIZE);
             if (freshData) {
               setItems((prev) => {
                 const merged = [...freshData];
@@ -235,9 +262,67 @@ export default function WorkspaceInboxPage() {
     return result;
   }, [items, filterUnreadOnly, readIds, sortOrder]);
 
+  const totalCount = filteredItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+  // Compute compact window of visible pages to prevent sidebar overflow
+  const visiblePages = useMemo(() => {
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+    const pages = new Set<number>();
+    pages.add(1);
+    pages.add(totalPages);
+    pages.add(currentPage);
+    if (currentPage - 1 > 1) pages.add(currentPage - 1);
+    if (currentPage + 1 < totalPages) pages.add(currentPage + 1);
+    if (currentPage === 1 && totalPages >= 3) pages.add(2);
+    if (currentPage === totalPages && totalPages >= 3) pages.add(totalPages - 1);
+    return Array.from(pages).sort((a, b) => a - b);
+  }, [totalPages, currentPage]);
+
+  // Automatically clamp currentPage when list changes or filter reduces items
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  // Synchronize currentPage if selectedIndex changes via arrow keys (J/K)
+  useEffect(() => {
+    if (selectedIndex >= 0) {
+      const targetPage = Math.floor(selectedIndex / pageSize) + 1;
+      if (targetPage !== currentPage && targetPage <= totalPages) {
+        setCurrentPage(targetPage);
+      }
+    }
+  }, [selectedIndex, pageSize, totalPages, currentPage]);
+
+  const startIndex = totalCount === 0 ? 0 : (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalCount);
+
+  const paginatedItems = useMemo(() => {
+    return filteredItems.slice(startIndex, endIndex);
+  }, [filteredItems, startIndex, endIndex]);
+
   const selectedItem = selectedIndex >= 0 && selectedIndex < filteredItems.length
     ? filteredItems[selectedIndex]
     : null;
+
+  const handleNextPage = async () => {
+    if (currentPage < totalPages) {
+      setCurrentPage((p) => p + 1);
+    } else if (hasMore && !loadingMore) {
+      await fetchInbox(items.length, false);
+      setCurrentPage((p) => p + 1);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage((p) => p - 1);
+    }
+  };
 
   // Handle Mark Read / Toggle
   const handleToggleRead = (id: string, e?: React.MouseEvent) => {
@@ -443,8 +528,9 @@ export default function WorkspaceInboxPage() {
               </p>
             </div>
           ) : (
-            filteredItems.map((item, idx) => {
-              const isSelected = selectedIndex === idx;
+            paginatedItems.map((item, localIdx) => {
+              const globalIdx = startIndex + localIdx;
+              const isSelected = selectedIndex === globalIdx;
               const isUnread = !readIds.has(item.id);
               const details = getItemDetails(item);
               const timeDisplay = formatShortTime(item.created_at);
@@ -453,7 +539,7 @@ export default function WorkspaceInboxPage() {
                 <div
                   key={item.id}
                   onClick={() => {
-                    setSelectedIndex(idx);
+                    setSelectedIndex(globalIdx);
                     // Mark as read on click
                     const nextSet = new Set(readIds);
                     nextSet.add(item.id);
@@ -502,19 +588,71 @@ export default function WorkspaceInboxPage() {
               );
             })
           )}
+        </div>
 
-          {hasMore && !isLoading && (
-            <div className="p-3 text-center">
-              <button
-                type="button"
-                onClick={() => fetchInbox(items.length, false)}
-                disabled={loadingMore}
-                className="text-xs text-zinc-400 hover:text-white px-3 py-1.5 rounded-md hover:bg-white/[0.05] transition-colors"
-              >
-                {loadingMore ? 'Loading older...' : 'Load more notifications'}
-              </button>
-            </div>
-          )}
+        {/* Shadcn UI Pagination - Compact & responsive to fit sidebar without overflow */}
+        <div className="py-2.5 px-3 border-t border-[#1e2025] bg-[#090a0c] shrink-0 select-none">
+          <Pagination className="w-full flex items-center justify-between gap-1">
+            {/* Left: Range text (e.g. 31–40 of 102) */}
+            <span className="text-[11px] font-mono text-zinc-500 shrink-0">
+              {totalCount === 0 ? '0 of 0' : `${startIndex + 1}–${endIndex} of ${totalCount}`}
+            </span>
+
+            {/* Right: Compact Shadcn Pagination Controls */}
+            <PaginationContent className="gap-0.5">
+              <PaginationItem>
+                <PaginationPrevious
+                  showText={false}
+                  onClick={handlePrevPage}
+                  className={cn(
+                    'h-6.5 w-6.5 p-0 text-zinc-400 hover:text-white hover:bg-white/[0.06] border-none flex items-center justify-center rounded-md transition-colors',
+                    currentPage <= 1 && 'pointer-events-none opacity-25'
+                  )}
+                />
+              </PaginationItem>
+
+              {/* Numbered Page Buttons with Smart Ellipsis */}
+              {visiblePages.map((page, idx) => {
+                const prevPage = visiblePages[idx - 1];
+                const showEllipsis = prevPage && page - prevPage > 1;
+
+                return (
+                  <React.Fragment key={page}>
+                    {showEllipsis && (
+                      <PaginationItem>
+                        <PaginationEllipsis className="h-6.5 w-4 text-zinc-600 text-[10px] flex items-center justify-center" />
+                      </PaginationItem>
+                    )}
+                    <PaginationItem>
+                      <PaginationLink
+                        isActive={currentPage === page}
+                        onClick={() => setCurrentPage(page)}
+                        className={cn(
+                          'h-6.5 w-6.5 text-[11px] font-mono transition-colors rounded-md p-0 flex items-center justify-center',
+                          currentPage === page
+                            ? 'bg-[#5e6ad2] text-white border-none font-semibold hover:bg-[#7170ff] hover:text-white shadow-xs'
+                            : 'text-zinc-400 hover:text-white hover:bg-white/[0.06] border-none'
+                        )}
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  </React.Fragment>
+                );
+              })}
+
+              <PaginationItem>
+                <PaginationNext
+                  showText={false}
+                  onClick={handleNextPage}
+                  className={cn(
+                    'h-6.5 w-6.5 p-0 text-zinc-400 hover:text-white hover:bg-white/[0.06] border-none flex items-center justify-center rounded-md transition-colors',
+                    currentPage >= totalPages && !hasMore && 'pointer-events-none opacity-25'
+                  )}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </div>
       </aside>
 

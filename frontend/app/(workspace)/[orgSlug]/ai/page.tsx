@@ -17,6 +17,13 @@ import {
   Bot,
   ExternalLink,
   AlertCircle,
+  MessageSquare,
+  Trash2,
+  Clock,
+  Check,
+  Navigation,
+  Search,
+  X,
 } from 'lucide-react';
 import { User } from '@/types';
 import { api } from '@/lib/api';
@@ -28,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { AIMarkdownMessage } from '@/components/ai/AIMarkdownMessage';
 import { toast } from 'sonner';
 
 interface ActionInterrupt {
@@ -67,6 +75,25 @@ const DEFAULT_WELCOME_MSG: Message = {
     "I'm your workspace copilot. Ask me anything — architect systems, design APIs, plan sprints, or search and manage workspace issues.",
   timestamp: 'Just now',
 };
+
+function formatRelativeTimeShort(dateString: string): string {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - date.getTime()) / 1000);
+    if (diffSec < 60) return 'now';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin}m`;
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return `${diffHr}h`;
+    const diffDays = Math.floor(diffHr / 24);
+    if (diffDays < 30) return `${diffDays}d`;
+    const diffMonths = Math.floor(diffDays / 30);
+    return `${diffMonths}mo`;
+  } catch {
+    return '';
+  }
+}
 
 export default function WorkspaceAIPage() {
   const params = useParams();
@@ -111,23 +138,109 @@ export default function WorkspaceAIPage() {
     }
   }, [orgSlug, parentContext.organization]);
 
-  // Load thread history
-  useEffect(() => {
-    if (typeof window === 'undefined' || !activeThreadId) return;
+  const [threads, setThreads] = useState<Array<{ id: string; title: string; updated_at: string }>>([]);
+  const [isLoadingThreads, setIsLoadingThreads] = useState(false);
+  const [isHistoryDrawerOpen, setIsHistoryDrawerOpen] = useState(false);
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+
+  // Fetch all user AI threads for the current organization
+  const fetchThreads = async () => {
+    const orgId = organizationId || parentContext.organization?.id;
+    if (!orgId) return;
     try {
-      const stored = localStorage.getItem(`ai_thread_${activeThreadId}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
-          return;
+      setIsLoadingThreads(true);
+      const data = await api.getAIThreads(orgId);
+      setThreads(data || []);
+    } catch (err) {
+      console.error('Failed to load AI threads:', err);
+    } finally {
+      setIsLoadingThreads(false);
+    }
+  };
+
+  const toggleHistoryDrawer = () => {
+    setIsHistoryDrawerOpen((prev) => {
+      const next = !prev;
+      if (next) fetchThreads();
+      return next;
+    });
+  };
+
+  const filteredThreads = useMemo(() => {
+    if (!historySearchQuery.trim()) return threads;
+    const q = historySearchQuery.toLowerCase();
+    return threads.filter((t) => t.title.toLowerCase().includes(q));
+  }, [threads, historySearchQuery]);
+
+  // Listen for Escape key to dismiss history drawer
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isHistoryDrawerOpen) {
+        setIsHistoryDrawerOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isHistoryDrawerOpen]);
+
+  useEffect(() => {
+    if (organizationId || parentContext.organization?.id) {
+      fetchThreads();
+    }
+  }, [organizationId, parentContext.organization?.id]);
+
+  // Load thread history from DB when activeThreadId changes
+  useEffect(() => {
+    if (!activeThreadId) return;
+    let isCancelled = false;
+
+    const loadThread = async () => {
+      // If activeThreadId is a standard UUID, attempt DB load
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeThreadId);
+      if (isUuid) {
+        try {
+          const dbMsgs = await api.getAIThreadMessages(activeThreadId);
+          if (!isCancelled && dbMsgs && dbMsgs.length > 0) {
+            const mapped: Message[] = dbMsgs.map((m) => ({
+              id: m.id,
+              sender: m.sender,
+              content: m.content,
+              tools: m.tools_json || [],
+              interrupt: m.interrupt_json || undefined,
+              timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            }));
+            setMessages(mapped);
+            return;
+          }
+        } catch (e) {
+          console.error('Could not load thread messages from DB:', e);
         }
       }
-    } catch {}
-    setMessages([DEFAULT_WELCOME_MSG]);
+
+      // Fallback to localStorage if temporary thread id or offline
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem(`ai_thread_${activeThreadId}`);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              if (!isCancelled) setMessages(parsed);
+              return;
+            }
+          }
+        } catch {}
+      }
+
+      if (!isCancelled) setMessages([DEFAULT_WELCOME_MSG]);
+    };
+
+    loadThread();
+    return () => {
+      isCancelled = true;
+    };
   }, [activeThreadId]);
 
-  // Persist thread history
+  // Persist current thread to localStorage as local fast-cache
   useEffect(() => {
     if (typeof window === 'undefined' || !activeThreadId) return;
     if (messages.length > 1 || (messages.length === 1 && messages[0].id !== 'msg_welcome')) {
@@ -141,11 +254,37 @@ export default function WorkspaceAIPage() {
     return messages.some((m) => m.sender === 'user');
   }, [messages]);
 
+  const handleSelectThread = (threadId: string) => {
+    if (threadId === activeThreadId) return;
+    if (isStreaming) {
+      handleStopStreaming();
+    }
+    setActiveThreadId(threadId);
+    router.push(`/${orgSlug}/ai?conversationId=${threadId}`);
+  };
+
   const handleNewConversation = () => {
+    if (isStreaming) {
+      handleStopStreaming();
+    }
     const newId = `conv_${Date.now()}`;
     setActiveThreadId(newId);
     setMessages([DEFAULT_WELCOME_MSG]);
     router.push(`/${orgSlug}/ai?conversationId=${newId}`);
+  };
+
+  const handleDeleteThread = async (e: React.MouseEvent, threadId: string) => {
+    e.stopPropagation();
+    try {
+      await api.deleteAIThread(threadId);
+      setThreads((prev) => prev.filter((t) => t.id !== threadId));
+      if (activeThreadId === threadId) {
+        handleNewConversation();
+      }
+      toast.success('Conversation deleted');
+    } catch (err: any) {
+      toast.error('Failed to delete conversation');
+    }
   };
 
   useEffect(() => {
@@ -308,6 +447,53 @@ export default function WorkspaceAIPage() {
     } finally {
       setIsStreaming(false);
       abortControllerRef.current = null;
+
+      // Persist messages to DB asynchronously
+      const currentOrgId = organizationId || parentContext.organization?.id;
+      if (currentOrgId) {
+        (async () => {
+          try {
+            let threadIdToUse = activeThreadId;
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadIdToUse);
+
+            if (!isUuid) {
+              const createdThread = await api.createAIThread({
+                organization_id: currentOrgId,
+                first_message: text,
+              });
+              if (createdThread?.id) {
+                threadIdToUse = createdThread.id;
+                setActiveThreadId(createdThread.id);
+                router.replace(`/${orgSlug}/ai?conversationId=${createdThread.id}`);
+                fetchThreads();
+              }
+            }
+
+            if (threadIdToUse && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadIdToUse)) {
+              await api.addAIThreadMessage(threadIdToUse, {
+                sender: 'user',
+                content: text,
+              });
+
+              // Retrieve the latest assistant message state
+              setMessages((current) => {
+                const latestAgent = current.find((m) => m.id === agentMsgId);
+                if (latestAgent) {
+                  api.addAIThreadMessage(threadIdToUse, {
+                    sender: 'agent',
+                    content: latestAgent.content || '',
+                    tools_json: latestAgent.tools,
+                    interrupt_json: latestAgent.interrupt ? (latestAgent.interrupt as any) : undefined,
+                  }).catch(() => {});
+                }
+                return current;
+              });
+            }
+          } catch (e) {
+            console.error('Error auto-syncing AI thread to DB:', e);
+          }
+        })();
+      }
     }
   };
 
@@ -393,32 +579,90 @@ export default function WorkspaceAIPage() {
       {/* Top Header Bar */}
       <div className="h-12 px-4 flex items-center justify-between border-b border-white/[0.04] bg-[#08090a] shrink-0 z-20">
         <div className="flex items-center gap-2">
-          <DropdownMenu>
+          <DropdownMenu onOpenChange={(open) => { if (open) fetchThreads(); }}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.04] transition-colors cursor-pointer"
+                data-testid="ai-conversation-dropdown"
+                className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium text-zinc-200 hover:text-white bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] transition-colors cursor-pointer max-w-[280px]"
               >
-                <span>New chat</span>
-                <ChevronDown className="w-3 h-3 text-zinc-500" />
+                <MessageSquare className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span className="truncate">
+                  {threads.find((t) => t.id === activeThreadId)?.title || (hasStarted ? 'Current chat' : 'New chat')}
+                </span>
+                <ChevronDown className="w-3 h-3 text-zinc-400 shrink-0 ml-0.5" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48 bg-[#141517] border border-white/[0.08] text-white p-1">
-              <DropdownMenuItem onClick={handleNewConversation} className="text-xs cursor-pointer">
-                <Plus className="w-3.5 h-3.5 mr-2" />
+            <DropdownMenuContent
+              align="start"
+              className="w-80 bg-[#121316] border border-white/[0.08] text-white p-1.5 shadow-2xl rounded-lg backdrop-blur-md"
+            >
+              <DropdownMenuItem
+                onClick={handleNewConversation}
+                className="text-xs cursor-pointer flex items-center gap-2 px-2.5 py-2 rounded-md hover:bg-white/[0.06] text-zinc-200 hover:text-white font-medium"
+              >
+                <Plus className="w-3.5 h-3.5 text-zinc-400" />
                 <span>Start New Chat</span>
               </DropdownMenuItem>
+              
+              <div className="h-[1px] bg-white/[0.06] my-1" />
+
+              <div className="px-2.5 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                Recent Conversations
+              </div>
+
+              <div className="max-h-60 overflow-y-auto space-y-0.5 custom-scrollbar">
+                {isLoadingThreads && threads.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-zinc-500 flex items-center justify-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Loading conversations...</span>
+                  </div>
+                ) : threads.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-zinc-500 text-center">
+                    No past conversations yet
+                  </div>
+                ) : (
+                  threads.map((thread) => {
+                    const isActive = thread.id === activeThreadId;
+                    return (
+                      <div
+                        key={thread.id}
+                        onClick={() => handleSelectThread(thread.id)}
+                        className={`group flex items-center justify-between px-2.5 py-2 rounded-md text-xs cursor-pointer transition-colors ${
+                          isActive
+                            ? 'bg-white/[0.08] text-white font-medium'
+                            : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          {isActive ? (
+                            <Check className="w-3.5 h-3.5 text-[#5e6ad2] shrink-0" />
+                          ) : (
+                            <MessageSquare className="w-3.5 h-3.5 text-zinc-500 shrink-0 group-hover:text-zinc-400" />
+                          )}
+                          <span className="truncate">{thread.title}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                          <span className="text-[10px] text-zinc-600 group-hover:text-zinc-500">
+                            {new Date(thread.updated_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteThread(e, thread.id)}
+                            className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 text-zinc-500 transition-all cursor-pointer"
+                            title="Delete conversation"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <button
-            type="button"
-            onClick={handleNewConversation}
-            className="p-1 rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04] transition-colors cursor-pointer"
-            title="New Chat"
-          >
-            <Edit3 className="w-3.5 h-3.5" />
-          </button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -491,10 +735,17 @@ export default function WorkspaceAIPage() {
             </form>
           </div>
 
-          {/* Bottom Right Copilot indicator */}
-          <div className="absolute bottom-4 right-4 flex items-center gap-1.5 text-xs text-zinc-500 font-sans select-none">
-            <Sparkles className="w-3.5 h-3.5 text-zinc-500" />
-            <span>Copilot</span>
+          {/* Bottom Right History indicator */}
+          <div className="absolute bottom-3.5 right-4 flex items-center select-none z-20">
+            <button
+              type="button"
+              onClick={toggleHistoryDrawer}
+              className="p-1.5 rounded-md bg-white/[0.03] hover:bg-white/[0.08] text-zinc-400 hover:text-white border border-white/[0.06] transition-colors cursor-pointer"
+              title="Chat history"
+              data-testid="ai-bottom-history-btn"
+            >
+              <Clock className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       ) : (
@@ -538,7 +789,7 @@ export default function WorkspaceAIPage() {
                       </div>
                     )}
 
-                    {/* Message Bubble */}
+                    {/* Message Bubble with Rich Markdown for AI */}
                     {msg.content && (
                       <div
                         className={`px-4 py-2.5 rounded-lg text-xs leading-relaxed ${
@@ -547,7 +798,11 @@ export default function WorkspaceAIPage() {
                             : 'bg-[#121316] text-zinc-200 border border-white/[0.06]'
                         }`}
                       >
-                        <div className="whitespace-pre-wrap">{msg.content}</div>
+                        {isUser ? (
+                          <div className="whitespace-pre-wrap">{msg.content}</div>
+                        ) : (
+                          <AIMarkdownMessage content={msg.content} />
+                        )}
                       </div>
                     )}
 
@@ -762,7 +1017,7 @@ export default function WorkspaceAIPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Bottom Query Bar */}
+          {/* Bottom Query Bar with Agent indicator & History trigger */}
           <div className="p-4 bg-[#08090a] border-t border-white/[0.04] shrink-0">
             <div className="max-w-3xl mx-auto flex items-center gap-2">
               <form
@@ -814,9 +1069,86 @@ export default function WorkspaceAIPage() {
                   </button>
                 )}
               </form>
+
+              {/* Bottom Right History Trigger */}
+              <div className="flex items-center shrink-0 pl-1">
+                <button
+                  type="button"
+                  onClick={toggleHistoryDrawer}
+                  className="p-2 rounded-xl bg-[#121316] hover:bg-white/[0.06] text-zinc-400 hover:text-white border border-white/[0.08] transition-colors cursor-pointer"
+                  title="Chat history"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* ────────────────────────────────────────────────────────────────────────
+         FLOATING HISTORY POPOVER (Matching user's reference screenshot)
+         ──────────────────────────────────────────────────────────────────────── */}
+      {isHistoryDrawerOpen && (
+        <>
+          {/* Transparent dismiss backdrop */}
+          <div
+            className="fixed inset-0 z-30"
+            onClick={() => setIsHistoryDrawerOpen(false)}
+          />
+
+          {/* Floating history popover anchored directly above the bottom right Agent/History button */}
+          <div
+            data-testid="ai-history-popover"
+            className="fixed bottom-14 right-4 z-40 w-80 max-w-[calc(100vw-2rem)] rounded-2xl bg-[#141518]/95 backdrop-blur-xl border border-white/[0.08] shadow-2xl p-2 flex flex-col space-y-0.5 animate-in fade-in zoom-in-95 duration-150 select-none"
+          >
+            {isLoadingThreads && threads.length === 0 ? (
+              <div className="py-4 text-center text-xs text-zinc-500 flex items-center justify-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Loading conversations...</span>
+              </div>
+            ) : threads.length === 0 ? (
+              <div className="py-4 text-center text-xs text-zinc-500">
+                No past conversations yet
+              </div>
+            ) : (
+              <div className="max-h-72 overflow-y-auto space-y-0.5 custom-scrollbar">
+                {threads.slice(0, 10).map((thread, idx) => {
+                  const isActive = thread.id === activeThreadId;
+                  const isRecent = idx < 2; // Blue status dot for recent items matching screenshot
+                  return (
+                    <div
+                      key={thread.id}
+                      onClick={() => {
+                        handleSelectThread(thread.id);
+                        setIsHistoryDrawerOpen(false);
+                      }}
+                      className={`group flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer transition-colors ${
+                        isActive
+                          ? 'bg-white/[0.08] text-white font-medium'
+                          : 'text-zinc-300 hover:bg-white/[0.05] hover:text-white'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                        {isRecent ? (
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#5e6ad2] shrink-0" />
+                        ) : (
+                          <span className="w-1.5 h-1.5 rounded-full bg-transparent shrink-0" />
+                        )}
+                        <span className="truncate text-xs text-zinc-200 group-hover:text-white">
+                          {thread.title}
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-mono text-zinc-500 shrink-0">
+                        {formatRelativeTimeShort(thread.updated_at)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

@@ -20,6 +20,10 @@ from app.schemas.phase4 import (
     ChatStreamRequest,
     ChatActionConfirmRequest,
     ChatActionConfirmResponse,
+    AIThreadCreateRequest,
+    AIThreadResponse,
+    AIMessageCreateRequest,
+    AIMessageResponse,
 )
 from app.services.phase4_service import Phase4Service
 
@@ -170,5 +174,102 @@ async def confirm_chat_action(
         user_jwt=current_user.raw_token,
         db=db,
     )
+
+
+# ==============================================================================
+# AI Conversation History Endpoints
+# ==============================================================================
+
+@router.get(
+    "/ai/threads",
+    response_model=List[AIThreadResponse],
+    summary="List persistent AI chat threads for the current user and organization",
+)
+async def list_ai_threads(
+    organization_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return Phase4Service.list_ai_threads(
+        organization_id=organization_id,
+        user_id=current_user.id,
+        db=db,
+    )
+
+
+@router.post(
+    "/ai/threads",
+    response_model=AIThreadResponse,
+    summary="Create or initialize a new AI chat thread",
+)
+async def create_ai_thread(
+    payload: AIThreadCreateRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return Phase4Service.create_or_get_ai_thread(
+        organization_id=payload.organization_id,
+        user_id=current_user.id,
+        db=db,
+        title=payload.title,
+        first_message=payload.first_message,
+    )
+
+
+@router.get(
+    "/ai/threads/{thread_id}/messages",
+    response_model=List[AIMessageResponse],
+    summary="List messages in an AI chat thread",
+)
+async def list_ai_thread_messages(
+    thread_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return Phase4Service.list_ai_messages(
+        thread_id=thread_id,
+        user_id=current_user.id,
+        db=db,
+    )
+
+
+@router.post(
+    "/ai/threads/{thread_id}/messages",
+    response_model=AIMessageResponse,
+    summary="Append a message to an AI chat thread",
+)
+async def create_ai_thread_message(
+    thread_id: str,
+    payload: AIMessageCreateRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    return Phase4Service.add_ai_message(
+        thread_id=thread_id,
+        sender=payload.sender,
+        content=payload.content,
+        user_id=current_user.id,
+        db=db,
+        tools_json=payload.tools_json,
+        interrupt_json=payload.interrupt_json,
+    )
+
+
+@router.delete(
+    "/ai/threads/{thread_id}",
+    summary="Delete an AI chat thread and all its messages",
+)
+async def delete_ai_thread(
+    thread_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db),
+):
+    Phase4Service.delete_ai_thread(
+        thread_id=thread_id,
+        user_id=current_user.id,
+        db=db,
+    )
+    return {"status": "success", "message": "Thread deleted"}
+
 
 

@@ -1,4 +1,5 @@
 import uuid
+import re
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
@@ -626,4 +627,129 @@ class Phase4Service:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Unsupported action: {data.action}",
             )
+
+    @classmethod
+    def generate_concise_title(cls, message: str) -> str:
+        """
+        Derives a concise 3-7 word title from the user's initial prompt.
+        """
+        clean = re.sub(r'^(please\s+|can\s+you\s+|i\s+want\s+to\s+|help\s+me\s+)', '', message.strip(), flags=re.IGNORECASE)
+        clean = re.sub(r'[^\w\s-]', '', clean)
+        words = clean.split()
+        if not words:
+            return "New Chat"
+        title = " ".join(words[:6])
+        return title[:60].capitalize()
+
+    @classmethod
+    def list_ai_threads(
+        cls,
+        organization_id: str,
+        user_id: str,
+        db: Client,
+    ) -> List[Dict[str, Any]]:
+        res = (
+            db.table("ai_threads")
+            .select("*")
+            .eq("organization_id", organization_id)
+            .eq("user_id", user_id)
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        return res.data or []
+
+    @classmethod
+    def create_or_get_ai_thread(
+        cls,
+        organization_id: str,
+        user_id: str,
+        db: Client,
+        title: Optional[str] = None,
+        first_message: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        thread_title = title
+        if not thread_title and first_message:
+            thread_title = cls.generate_concise_title(first_message)
+        if not thread_title:
+            thread_title = "New Chat"
+
+        payload = {
+            "organization_id": organization_id,
+            "user_id": user_id,
+            "title": thread_title,
+        }
+        res = db.table("ai_threads").insert(payload).execute()
+        if not res.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create AI thread",
+            )
+        return res.data[0]
+
+    @classmethod
+    def list_ai_messages(
+        cls,
+        thread_id: str,
+        user_id: str,
+        db: Client,
+    ) -> List[Dict[str, Any]]:
+        # Verify ownership
+        t_res = db.table("ai_threads").select("id").eq("id", thread_id).eq("user_id", user_id).limit(1).execute()
+        if not t_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI Thread not found")
+
+        res = (
+            db.table("ai_messages")
+            .select("*")
+            .eq("thread_id", thread_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        return res.data or []
+
+    @classmethod
+    def add_ai_message(
+        cls,
+        thread_id: str,
+        sender: str,
+        content: str,
+        user_id: str,
+        db: Client,
+        tools_json: Optional[List[Dict[str, Any]]] = None,
+        interrupt_json: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        t_res = db.table("ai_threads").select("id").eq("id", thread_id).eq("user_id", user_id).limit(1).execute()
+        if not t_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI Thread not found")
+
+        payload = {
+            "thread_id": thread_id,
+            "sender": sender,
+            "content": content,
+            "tools_json": tools_json or [],
+            "interrupt_json": interrupt_json,
+        }
+        res = db.table("ai_messages").insert(payload).execute()
+        if not res.data:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save message")
+
+        # Update thread updated_at
+        db.table("ai_threads").update({"updated_at": datetime.now(timezone.utc).isoformat()}).eq("id", thread_id).execute()
+
+        return res.data[0]
+
+    @classmethod
+    def delete_ai_thread(
+        cls,
+        thread_id: str,
+        user_id: str,
+        db: Client,
+    ) -> bool:
+        t_res = db.table("ai_threads").select("id").eq("id", thread_id).eq("user_id", user_id).limit(1).execute()
+        if not t_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI Thread not found")
+
+        db.table("ai_threads").delete().eq("id", thread_id).execute()
+        return True
+
 

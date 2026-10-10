@@ -7,6 +7,7 @@ Problem Set 7 (Hallucinated State Mutations & Unintended Database Modifications)
 - Mutating tools (update_issue_status, assign_issue) declare their mutation contract.
 """
 
+import re
 from typing import Any, Dict, List, Optional
 from langchain_core.tools import tool
 from supabase import Client
@@ -25,15 +26,35 @@ def search_issues_tool(query: str, organization_id: str, user_jwt: str) -> List[
     """
     try:
         db = get_user_scoped_client(user_jwt)
-        res = (
+        # Check if team is specified in the query
+        teams_res = db.table("teams").select("id, key, name").eq("organization_id", organization_id).execute()
+        teams = teams_res.data or []
+        target_team_id = None
+        for tm in teams:
+            t_key = tm.get("key", "").lower()
+            t_name = tm.get("name", "").lower()
+            if re.search(rf"\b{t_key}\b", query.lower()) or (t_name and t_name in query.lower()):
+                target_team_id = tm["id"]
+                # Strip team key/name from search keyword
+                query = re.sub(rf"\b{t_key}\b", "", query, flags=re.IGNORECASE)
+                query = re.sub(rf"\b{re.escape(t_name)}\b", "", query, flags=re.IGNORECASE)
+                break
+
+        # Strip generic stopwords from search query
+        clean_kw = re.sub(r'\b(list|show|find|search|all|open|active|issues|tickets|in|team|for|the|my|of)\b', '', query, flags=re.IGNORECASE).strip()
+        
+        q = (
             db.table("issues")
             .select("id, identifier, title, priority, state_id, workflow_states(name, category)")
             .eq("organization_id", organization_id)
             .is_("deleted_at", "null")
-            .ilike("title", f"%{query}%")
-            .limit(10)
-            .execute()
         )
+        if target_team_id:
+            q = q.eq("team_id", target_team_id)
+        if clean_kw:
+            q = q.ilike("title", f"%{clean_kw}%")
+            
+        res = q.order("created_at", desc=True).limit(10).execute()
         return res.data or []
     except Exception:
         return []

@@ -175,3 +175,40 @@ class ChatActionConfirmResponse(BaseModel):
     issue_identifier: Optional[str] = None
     message: str
     result: Optional[Dict[str, Any]] = None
+
+
+# ==============================================================================
+# 5. AI Conversation History Schemas
+# ==============================================================================
+
+class AIThreadCreateRequest(BaseModel):
+    organization_id: str
+    title: Optional[str] = None
+    first_message: Optional[str] = None
+
+
+class AIThreadResponse(BaseModel):
+    id: str
+    organization_id: str
+    user_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class AIMessageCreateRequest(BaseModel):
+    sender: str  # 'user' or 'agent'
+    content: str
+    tools_json: Optional[List[Dict[str, Any]]] = None
+    interrupt_json: Optional[Dict[str, Any]] = None
+
+
+class AIMessageResponse(BaseModel):
+    id: str
+    thread_id: str
+    sender: str
+    content: str
+    tools_json: Optional[List[Dict[str, Any]]] = None
+    interrupt_json: Optional[Dict[str, Any]] = None
+    created_at: datetime
+
