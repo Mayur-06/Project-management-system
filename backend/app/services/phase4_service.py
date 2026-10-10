@@ -579,6 +579,48 @@ class Phase4Service:
                 message="Assignee successfully updated by AI agent.",
                 result=res,
             )
+        elif data.action == "create_issue":
+            from app.agents.tools.workspace_tools import create_issue_tool
+
+            team_id = data.team_id
+            if not team_id:
+                # Resolve team via user's workspace memberships
+                mem_lookup = db.table("workspace_members").select("organization_id").eq("user_id", user_id).limit(1).execute()
+                if mem_lookup.data:
+                    org_id = mem_lookup.data[0]["organization_id"]
+                    tm_lookup = db.table("teams").select("id").eq("organization_id", org_id).limit(1).execute()
+                    if tm_lookup.data:
+                        team_id = tm_lookup.data[0]["id"]
+                if not team_id:
+                    tm_lookup = db.table("teams").select("id").limit(1).execute()
+                    team_id = tm_lookup.data[0]["id"] if tm_lookup.data else "00000000-0000-0000-0000-000000000001"
+
+            title = data.title or "Untitled Issue"
+            res = create_issue_tool.invoke({
+                "team_id": team_id,
+                "title": title,
+                "description": data.description,
+                "priority": data.priority or "medium",
+                "state_id": data.target_state_id,
+                "assignee_id": data.target_assignee_id,
+                "creator_id": user_id,
+                "user_jwt": user_jwt,
+            })
+            if isinstance(res, dict) and res.get("error"):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=res["error"])
+
+            created_issue = res.get("issue") or {}
+            created_id = created_issue.get("id")
+            created_ident = created_issue.get("identifier")
+
+            return ChatActionConfirmResponse(
+                status="success",
+                action=data.action,
+                issue_id=created_id,
+                issue_identifier=created_ident,
+                message=f"Issue {created_ident or ''} successfully created by AI agent.",
+                result=res,
+            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

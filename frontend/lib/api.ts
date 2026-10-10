@@ -805,10 +805,14 @@ export const api = {
   // AI Chat & ReAct Agent
   async confirmChatAction(payload: {
     action: string;
-    issue_id: string;
+    issue_id?: string;
+    team_id?: string;
+    title?: string;
+    description?: string;
+    priority?: string;
     target_state_id?: string;
     target_assignee_id?: string;
-  }): Promise<{ status: string; action: string; issue_id: string; message: string; result?: any } | null> {
+  }): Promise<{ status: string; action: string; issue_id?: string; issue_identifier?: string; message: string; result?: any } | null> {
     return await fetchWithAuth(`/ai/chat/action/confirm`, {
       method: 'POST',
       body: JSON.stringify(payload),

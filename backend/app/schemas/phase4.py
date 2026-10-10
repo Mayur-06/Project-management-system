@@ -158,7 +158,11 @@ class ChatStreamRequest(BaseModel):
 
 class ChatActionConfirmRequest(BaseModel):
     action: str
-    issue_id: str
+    issue_id: Optional[str] = None
+    team_id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
     target_state_id: Optional[str] = None
     target_assignee_id: Optional[str] = None
     client_session_id: Optional[str] = None
@@ -167,6 +171,7 @@ class ChatActionConfirmRequest(BaseModel):
 class ChatActionConfirmResponse(BaseModel):
     status: str
     action: str
-    issue_id: str
+    issue_id: Optional[str] = None
+    issue_identifier: Optional[str] = None
     message: str
     result: Optional[Dict[str, Any]] = None

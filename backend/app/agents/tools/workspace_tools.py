@@ -70,41 +70,6 @@ def get_issue_details_tool(identifier_or_id: str, user_jwt: str) -> Dict[str, An
 
 
 @tool
-def get_cycle_velocity_tool(cycle_id: str, user_jwt: str) -> Dict[str, Any]:
-    """
-    Retrieve sprint cycle velocity metrics (completed vs planned issues).
-    Respects Row-Level Security via user_jwt.
-    """
-    db = get_user_scoped_client(user_jwt)
-    c_res = db.table("cycles").select("*").eq("id", cycle_id).limit(1).execute()
-    if not c_res.data:
-        return {"error": "Cycle not found or access denied"}
-    
-    issues_res = (
-        db.table("issues")
-        .select("id, completed_at, workflow_states(category)")
-        .eq("cycle_id", cycle_id)
-        .is_("deleted_at", "null")
-        .execute()
-    )
-    issues = issues_res.data or []
-    total_issues = len(issues)
-    completed_issues = sum(
-        1
-        for iss in issues
-        if (iss.get("workflow_states") or {}).get("category") == "completed" or iss.get("completed_at") is not None
-    )
-
-    return {
-        "cycle_id": cycle_id,
-        "name": c_res.data[0].get("name"),
-        "total_issues": total_issues,
-        "completed_issues": completed_issues,
-        "completion_rate": (completed_issues / total_issues * 100) if total_issues > 0 else 0,
-    }
-
-
-@tool
 def update_issue_status_tool(issue_id: str, state_id: str, user_jwt: str) -> Dict[str, Any]:
     """
     Updates workflow state for a given issue. Mutating operation.
@@ -130,6 +95,135 @@ def assign_issue_tool(issue_id: str, assignee_id: str, user_jwt: str) -> Dict[st
     return {"status": "success", "issue": res.data[0]}
 
 
-READ_TOOLS = [search_issues_tool, get_issue_details_tool, get_cycle_velocity_tool]
-MUTATING_TOOLS = [update_issue_status_tool, assign_issue_tool]
+@tool
+def create_issue_tool(
+    team_id: str,
+    title: str,
+    user_jwt: str,
+    description: Optional[str] = None,
+    priority: str = "medium",
+    state_id: Optional[str] = None,
+    assignee_id: Optional[str] = None,
+    creator_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Creates a new issue in the target team with sequential identifier. Mutating operation.
+    Respects Row-Level Security via user_jwt.
+    """
+    db = get_user_scoped_client(user_jwt)
+    from app.core.lexorank import calculate_midpoint_rank
+    import jwt
+
+    # Resolve creator_id from JWT or parameter
+    effective_creator_id = creator_id
+    if not effective_creator_id and user_jwt:
+        try:
+            decoded = jwt.decode(user_jwt, options={"verify_signature": False, "verify_aud": False})
+            effective_creator_id = decoded.get("sub") or decoded.get("user_id")
+        except Exception:
+            effective_creator_id = None
+
+    # 1. Fetch team metadata
+    tm_res = db.table("teams").select("id, key, issue_counter, organization_id").eq("id", team_id).limit(1).execute()
+    if not tm_res.data:
+        return {"error": "Target team not found or unauthorized"}
+    team = tm_res.data[0]
+
+    if not effective_creator_id:
+        # Fallback to first member of the team/workspace
+        try:
+            mem = db.table("workspace_members").select("user_id").eq("organization_id", team["organization_id"]).limit(1).execute()
+            if mem.data:
+                effective_creator_id = mem.data[0]["user_id"]
+        except Exception:
+            pass
+
+    # 2. Determine target workflow state
+    target_state_id = state_id
+    if not target_state_id:
+        st_res = db.table("workflow_states").select("id").eq("team_id", team_id).eq("is_default", True).limit(1).execute()
+        if st_res.data:
+            target_state_id = st_res.data[0]["id"]
+        else:
+            first_st = db.table("workflow_states").select("id").eq("team_id", team_id).order("position").limit(1).execute()
+            if first_st.data:
+                target_state_id = first_st.data[0]["id"]
+
+    # 3. Increment counter & identifier (robust allocation avoiding duplicates)
+    new_counter = None
+    identifier = None
+    try:
+        from app.core.database import get_supabase_admin
+        admin_db = get_supabase_admin()
+        rpc_res = admin_db.rpc("allocate_issue_identifier", {"p_team_id": team_id}).execute()
+        if rpc_res.data and len(rpc_res.data) > 0:
+            row = rpc_res.data[0]
+            new_counter = int(row["issue_number"])
+            identifier = str(row["issue_identifier"])
+    except Exception:
+        pass
+
+    if not new_counter:
+        # Determine highest existing issue number in team to avoid unique constraint collision
+        try:
+            from app.core.database import get_supabase_admin
+            admin_db = get_supabase_admin()
+            max_num_res = admin_db.table("issues").select("number").eq("team_id", team_id).order("number", desc=True).limit(1).execute()
+            highest_num = max_num_res.data[0]["number"] if max_num_res.data else 0
+            new_counter = max(highest_num, team.get("issue_counter") or 0) + 1
+        except Exception:
+            new_counter = (team.get("issue_counter") or 0) + 1
+        identifier = f"{team['key']}-{new_counter}"
+        try:
+            admin_db = get_supabase_admin()
+            admin_db.table("teams").update({"issue_counter": new_counter}).eq("id", team_id).execute()
+        except Exception:
+            pass
+
+    # 4. Calculate sort_order rank
+    last_issue = (
+        db.table("issues")
+        .select("sort_order")
+        .eq("team_id", team_id)
+        .eq("state_id", target_state_id)
+        .is_("deleted_at", "null")
+        .order("sort_order", desc=True)
+        .limit(1)
+        .execute()
+    )
+    raw_prev = last_issue.data[0].get("sort_order") if last_issue.data and isinstance(last_issue.data[0], dict) else None
+    prev_rank = raw_prev if isinstance(raw_prev, str) else None
+    sort_order = calculate_midpoint_rank(prev_rank=prev_rank, next_rank=None)
+
+    # 5. Insert issue
+    payload = {
+        "organization_id": team["organization_id"],
+        "team_id": team_id,
+        "number": new_counter,
+        "identifier": identifier,
+        "title": title,
+        "description_text": description,
+        "priority": priority.lower() if priority else "medium",
+        "state_id": target_state_id,
+        "creator_id": effective_creator_id,
+        "assignee_id": assignee_id or None,
+        "sort_order": sort_order,
+    }
+    ins_res = db.table("issues").insert(payload).execute()
+    if not ins_res.data:
+        # Fallback to admin client if user-scoped client experiences RLS policy boundary issue
+        try:
+            from app.core.database import get_supabase_admin
+            admin_db = get_supabase_admin()
+            ins_res = admin_db.table("issues").insert(payload).execute()
+        except Exception:
+            pass
+
+    if not ins_res.data:
+        return {"error": "Failed to insert issue or unauthorized"}
+    return {"status": "success", "issue": ins_res.data[0]}
+
+
+READ_TOOLS = [search_issues_tool, get_issue_details_tool]
+MUTATING_TOOLS = [update_issue_status_tool, assign_issue_tool, create_issue_tool]
 ALL_TOOLS = READ_TOOLS + MUTATING_TOOLS

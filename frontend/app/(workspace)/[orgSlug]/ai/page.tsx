@@ -15,6 +15,8 @@ import {
   ChevronDown,
   Edit3,
   Bot,
+  ExternalLink,
+  AlertCircle,
 } from 'lucide-react';
 import { User } from '@/types';
 import { api } from '@/lib/api';
@@ -30,9 +32,14 @@ import { toast } from 'sonner';
 
 interface ActionInterrupt {
   action: string;
-  issue_id: string;
+  issue_id?: string;
   issue_identifier?: string;
   issue_title?: string;
+  team_id?: string;
+  team_key?: string;
+  draft_title?: string;
+  draft_priority?: string;
+  draft_description?: string;
   target_state_id?: string;
   target_state_name?: string;
   target_assignee_id?: string;
@@ -40,6 +47,8 @@ interface ActionInterrupt {
   status: 'pending' | 'confirmed' | 'cancelled';
   isLoading?: boolean;
   resultMessage?: string;
+  created_issue_identifier?: string;
+  created_issue_id?: string;
 }
 
 interface Message {
@@ -259,6 +268,11 @@ export default function WorkspaceAIPage() {
                         issue_id: data.issue_id,
                         issue_identifier: data.issue_identifier,
                         issue_title: data.issue_title,
+                        team_id: data.team_id,
+                        team_key: data.team_key,
+                        draft_title: data.draft_title,
+                        draft_priority: data.draft_priority || 'medium',
+                        draft_description: data.draft_description,
                         target_state_id: data.target_state_id,
                         target_state_name: data.target_state_name,
                         target_assignee_id: data.target_assignee_id,
@@ -310,6 +324,10 @@ export default function WorkspaceAIPage() {
       const res = await api.confirmChatAction({
         action: interrupt.action,
         issue_id: interrupt.issue_id,
+        team_id: interrupt.team_id,
+        title: interrupt.draft_title,
+        description: interrupt.draft_description,
+        priority: interrupt.draft_priority,
         target_state_id: interrupt.target_state_id,
         target_assignee_id: interrupt.target_assignee_id,
       });
@@ -327,6 +345,8 @@ export default function WorkspaceAIPage() {
                   status: 'confirmed',
                   isLoading: false,
                   resultMessage: messageText,
+                  created_issue_identifier: res?.issue_identifier || m.interrupt.issue_identifier,
+                  created_issue_id: res?.issue_id || m.interrupt.issue_id,
                 },
               }
             : m
@@ -533,68 +553,204 @@ export default function WorkspaceAIPage() {
 
                     {/* Human-in-the-Loop Interrupt Gate Card */}
                     {msg.interrupt && (
-                      <div className="mt-3 p-3.5 rounded-lg border border-amber-500/30 bg-amber-950/20 w-full space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-                            Action Proposed
-                          </span>
-                          <span className="text-[11px] text-zinc-400 font-mono">
-                            {msg.interrupt.action}
-                          </span>
-                        </div>
-
-                        <p className="text-xs text-zinc-300">
-                          {msg.interrupt.description}
-                        </p>
-
-                        {msg.interrupt.issue_identifier && (
-                          <div className="flex items-center gap-2 text-[11px] text-zinc-400">
-                            <span className="px-1.5 py-0.5 rounded bg-white/[0.06] font-mono text-zinc-300">
-                              {msg.interrupt.issue_identifier}
-                            </span>
-                            {msg.interrupt.target_state_name && (
-                              <>
-                                <ArrowRight className="w-3 h-3 text-zinc-500" />
-                                <span className="px-1.5 py-0.5 rounded bg-white/[0.06] text-zinc-200">
-                                  {msg.interrupt.target_state_name}
+                      <div className="mt-3 w-full">
+                        {msg.interrupt.action === 'create_issue' ? (
+                          /* Authentic Linear Interactive Draft Card */
+                          <div className="p-4 rounded-xl border border-indigo-500/30 bg-[#121316] shadow-xl w-full space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-white/[0.04]">
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                                <span className="text-xs font-semibold text-zinc-200 tracking-wide">
+                                  Draft Issue Proposal
                                 </span>
-                              </>
+                              </div>
+                              <span className="text-[11px] font-mono text-zinc-400 px-2 py-0.5 rounded bg-white/[0.04] border border-white/[0.04]">
+                                Team: {msg.interrupt.team_key || 'ENG'}
+                              </span>
+                            </div>
+
+                            {/* Editable Fields if pending */}
+                            {msg.interrupt.status === 'pending' ? (
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider block mb-1">
+                                    Issue Title
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={msg.interrupt.draft_title || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setMessages((prev) =>
+                                        prev.map((m) =>
+                                          m.id === msg.id && m.interrupt
+                                            ? { ...m, interrupt: { ...m.interrupt, draft_title: val } }
+                                            : m
+                                        )
+                                      );
+                                    }}
+                                    className="w-full bg-[#18191c] border border-white/[0.08] focus:border-indigo-500/60 rounded px-2.5 py-1.5 text-xs text-white placeholder-zinc-500 outline-none transition-colors"
+                                    placeholder="Enter issue title..."
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-4">
+                                  <div>
+                                    <label className="text-[10px] uppercase font-semibold text-zinc-400 tracking-wider block mb-1">
+                                      Priority
+                                    </label>
+                                    <div className="flex items-center gap-1">
+                                      {['urgent', 'high', 'medium', 'low', 'none'].map((p) => {
+                                        const isSelected = (msg.interrupt?.draft_priority || 'medium').toLowerCase() === p;
+                                        return (
+                                          <button
+                                            key={p}
+                                            type="button"
+                                            onClick={() => {
+                                              setMessages((prev) =>
+                                                prev.map((m) =>
+                                                  m.id === msg.id && m.interrupt
+                                                    ? { ...m, interrupt: { ...m.interrupt, draft_priority: p } }
+                                                    : m
+                                                )
+                                              );
+                                            }}
+                                            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                                              isSelected
+                                                ? p === 'urgent'
+                                                  ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                                                  : p === 'high'
+                                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                                  : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40'
+                                                : 'bg-white/[0.03] text-zinc-400 hover:text-zinc-200 border border-white/[0.04]'
+                                            }`}
+                                          >
+                                            {p.charAt(0).toUpperCase() + p.slice(1)}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-2 border-t border-white/[0.04]">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleConfirmInterrupt(msg.id, msg.interrupt!)}
+                                    disabled={msg.interrupt.isLoading || !msg.interrupt.draft_title?.trim()}
+                                    className="px-3.5 py-1.5 rounded bg-[#5e6ad2] hover:bg-[#7170ff] text-white text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-40 cursor-pointer shadow-sm"
+                                  >
+                                    {msg.interrupt.isLoading ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                    )}
+                                    Confirm & Create
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCancelInterrupt(msg.id)}
+                                    disabled={msg.interrupt.isLoading}
+                                    className="px-3 py-1.5 rounded bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 text-xs transition-colors cursor-pointer border border-white/[0.04]"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : msg.interrupt.status === 'confirmed' ? (
+                              <div className="space-y-2 pt-1">
+                                <div className="flex items-center gap-2 text-xs text-emerald-400 font-medium">
+                                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                  <span>{msg.interrupt.resultMessage || 'Issue created successfully.'}</span>
+                                </div>
+                                {msg.interrupt.created_issue_identifier && (
+                                  <div className="pt-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const tKey = (msg.interrupt?.team_key || 'eng').toLowerCase();
+                                        router.push(`/${orgSlug}/${tKey}/issues/${msg.interrupt?.created_issue_identifier}`);
+                                      }}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-white/[0.06] hover:bg-white/[0.1] text-xs font-mono text-zinc-200 transition-colors border border-white/[0.06] cursor-pointer"
+                                    >
+                                      <span>View {msg.interrupt.created_issue_identifier}</span>
+                                      <ExternalLink className="w-3 h-3 text-zinc-400" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-xs text-zinc-500 pt-1">
+                                Draft creation cancelled. No issue was created.
+                              </div>
                             )}
                           </div>
-                        )}
-
-                        {msg.interrupt.status === 'pending' ? (
-                          <div className="flex items-center gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => handleConfirmInterrupt(msg.id, msg.interrupt!)}
-                              disabled={msg.interrupt.isLoading}
-                              className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
-                            >
-                              {msg.interrupt.isLoading ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <CheckCircle2 className="w-3 h-3" />
-                              )}
-                              Confirm & Execute
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleCancelInterrupt(msg.id)}
-                              disabled={msg.interrupt.isLoading}
-                              className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors cursor-pointer"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : msg.interrupt.status === 'confirmed' ? (
-                          <div className="flex items-center gap-1.5 text-xs text-emerald-400 pt-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>{msg.interrupt.resultMessage || 'Action executed successfully.'}</span>
-                          </div>
                         ) : (
-                          <div className="text-xs text-zinc-500 pt-1">
-                            Action cancelled.
+                          /* Standard mutating action card (status change / assign) */
+                          <div className="p-3.5 rounded-lg border border-amber-500/30 bg-amber-950/20 w-full space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                                Action Proposed
+                              </span>
+                              <span className="text-[11px] text-zinc-400 font-mono">
+                                {msg.interrupt.action}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-zinc-300">
+                              {msg.interrupt.description}
+                            </p>
+
+                            {msg.interrupt.issue_identifier && (
+                              <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                                <span className="px-1.5 py-0.5 rounded bg-white/[0.06] font-mono text-zinc-300">
+                                  {msg.interrupt.issue_identifier}
+                                </span>
+                                {msg.interrupt.target_state_name && (
+                                  <>
+                                    <ArrowRight className="w-3 h-3 text-zinc-500" />
+                                    <span className="px-1.5 py-0.5 rounded bg-white/[0.06] text-zinc-200">
+                                      {msg.interrupt.target_state_name}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+
+                            {msg.interrupt.status === 'pending' ? (
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleConfirmInterrupt(msg.id, msg.interrupt!)}
+                                  disabled={msg.interrupt.isLoading}
+                                  className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
+                                >
+                                  {msg.interrupt.isLoading ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="w-3 h-3" />
+                                  )}
+                                  Confirm & Execute
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCancelInterrupt(msg.id)}
+                                  disabled={msg.interrupt.isLoading}
+                                  className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-colors cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : msg.interrupt.status === 'confirmed' ? (
+                              <div className="flex items-center gap-1.5 text-xs text-emerald-400 pt-1">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>{msg.interrupt.resultMessage || 'Action executed successfully.'}</span>
+                              </div>
+                            ) : (
+                              <div className="text-xs text-zinc-500 pt-1">
+                                Action cancelled.
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
