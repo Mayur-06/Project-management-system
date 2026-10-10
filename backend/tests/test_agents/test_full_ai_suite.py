@@ -338,3 +338,51 @@ def test_react_assistant_general_engineering_copilot_stream(client, mock_db):
     # Must NOT contain annoying default "inspected your workspace issues"
     assert "inspected your workspace issues" not in body
 
+
+def test_react_assistant_create_issue_interrupt_and_confirm(client, mock_db, monkeypatch):
+    """Verify Linear Ask drafts an issue with interrupt_required and confirms creation."""
+    scoped_client_mock = MagicMock()
+    # Mock teams
+    scoped_client_mock.table.return_value.select.return_value.eq.return_value.execute.return_value = MagicMock(
+        data=[{"id": MOCK_TEAM_ID, "key": "ENG", "name": "Engineering", "issue_counter": 12, "organization_id": MOCK_ORG_ID}]
+    )
+    # Mock workflow states
+    scoped_client_mock.table.return_value.select.return_value.eq.return_value.order.return_value.execute.return_value = MagicMock(
+        data=[{"id": MOCK_STATE_ID_1, "name": "Todo", "is_default": True, "position": 1}]
+    )
+    # Mock insert
+    NEW_ISSUE_ID = "99999999-aaaa-bbbb-cccc-dddddddddddd"
+    scoped_client_mock.table.return_value.insert.return_value.execute.return_value = MagicMock(
+        data=[{"id": NEW_ISSUE_ID, "identifier": "ENG-13", "title": "Memory leak in websocket listener", "state_id": MOCK_STATE_ID_1}]
+    )
+
+    import app.agents.tools.workspace_tools as wt
+    monkeypatch.setattr(wt, "get_user_scoped_client", lambda jwt: scoped_client_mock)
+
+    # 1. Ask assistant to create an issue
+    chat_payload = {
+        "organization_id": MOCK_ORG_ID,
+        "messages": [{"role": "user", "content": "Create an urgent bug titled Memory leak in websocket listener in team ENG"}],
+    }
+    stream_res = client.post("/api/v1/ai/chat/stream", json=chat_payload)
+    assert stream_res.status_code == status.HTTP_200_OK
+    stream_body = stream_res.text
+    assert "event: interrupt_required" in stream_body
+    assert "create_issue" in stream_body
+
+    # 2. Confirm action
+    confirm_payload = {
+        "action": "create_issue",
+        "team_id": MOCK_TEAM_ID,
+        "title": "Memory leak in websocket listener",
+        "priority": "urgent",
+        "target_state_id": MOCK_STATE_ID_1,
+    }
+    confirm_res = client.post("/api/v1/ai/chat/action/confirm", json=confirm_payload)
+    assert confirm_res.status_code == status.HTTP_200_OK
+    confirm_data = confirm_res.json()
+    assert confirm_data["status"] == "success"
+    assert confirm_data["action"] == "create_issue"
+    assert confirm_data["issue_id"] == NEW_ISSUE_ID
+    assert confirm_data["issue_identifier"] == "ENG-13"
+

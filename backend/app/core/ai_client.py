@@ -86,7 +86,7 @@ def generate_llm_completion(prompt: str, system_instruction: Optional[str] = Non
         ) if system_instruction else None
 
         response = client.models.generate_content(
-            model=settings.GEMINI_MODEL or "gemini-2.5-flash",
+            model=settings.GEMINI_MODEL or "gemini-3.6-flash",
             contents=prompt,
             config=config,
         )
@@ -111,7 +111,7 @@ def stream_llm_completion(prompt: str, system_instruction: Optional[str] = None)
         ) if system_instruction else None
 
         response = client.models.generate_content_stream(
-            model=settings.GEMINI_MODEL or "gemini-2.5-flash",
+            model=settings.GEMINI_MODEL or "gemini-3.6-flash",
             contents=prompt,
             config=config,
         )
