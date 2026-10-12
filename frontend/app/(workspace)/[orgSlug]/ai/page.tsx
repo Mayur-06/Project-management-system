@@ -736,7 +736,7 @@ export default function WorkspaceAIPage() {
           </div>
 
           {/* Bottom Right History indicator */}
-          <div className="absolute bottom-3.5 right-4 flex items-center select-none z-20">
+          <div className="absolute bottom-3.5 right-4 hidden md:flex items-center select-none z-20">
             <button
               type="button"
               onClick={toggleHistoryDrawer}
@@ -754,7 +754,7 @@ export default function WorkspaceAIPage() {
            ──────────────────────────────────────────────────────────────────────── */
         <div className="flex-1 flex flex-col h-full overflow-hidden">
           {/* Messages Canvas */}
-          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 max-w-3xl w-full mx-auto">
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 max-w-3xl w-full mx-auto">
             {messages.map((msg) => {
               const isUser = msg.sender === 'user';
               return (
@@ -1071,7 +1071,7 @@ export default function WorkspaceAIPage() {
               </form>
 
               {/* Bottom Right History Trigger */}
-              <div className="flex items-center shrink-0 pl-1">
+              <div className="hidden md:flex items-center shrink-0 pl-1">
                 <button
                   type="button"
                   onClick={toggleHistoryDrawer}

@@ -261,7 +261,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     };
 
     return (
-      <div className="flex-1 overflow-x-auto p-6 flex gap-6 select-none min-h-[calc(100vh-3.5rem)] font-sans">
+      <div className="flex-1 overflow-x-auto p-3 sm:p-6 flex gap-3 sm:gap-6 select-none min-h-[calc(100vh-3.5rem)] font-sans">
         {/* Active Columns */}
         {visibleStates.map((state) => {
           const stateIssues = issues.filter((i) => i.state_id === state.id);
@@ -271,7 +271,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               key={state.id}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDropOnFlatColumn(e, state.id)}
-              className="w-80 shrink-0 flex flex-col bg-[#0f1011] rounded-xl border border-white/[0.06] overflow-hidden"
+              className="w-[calc(100vw-2.5rem)] max-w-[320px] sm:w-80 shrink-0 flex flex-col bg-[#0f1011] rounded-xl border border-white/[0.06] overflow-hidden"
             >
               {/* Column Header */}
               <div className="p-3 border-b border-white/[0.06] flex items-center justify-between bg-[#121315]">
@@ -323,7 +323,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
         {/* Collapsible Hidden Columns Rail Matching Image 1 */}
         {hiddenStates.length > 0 && (
-          <div className="w-72 shrink-0 flex flex-col space-y-2">
+          <div className="w-[calc(100vw-2.5rem)] max-w-[280px] sm:w-72 shrink-0 flex flex-col space-y-2">
             <button
               type="button"
               onClick={() => setIsHiddenColumnsExpanded((prev) => !prev)}

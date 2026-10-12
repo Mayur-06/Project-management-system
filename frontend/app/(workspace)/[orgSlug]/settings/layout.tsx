@@ -83,7 +83,7 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
   return (
     <div className="flex h-screen w-screen bg-black text-white overflow-hidden font-sans">
       {/* Dedicated Settings Sidebar */}
-      <aside className="w-64 h-screen bg-black border-r border-zinc-800 flex flex-col justify-between select-none text-sm z-20">
+      <aside className="hidden md:flex w-64 h-screen bg-black border-r border-zinc-800 flex-col justify-between select-none text-sm z-20 shrink-0">
         <div className="flex flex-col">
           {/* Header with Back to Workspace Button */}
           <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
@@ -220,22 +220,84 @@ export default function SettingsLayout({ children }: SettingsLayoutProps) {
       {/* Main Settings Content */}
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-black font-sans">
         {/* Sticky Top Header matching TopNav */}
-        <header className="h-14 border-b border-[#1e2025] bg-[#090a0c]/80 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-10 select-none shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-              <span onClick={handleBackToWorkspace} className="hover:text-zinc-200 transition-colors cursor-pointer">
+        <header className="h-14 border-b border-[#1e2025] bg-[#090a0c]/80 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between sticky top-0 z-10 select-none shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <button
+              onClick={handleBackToWorkspace}
+              className="md:hidden flex items-center justify-center w-7 h-7 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-850 transition-colors cursor-pointer shrink-0"
+              title="Return to Workspace"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400 truncate">
+              <span onClick={handleBackToWorkspace} className="hover:text-zinc-200 transition-colors cursor-pointer truncate max-w-[120px] sm:max-w-none">
                 {organization?.name || orgSlug.toUpperCase()}
               </span>
-              <ChevronRight className="w-3 h-3 text-zinc-600" />
-              <span className="text-zinc-400">Settings</span>
-              <ChevronRight className="w-3 h-3 text-zinc-600" />
-              <span className="text-white font-medium">{getSectionTitle()}</span>
+              <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
+              <span className="text-zinc-400 shrink-0">Settings</span>
+              <ChevronRight className="w-3 h-3 text-zinc-600 shrink-0" />
+              <span className="text-white font-medium truncate">{getSectionTitle()}</span>
             </div>
           </div>
 
+          <button
+            onClick={handleSignOut}
+            className="md:hidden flex items-center justify-center w-7 h-7 rounded-md text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer shrink-0"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </header>
 
-        <div className="max-w-4xl w-full mx-auto p-6 md:p-8 flex-1">
+        {/* Mobile Horizontal Navigation Tabs */}
+        <div className="md:hidden border-b border-zinc-800 bg-[#090a0c] px-3 py-2 flex items-center gap-1.5 overflow-x-auto scrollbar-none shrink-0">
+          <Link
+            href={`/${orgSlug}/settings/workspace`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
+              isWorkspaceActive
+                ? 'bg-zinc-900 text-white border border-zinc-700'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+            }`}
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span>Workspace</span>
+          </Link>
+          <Link
+            href={`/${orgSlug}/settings/members`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
+              isMembersActive
+                ? 'bg-zinc-900 text-white border border-zinc-700'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Members</span>
+          </Link>
+          <Link
+            href={`/${orgSlug}/settings/teams`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
+              isTeamsOverviewActive || pathname?.includes('/settings/teams/')
+                ? 'bg-zinc-900 text-white border border-zinc-700'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+            }`}
+          >
+            <FolderKanban className="w-3.5 h-3.5" />
+            <span>Teams</span>
+          </Link>
+          <Link
+            href={`/${orgSlug}/settings/profile`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
+              isProfileActive
+                ? 'bg-zinc-900 text-white border border-zinc-700'
+                : 'text-zinc-400 hover:text-white hover:bg-zinc-900/60'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>Profile</span>
+          </Link>
+        </div>
+
+        <div className="max-w-4xl w-full mx-auto p-4 sm:p-6 md:p-8 flex-1">
           {children}
         </div>
       </main>

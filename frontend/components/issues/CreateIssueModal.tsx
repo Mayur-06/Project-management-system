@@ -242,14 +242,14 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="sm:max-w-2xl bg-[#191a1d] border border-white/[0.08] text-white p-0 gap-0 rounded-2xl shadow-2xl overflow-hidden [&>button]:hidden font-sans"
+        className="w-[calc(100vw-1.5rem)] sm:w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto bg-[#191a1d] border border-white/[0.08] text-white p-0 gap-0 rounded-2xl shadow-2xl [&>button]:hidden font-sans"
       >
         <DialogHeader className="sr-only">
           <DialogTitle>Create Issue</DialogTitle>
         </DialogHeader>
 
         {/* Top Header: Seamless, no bottom border, matching Image 2 */}
-        <div className="px-6 pt-5 pb-2 flex items-center justify-between select-none">
+        <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-2 flex items-center justify-between select-none">
           {/* Breadcrumb Pill */}
           <div className="flex items-center gap-2">
             {teams.length > 1 ? (
@@ -307,7 +307,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
           )}
 
           {/* Issue Title Input - Clean borderless */}
-          <div className="px-6 pt-2 pb-1">
+          <div className="px-4 sm:px-6 pt-2 pb-1">
             <input
               autoFocus
               type="text"
@@ -320,7 +320,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
 
 
           {/* Issue Description Textarea - Clean borderless */}
-          <div className="px-6 pt-1 pb-4">
+          <div className="px-4 sm:px-6 pt-1 pb-3 sm:pb-4">
             <textarea
               rows={4}
               value={description}
@@ -331,7 +331,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
           </div>
 
           {/* Property Pills Row (Linear style matching Image 2, NO line separator) */}
-          <div className="px-6 pb-4 flex items-center flex-wrap gap-2 select-none">
+          <div className="px-4 sm:px-6 pb-3 sm:pb-4 flex items-center flex-wrap gap-2 select-none">
             {/* Status Pill */}
             <Popover open={isStatusPopoverOpen} onOpenChange={setIsStatusPopoverOpen}>
               <PopoverTrigger asChild>
@@ -525,7 +525,7 @@ export const CreateIssueModal: React.FC<CreateIssueModalProps> = ({
           </div>
 
           {/* Bottom Footer Bar - Same background, NO line separation */}
-          <div className="px-6 pb-5 pt-2 flex items-center justify-between">
+          <div className="px-4 sm:px-6 pb-4 sm:pb-5 pt-2 flex items-center justify-between">
             {/* Attachment paperclip circular trigger */}
             <TooltipProvider delayDuration={300}>
               <Tooltip>

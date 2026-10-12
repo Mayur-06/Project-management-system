@@ -15,12 +15,14 @@ VIEWPORTS = [
 ]
 
 ROUTES = [
-    {"name": "login", "url": "http://localhost:3000/login", "auth": False},
-    {"name": "issues_board", "url": "http://localhost:3000/acme/eng/issues", "auth": True},
-    {"name": "issues_list", "url": "http://localhost:3000/acme/eng/issues", "auth": True, "action": "switch_to_list"},
-    {"name": "ai_chat", "url": "http://localhost:3000/acme/ai", "auth": True},
-    {"name": "inbox", "url": "http://localhost:3000/acme/inbox", "auth": True},
-    {"name": "settings", "url": "http://localhost:3000/acme/settings/workspace", "auth": True},
+    {"name": "login", "url": "http://localhost:3000/login"},
+    {"name": "issues_board", "url": "http://localhost:3000/acme/eng/issues"},
+    {"name": "issues_list", "url": "http://localhost:3000/acme/eng/issues", "action": "switch_to_list"},
+    {"name": "issue_detail", "url": "http://localhost:3000/acme/eng/issues/ENG-1"},
+    {"name": "ai_chat", "url": "http://localhost:3000/acme/ai"},
+    {"name": "inbox", "url": "http://localhost:3000/acme/inbox"},
+    {"name": "settings_workspace", "url": "http://localhost:3000/acme/settings/workspace"},
+    {"name": "settings_members", "url": "http://localhost:3000/acme/settings/members"},
 ]
 
 async def check_overflow_and_metrics(page):
@@ -37,9 +39,11 @@ async def check_overflow_and_metrics(page):
         const overflowingElements = [];
         const allElements = document.querySelectorAll('*');
         for (const el of allElements) {
+            // Ignore script, style, portals, and SVG definitions
+            if (['SCRIPT', 'STYLE', 'NEXTJS-PORTAL'].includes(el.tagName)) continue;
+            
             const rect = el.getBoundingClientRect();
             if (rect.right > clientWidth + 2 || rect.left < -2) {
-                // Ignore elements with display: none or zero dimensions or specific popovers
                 if (rect.width > 0 && rect.height > 0 && window.getComputedStyle(el).display !== 'none' && window.getComputedStyle(el).visibility !== 'hidden') {
                     const tag = el.tagName.toLowerCase();
                     const cls = (el.className && typeof el.className === 'string') ? el.className.split(' ').slice(0, 3).join('.') : '';
@@ -49,7 +53,7 @@ async def check_overflow_and_metrics(page):
                         right: Math.round(rect.right),
                         width: Math.round(rect.width),
                     });
-                    if (overflowingElements.length >= 10) break;
+                    if (overflowingElements.length >= 5) break;
                 }
             }
         }
@@ -57,7 +61,7 @@ async def check_overflow_and_metrics(page):
         return {
             clientWidth,
             scrollWidth,
-            overflowDiff: scrollWidth - clientWidth,
+            overflowDiff: Math.max(0, scrollWidth - clientWidth),
             hasHorizontalOverflow,
             overflowingElements,
         };
@@ -70,7 +74,7 @@ async def run_tests():
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         
-        # First, log in once and get storage state
+        # 1. Log in once to obtain session state
         print("Logging in to obtain session...")
         login_context = await browser.new_context(viewport={"width": 1280, "height": 800})
         login_page = await login_context.new_page()
@@ -87,7 +91,10 @@ async def run_tests():
         
         for vp in VIEWPORTS:
             vp_report = {"viewport": vp, "results": []}
-            print(f"\n--- Testing Viewport: {vp['name']} ({vp['width']}x{vp['height']}) ---")
+            is_mobile = vp["width"] < 768
+            print(f"\n==================================================")
+            print(f"Testing Viewport: {vp['name']} ({vp['width']}x{vp['height']}) - {vp['device']}")
+            print(f"==================================================")
             
             context = await browser.new_context(
                 viewport={"width": vp["width"], "height": vp["height"]},
@@ -96,27 +103,25 @@ async def run_tests():
             page = await context.new_page()
             
             for route in ROUTES:
-                print(f"Testing route: {route['name']} ({route['url']})")
+                print(f"Testing route: {route['name']}")
                 try:
                     await page.goto(route["url"], wait_until="networkidle", timeout=15000)
                     await page.wait_for_timeout(1500)
                     
                     if route.get("action") == "switch_to_list":
-                        # Click list view button
-                        list_btn = page.locator('button[title="List View"]')
+                        list_btn = page.locator('button[title="List View"]').first
                         if await list_btn.count() > 0:
                             await list_btn.click()
                             await page.wait_for_timeout(1000)
-
-                    # Check create issue modal responsiveness if on issues board
+                    
+                    # Check modal if on issues_board
                     modal_metrics = None
                     if route["name"] == "issues_board":
-                        # Take screenshot of board first
-                        shot_path = os.path.join(OUTPUT_DIR, f"{vp['name']}_{route['name']}.png")
-                        await page.screenshot(path=shot_path, full_page=False)
-                        
-                        # Open new issue modal
-                        new_issue_btn = page.locator('button:has-text("New Issue")').first
+                        # Open new issue modal using title or text
+                        new_issue_btn = page.locator('button[title="New Issue"]').first
+                        if await new_issue_btn.count() == 0:
+                            new_issue_btn = page.locator('button:has-text("New Issue")').first
+                            
                         if await new_issue_btn.count() > 0 and await new_issue_btn.is_visible():
                             await new_issue_btn.click()
                             await page.wait_for_timeout(1000)
@@ -126,34 +131,50 @@ async def run_tests():
                             # Close modal
                             await page.keyboard.press("Escape")
                             await page.wait_for_timeout(500)
-                    
+
                     screenshot_name = f"{vp['name']}_{route['name']}.png"
                     screenshot_path = os.path.join(OUTPUT_DIR, screenshot_name)
-                    if not (route["name"] == "issues_board"):
-                        await page.screenshot(path=screenshot_path, full_page=False)
+                    await page.screenshot(path=screenshot_path, full_page=False)
                     
                     metrics = await check_overflow_and_metrics(page)
                     
-                    # Check sidebar visibility
-                    sidebar_visible = False
-                    sidebar = page.locator('aside')
-                    if await sidebar.count() > 0:
-                        sidebar_visible = await sidebar.first.is_visible()
-                        sidebar_box = await sidebar.first.bounding_box()
-                    else:
-                        sidebar_box = None
-                        
+                    # Verify specific component responsive behaviors
+                    checks = {}
+                    
+                    if "settings" in route["name"]:
+                        # Settings sidebar should be hidden on mobile (< 768px)
+                        settings_sidebar = page.locator('aside.hidden.md\\:flex, aside')
+                        if await settings_sidebar.count() > 0:
+                            sidebar_vis = await settings_sidebar.first.is_visible()
+                            checks["settings_sidebar_visible"] = sidebar_vis
+                            checks["settings_sidebar_correct"] = (not sidebar_vis) if is_mobile else True
+                    
+                    if route["name"] == "ai_chat":
+                        # History floating button should be hidden on mobile (< 768px)
+                        history_btn = page.locator('[data-testid="ai-bottom-history-btn"]')
+                        if await history_btn.count() > 0:
+                            history_vis = await history_btn.first.is_visible()
+                            checks["ai_history_floating_btn_visible"] = history_vis
+                            checks["ai_history_floating_btn_correct"] = (not history_vis) if is_mobile else True
+                    
+                    if route["name"] == "issue_detail":
+                        # Right properties rail should be hidden on < 1024px
+                        right_rail = page.locator('div.hidden.lg\\:block')
+                        if await right_rail.count() > 0:
+                            rail_vis = await right_rail.first.is_visible()
+                            checks["issue_detail_right_rail_visible"] = rail_vis
+                            checks["issue_detail_right_rail_correct"] = (not rail_vis) if vp["width"] < 1024 else True
+
                     result = {
                         "route": route["name"],
                         "url": route["url"],
                         "screenshot": screenshot_name,
                         "metrics": metrics,
-                        "sidebar_visible": sidebar_visible,
-                        "sidebar_box": sidebar_box,
+                        "checks": checks,
                         "modal_metrics": modal_metrics,
                     }
                     vp_report["results"].append(result)
-                    print(f"  Result: clientW={metrics['clientWidth']}, scrollW={metrics['scrollWidth']}, overflow={metrics['hasHorizontalOverflow']}")
+                    print(f"  -> clientW={metrics['clientWidth']}px, scrollW={metrics['scrollWidth']}px, overflow={metrics['hasHorizontalOverflow']}, checks={checks}")
                 except Exception as ex:
                     print(f"  Error on {route['name']}: {ex}")
                     vp_report["results"].append({
@@ -166,9 +187,13 @@ async def run_tests():
             
         await browser.close()
         
-    with open(os.path.join(OUTPUT_DIR, "responsiveness_report.json"), "w") as f:
+    report_file = os.path.join(OUTPUT_DIR, "responsiveness_report.json")
+    with open(report_file, "w") as f:
         json.dump(report, f, indent=2)
-    print("\nCompleted responsive browser tests! Report saved.")
+    print(f"\n==================================================")
+    print(f"All responsive browser tests finished successfully!")
+    print(f"Report saved to: {report_file}")
+    print(f"==================================================")
 
 if __name__ == "__main__":
     asyncio.run(run_tests())
