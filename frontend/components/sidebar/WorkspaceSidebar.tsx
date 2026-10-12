@@ -17,6 +17,7 @@ import {
   LogOut,
   Inbox,
   List,
+  X,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
@@ -34,6 +35,8 @@ interface WorkspaceSidebarProps {
   onOpenCommandPalette: () => void;
   onOpenNewIssue: () => void;
   onOpenAIAsk: () => void;
+  onNavigate?: () => void;
+  onCloseMobile?: () => void;
 }
 
 export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
@@ -45,6 +48,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onOpenCommandPalette,
   onOpenNewIssue,
   onOpenAIAsk,
+  onNavigate,
+  onCloseMobile,
 }) => {
   const router = useRouter();
   const pathname = usePathname();
@@ -144,7 +149,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   ];
 
   return (
-    <aside className="w-64 h-screen bg-panel-dark border-r border-border-subtle flex flex-col justify-between select-none text-sm z-20 font-sans">
+    <aside className="w-64 h-full bg-panel-dark border-r border-border-subtle flex flex-col justify-between select-none text-sm z-20 font-sans">
       {/* Workspace Header */}
       <div className="flex flex-col relative">
         <div className="p-3 border-b border-border-subtle flex items-center justify-between">
@@ -166,6 +171,15 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <ChevronDown className={`w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform ${isWorkspaceDropdownOpen ? 'rotate-180' : ''}`} />
             </div>
           </button>
+          {onCloseMobile && (
+            <button
+              onClick={onCloseMobile}
+              className="p-1 rounded text-zinc-400 hover:text-white md:hidden ml-1 cursor-pointer"
+              title="Close navigation"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         {/* Workspace Switcher Dropdown */}
@@ -183,7 +197,10 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                     <Link
                       key={item.organization.id}
                       href={firstTeam ? `/${item.organization.slug}/${firstTeam}/issues` : `/${item.organization.slug}/issues`}
-                      onClick={() => setIsWorkspaceDropdownOpen(false)}
+                      onClick={() => {
+                        setIsWorkspaceDropdownOpen(false);
+                        onNavigate?.();
+                      }}
                       className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors ${
                         isCurrent
                           ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
@@ -234,6 +251,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <Link
                 key={item.label}
                 href={item.href}
+                onClick={() => onNavigate?.()}
                 className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   isActive
                     ? 'bg-white/[0.08] text-text-primary border border-border-subtle shadow-xs'
@@ -261,7 +279,10 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <span>Teams</span>
               <button
                 type="button"
-                onClick={() => router.push(`/${currentOrgSlug}/teams/new`)}
+                onClick={() => {
+                  onNavigate?.();
+                  router.push(`/${currentOrgSlug}/teams/new`);
+                }}
                 className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white transition-colors cursor-pointer"
                 title="Create New Team"
               >
@@ -310,6 +331,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                     <div className="pl-6 pr-1 py-0.5 space-y-0.5 animate-fade-in">
                       <Link
                         href={issuesHref}
+                        onClick={() => onNavigate?.()}
                         className={`flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors ${
                           isIssuesActive
                             ? 'bg-zinc-900 text-white font-medium border border-zinc-700/80'
@@ -361,6 +383,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           </button>
           <Link
             href={`/${currentOrgSlug}/settings/workspace`}
+            onClick={() => onNavigate?.()}
             className="p-1.5 rounded-md hover:bg-[#1a1d22] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
             title="Settings (Cmd+,)"
           >

@@ -17,7 +17,6 @@ from typing import AsyncGenerator, Dict, Any, List, Optional
 from app.agents.tools.workspace_tools import (
     search_issues_tool,
     get_issue_details_tool,
-    get_cycle_velocity_tool,
     update_issue_status_tool,
     assign_issue_tool,
 )
@@ -61,31 +60,28 @@ class LinearAskAgent:
         key_match = re.search(r'\b([A-Za-z]+-\d+)\b', query)
 
         # Detect intent cleanly
-        is_mutation = False
-        if any(v in q_lower for v in ("to done", "to in progress", "to completed", "to canceled", "to backlog")):
-            is_mutation = True
-        elif key_match and any(v in q_lower for v in ("move", "close", "mark", "assign", "transition", "complete", "reopen")):
-            is_mutation = True
-        elif any(q_lower.startswith(p) for p in ("move ", "close ", "assign ", "complete ")):
-            is_mutation = True
+        is_create_issue = False
+        create_keywords = ("create issue", "create ticket", "new issue", "new ticket", "file issue", "file ticket", "draft issue", "draft ticket", "create a bug", "report a bug", "add issue", "add ticket")
+        if any(p in q_lower for p in create_keywords) or (q_lower.startswith("create ") and any(w in q_lower for w in ("bug", "task", "feature", "issue", "ticket"))):
+            is_create_issue = True
 
-        # Detect if user is asking a conceptual/definition question (e.g. "what is velocity", "explain burndown")
+        is_mutation = False
+        if not is_create_issue:
+            if any(v in q_lower for v in ("to done", "to in progress", "to completed", "to canceled", "to backlog")):
+                is_mutation = True
+            elif key_match and any(v in q_lower for v in ("move", "close", "mark", "assign", "transition", "complete", "reopen")):
+                is_mutation = True
+            elif any(q_lower.startswith(p) for p in ("move ", "close ", "assign ", "complete ")):
+                is_mutation = True
+
+        # Detect if user is asking a conceptual/definition question
         is_definition_question = (
             any(q_lower.startswith(p) for p in ("what is ", "what does ", "define ", "explain ", "meaning of ", "how is "))
-            and not any(w in q_lower for w in ("our", "current", "this", "my", "team", "workspace", "active", "cycle"))
+            and not any(w in q_lower for w in ("our", "current", "this", "my", "team", "workspace", "active"))
         )
 
-        is_cycle_query = False
-        if not is_mutation and not is_definition_question:
-            is_cycle_query = (
-                any(w in q_lower for w in ("burndown", "sprint progress", "cycle progress", "cycle velocity", "sprint status", "team velocity"))
-                or ("velocity" in q_lower and any(w in q_lower for w in ("our", "current", "show", "check", "team", "sprint", "cycle", "report", "stats")))
-                or ("cycle" in q_lower and any(w in q_lower for w in ("what", "how", "show", "current", "stats", "metrics", "rate", "points", "velocity")))
-                or ("sprint" in q_lower and any(w in q_lower for w in ("what", "how", "show", "current", "stats", "metrics", "rate", "points", "velocity")))
-            )
-
         is_issue_search = False
-        if not is_mutation and not is_cycle_query:
+        if not is_create_issue and not is_mutation and not is_definition_question:
             explicit_ticket_phrases = (
                 "find issue", "find ticket", "search issue", "search ticket",
                 "list issue", "list ticket", "show issue", "show ticket",
@@ -101,64 +97,110 @@ class LinearAskAgent:
             elif any(w in q_lower for w in ("issue", "issues", "ticket", "tickets")) and any(w in q_lower for w in ("find", "search", "list", "filter", "lookup", "look up", "any", "status", "active")):
                 is_issue_search = True
 
-        # Scenario A: Velocity or Sprint metrics query
-        if is_cycle_query:
-            yield f"event: tool_start\ndata: {json.dumps({'tool': 'get_cycle_velocity', 'query': query})}\n\n"
+        # Scenario 0: Interactive Issue Creation Request (Human-in-the-Loop Interrupt Gate)
+        if is_create_issue:
+            yield f"event: tool_start\ndata: {json.dumps({'tool': 'create_issue', 'query': query})}\n\n"
             await asyncio.sleep(0.02)
 
             from app.agents.tools.workspace_tools import get_user_scoped_client
-            cycle_data = None
-            try:
-                user_db = get_user_scoped_client(user_jwt)
-                c_res = (
-                    user_db.table("cycles")
-                    .select("id, name, starts_at, ends_at")
-                    .is_("completed_at", "null")
-                    .order("starts_at", desc=True)
-                    .limit(1)
-                    .execute()
-                )
-                if c_res.data:
-                    cycle_data = get_cycle_velocity_tool.invoke({
-                        "cycle_id": c_res.data[0]["id"],
-                        "user_jwt": user_jwt,
-                    })
-            except Exception:
-                cycle_data = None
+            user_db = get_user_scoped_client(user_jwt)
 
-            yield f"event: tool_complete\ndata: {json.dumps({'tool': 'get_cycle_velocity', 'status': 'success'})}\n\n"
+            # Discover user's teams in the organization
+            teams_res = user_db.table("teams").select("id, key, name").eq("organization_id", organization_id).execute()
+            teams = teams_res.data or []
+            target_team = teams[0] if teams else {"id": "00000000-0000-0000-0000-000000000001", "key": "TEAM", "name": "General"}
+
+            # Check if user mentioned a specific team key or name
+            for tm in teams:
+                if tm.get("key", "").lower() in q_lower or tm.get("name", "").lower() in q_lower:
+                    target_team = tm
+                    break
+
+            # Fetch workflow states for this team
+            team_id = target_team["id"]
+            states_res = user_db.table("workflow_states").select("id, name, is_default, position").eq("team_id", team_id).order("position").execute()
+            team_states = states_res.data or []
+            default_st = next((s for s in team_states if s.get("is_default")), (team_states[0] if team_states else None))
+            target_state_id = default_st["id"] if default_st else None
+            target_state_name = default_st["name"] if default_st else "Todo"
+
+            # Use LLM or rule-based parser to extract Title, Priority, Description
+            draft_title = "New Task"
+            draft_priority = "medium"
+            draft_desc = ""
+
+            llm_extract = generate_llm_completion(
+                prompt=(
+                    f"User said: '{query}'\n"
+                    f"Extract the planned issue title, priority ('urgent', 'high', 'medium', 'low', 'none'), "
+                    f"and optional concise description from the user prompt.\n"
+                    f"Return STRICT JSON with keys: title, priority, description.\n"
+                    f"Return ONLY valid JSON."
+                ),
+                system_instruction="You are an engineering copilot extracting structured ticket parameters."
+            )
+            if llm_extract:
+                try:
+                    cleaned = llm_extract.strip()
+                    if cleaned.startswith("```json"):
+                        cleaned = cleaned[7:]
+                    if cleaned.startswith("```"):
+                        cleaned = cleaned[3:]
+                    if cleaned.endswith("```"):
+                        cleaned = cleaned[:-3]
+                    extracted_data = json.loads(cleaned.strip())
+                    draft_title = extracted_data.get("title") or draft_title
+                    draft_priority = extracted_data.get("priority") or draft_priority
+                    draft_desc = extracted_data.get("description") or ""
+                except Exception:
+                    pass
+
+            if draft_title == "New Task":
+                # Fallback extraction from regex/text
+                for kw in create_keywords:
+                    if kw in q_lower:
+                        idx = q_lower.find(kw) + len(kw)
+                        candidate = query[idx:].strip().strip(":").strip("-").strip()
+                        if candidate:
+                            draft_title = candidate[:80]
+                        break
+
+            # Infer priority if explicit
+            if any(w in q_lower for w in ("urgent", "p0", "blocker")):
+                draft_priority = "urgent"
+            elif any(w in q_lower for w in ("high", "p1")):
+                draft_priority = "high"
+            elif any(w in q_lower for w in ("low", "p3", "minor")):
+                draft_priority = "low"
+
+            interrupt_payload = {
+                "action": "create_issue",
+                "team_id": team_id,
+                "team_key": target_team.get("key", "TEAM"),
+                "draft_title": draft_title,
+                "draft_priority": draft_priority,
+                "draft_description": draft_desc,
+                "target_state_id": target_state_id,
+                "target_state_name": target_state_name,
+                "description": f"Create new issue '{draft_title}' in team {target_team.get('key', 'TEAM')}",
+            }
+
+            yield f"event: interrupt_required\ndata: {json.dumps(interrupt_payload)}\n\n"
             await asyncio.sleep(0.01)
 
-            if cycle_data and not cycle_data.get("error"):
-                summary = (
-                    f"Sprint '{cycle_data.get('cycle_name') or 'Current Cycle'}' Velocity Report: "
-                    f"{cycle_data.get('completed_points', 0)} of {cycle_data.get('total_points', 0)} points completed "
-                    f"({cycle_data.get('completion_rate', '0%')} completion rate across {cycle_data.get('total_issues', 0)} issues)."
-                )
-            else:
-                summary = "No active sprint cycle is currently configured for this team. You can create a new cycle in the Cycles tab to track velocity."
-
-            # Dynamic LLM summary if configured
-            llm_summary = generate_llm_completion(
-                prompt=(
-                    f"User asked: '{query}'\n"
-                    f"Cycle metrics data from database: {json.dumps(cycle_data or {})}\n"
-                    f"If cycle metrics data is empty or null, inform the user concisely that no active cycle is configured for this team. "
-                    f"Otherwise provide a friendly 1-2 sentence engineering sprint velocity summary."
-                ),
-                system_instruction="You are Workspace Copilot, an ultra-fast engineering project assistant."
-            )
-            if llm_summary:
-                summary = llm_summary.strip()
-
-            sub_tokens = re.findall(r'\S+|\n+|\s+', summary)
-            for tok in sub_tokens:
+            tokens = [
+                f"I've ", f"prepared ", f"a ", f"draft ", f"for ", f"this ", f"issue ",
+                f"in ", f"{target_team.get('key', 'team')}. ",
+                f"Review ", f"and ", f"adjust ", f"any ", f"details ", f"below, ",
+                f"then ", f"click ", f"Confirm ", f"to ", f"create ", f"it."
+            ]
+            for tok in tokens:
                 if request and await request.is_disconnected():
                     return
                 yield f"event: token\ndata: {json.dumps({'text': tok})}\n\n"
-                await asyncio.sleep(0.015)
+                await asyncio.sleep(0.01)
 
-        # Scenario B: Mutating status update request (Problem Set 7 - interrupt confirmation)
+        # Scenario A: Mutating status update request (Problem Set 7 - interrupt confirmation)
         elif is_mutation:
             yield f"event: tool_start\ndata: {json.dumps({'tool': 'update_issue_status', 'query': query})}\n\n"
             await asyncio.sleep(0.02)

@@ -142,3 +142,8 @@ code, kbd, samp, pre, .font-mono {
   animation: fadeIn 0.12s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Ensure Next.js dev overlay indicator does not block top-left mobile interactions */
+nextjs-portal {
+  pointer-events: none !important;
+}
+

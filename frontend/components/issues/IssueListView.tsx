@@ -145,7 +145,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
               >
                 <div
                   onClick={() => onSelectIssue(issue)}
-                  className="group flex items-center justify-between min-h-[38px] py-2 px-3.5 rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer text-xs relative select-none"
+                  className="group flex items-center justify-between min-h-[38px] py-2 px-2 sm:px-3.5 rounded-md hover:bg-white/[0.04] transition-colors cursor-pointer text-xs relative select-none"
                 >
                   {/* Left side: Tree Guide Lines + Priority + Identifier + Status + Title + Labels + Progress */}
                   <div className="flex items-center min-w-0 flex-1 gap-3 mr-4">
@@ -260,7 +260,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
 
                     {/* Labels Matching Image 3 */}
                     <div
-                      className="flex items-center gap-1.5 shrink-0"
+                      className="hidden sm:flex items-center gap-1.5 shrink-0"
                       onClick={(e) => e.stopPropagation()}
                     >
                       {issue.labels && issue.labels.length > 0 ? (
@@ -399,7 +399,7 @@ export const IssueListView: React.FC<IssueListViewProps> = ({
                     </div>
 
                     {formattedDate && (
-                      <span className="text-[11px] font-sans text-zinc-500 shrink-0">
+                      <span className="text-[11px] font-sans text-zinc-500 shrink-0 hidden md:inline">
                         {formattedDate}
                       </span>
                     )}

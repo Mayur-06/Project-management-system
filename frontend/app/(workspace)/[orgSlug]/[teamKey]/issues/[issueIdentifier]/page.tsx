@@ -504,11 +504,48 @@ export default function IssueDetailPage() {
       {/* Two Column Canvas: Left Main Content & Right Properties Rail */}
       <div className="flex-1 flex overflow-hidden">
         {/* Main Left Column */}
-        <div className="flex-1 p-6 sm:p-8 overflow-y-auto space-y-6 max-w-4xl">
+        <div className="flex-1 p-4 sm:p-6 sm:p-8 overflow-y-auto space-y-5 sm:space-y-6 max-w-4xl">
           <IssueTitleEditor
             initialTitle={issue.title}
             onSave={handleTitleChange}
           />
+
+          {/* Mobile Property Dropdown Pills (< lg screens) */}
+          <div className="flex lg:hidden flex-wrap items-center gap-2 pt-1 pb-2 border-b border-white/[0.06] select-none">
+            {/* Status Dropdown */}
+            <StatusPicker
+              states={activeStates}
+              currentStateId={issue.state_id}
+              currentState={issue.state}
+              onSelectState={handleStatusChange}
+              triggerClassName="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.09] px-2.5 py-1 text-xs rounded-full text-zinc-200"
+            />
+
+            {/* Priority Dropdown */}
+            <PriorityPicker
+              currentPriority={issue.priority}
+              onSelectPriority={handlePriorityChange}
+              triggerClassName="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.09] px-2.5 py-1 text-xs rounded-full text-zinc-200"
+            />
+
+            {/* Assignee Dropdown */}
+            <AssigneePicker
+              users={assignableUsers}
+              currentAssigneeId={issue.assignee_id}
+              currentAssignee={issue.assignee}
+              showLabel={true}
+              onSelectAssignee={(uid) => handleAssigneeChange(uid || '')}
+              triggerClassName="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.09] px-2.5 py-1 text-xs rounded-full text-zinc-200"
+            />
+
+            {/* Labels Dropdown */}
+            <LabelPicker
+              availableLabels={availableLabels}
+              selectedLabelIds={(issue.labels || []).map((l) => l.id)}
+              onToggleLabel={handleToggleLabel}
+              triggerClassName="bg-white/[0.05] border border-white/[0.08] hover:bg-white/[0.09] px-2.5 py-1 text-xs rounded-full text-zinc-200"
+            />
+          </div>
 
           {/* Description */}
           <div className="space-y-1.5">
@@ -632,8 +669,8 @@ export default function IssueDetailPage() {
           />
         </div>
 
-        {/* Right Properties Sidebar — Strictly Project Schema Only (Per Requirement #2) */}
-        <div className="w-64 border-l border-white/[0.05] p-5 bg-[#0a0b0d] space-y-6 text-xs shrink-0 select-none">
+        {/* Right Properties Sidebar — Strictly Project Schema Only (Visible on lg: and up) */}
+        <div className="hidden lg:block w-64 border-l border-white/[0.05] p-5 bg-[#0a0b0d] space-y-6 text-xs shrink-0 select-none">
           <div className="space-y-3">
             <h3 className="font-semibold text-zinc-400 text-[11px] uppercase tracking-wider">
               Properties

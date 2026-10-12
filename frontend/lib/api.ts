@@ -805,10 +805,14 @@ export const api = {
   // AI Chat & ReAct Agent
   async confirmChatAction(payload: {
     action: string;
-    issue_id: string;
+    issue_id?: string;
+    team_id?: string;
+    title?: string;
+    description?: string;
+    priority?: string;
     target_state_id?: string;
     target_assignee_id?: string;
-  }): Promise<{ status: string; action: string; issue_id: string; message: string; result?: any } | null> {
+  }): Promise<{ status: string; action: string; issue_id?: string; issue_identifier?: string; message: string; result?: any } | null> {
     return await fetchWithAuth(`/ai/chat/action/confirm`, {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -865,6 +869,38 @@ export const api = {
         }
       }
     }
+  },
+
+  // AI Threads & Conversation History
+  async getAIThreads(organizationId: string): Promise<Array<{ id: string; organization_id: string; user_id: string; title: string; created_at: string; updated_at: string }>> {
+    const data = await fetchWithAuth<Array<any>>(`/ai/threads?organization_id=${organizationId}`);
+    return data || [];
+  },
+
+  async createAIThread(payload: { organization_id: string; title?: string; first_message?: string }): Promise<{ id: string; organization_id: string; user_id: string; title: string; created_at: string; updated_at: string } | null> {
+    return await fetchWithAuth(`/ai/threads`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async getAIThreadMessages(threadId: string): Promise<Array<{ id: string; thread_id: string; sender: 'user' | 'agent'; content: string; tools_json?: any; interrupt_json?: any; created_at: string }>> {
+    const data = await fetchWithAuth<Array<any>>(`/ai/threads/${threadId}/messages`);
+    return data || [];
+  },
+
+  async addAIThreadMessage(threadId: string, payload: { sender: 'user' | 'agent'; content: string; tools_json?: any; interrupt_json?: any }): Promise<any | null> {
+    return await fetchWithAuth(`/ai/threads/${threadId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async deleteAIThread(threadId: string): Promise<boolean> {
+    const res = await fetchWithAuth(`/ai/threads/${threadId}`, {
+      method: 'DELETE',
+    });
+    return !!res;
   },
 
   // ─────────────────────────────────────────────────────────────

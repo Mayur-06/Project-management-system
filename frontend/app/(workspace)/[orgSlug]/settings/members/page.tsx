@@ -188,8 +188,8 @@ export default function MembersSettingsPage() {
             No matching members found.
           </div>
         ) : (
-          <div className="border border-[#1e2025] rounded-xl overflow-hidden bg-[#0f1011]">
-            <table className="w-full text-left border-collapse text-xs">
+          <div className="border border-[#1e2025] rounded-xl overflow-x-auto bg-[#0f1011]">
+            <table className="w-full text-left border-collapse text-xs min-w-[540px]">
               <thead>
                 <tr className="border-b border-[#1e2025] bg-black/40 text-zinc-400 font-medium">
                   <th className="py-3 px-4 font-medium">Name</th>

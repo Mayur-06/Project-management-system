@@ -10,6 +10,8 @@ import { api } from '@/lib/api';
 import { WorkspaceContext, useWorkspace } from '@/lib/WorkspaceContext';
 import { supabase } from '@/lib/supabase/client';
 
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const router = useRouter();
@@ -24,8 +26,15 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
 
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState<string>('');
   const [currentTeamStates, setCurrentTeamStates] = useState<WorkflowState[]>([]);
+
+  useEffect(() => {
+    const handleOpenMobile = () => setIsMobileNavOpen(true);
+    window.addEventListener('openMobileNav', handleOpenMobile);
+    return () => window.removeEventListener('openMobileNav', handleOpenMobile);
+  }, []);
 
   // Derive currentTeam from the URL teamKey — no extra API call needed
   const currentTeam = useMemo(
@@ -93,17 +102,50 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   return (
     <WorkspaceContext.Provider value={contextValue}>
       <div className="flex h-screen w-screen bg-black text-white overflow-hidden font-sans">
-        {/* Sidebar with dynamic workspace data */}
-        <WorkspaceSidebar
-          currentOrgSlug={orgSlug}
-          currentTeamKey={teamKey}
-          organization={organization}
-          teams={teams}
-          currentUser={currentUser}
-          onOpenCommandPalette={() => setIsCommandOpen(true)}
-          onOpenNewIssue={handleOpenNewIssue}
-          onOpenAIAsk={handleOpenAIAsk}
-        />
+        {/* Desktop Sidebar (hidden on mobile, visible on md+) */}
+        <div className="hidden md:flex shrink-0 h-full">
+          <WorkspaceSidebar
+            currentOrgSlug={orgSlug}
+            currentTeamKey={teamKey}
+            organization={organization}
+            teams={teams}
+            currentUser={currentUser}
+            onOpenCommandPalette={() => setIsCommandOpen(true)}
+            onOpenNewIssue={handleOpenNewIssue}
+            onOpenAIAsk={handleOpenAIAsk}
+          />
+        </div>
+
+        {/* Mobile Navigation Drawer Sheet */}
+        <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
+          <SheetContent side="left" className="w-64 p-0 bg-[#0f1011] border-r border-white/[0.08] [&>button]:hidden">
+            <SheetHeader className="sr-only">
+              <SheetTitle>Navigation Menu</SheetTitle>
+              <SheetDescription>Workspace navigation sidebar</SheetDescription>
+            </SheetHeader>
+            <WorkspaceSidebar
+              currentOrgSlug={orgSlug}
+              currentTeamKey={teamKey}
+              organization={organization}
+              teams={teams}
+              currentUser={currentUser}
+              onOpenCommandPalette={() => {
+                setIsMobileNavOpen(false);
+                setIsCommandOpen(true);
+              }}
+              onOpenNewIssue={() => {
+                setIsMobileNavOpen(false);
+                handleOpenNewIssue();
+              }}
+              onOpenAIAsk={() => {
+                setIsMobileNavOpen(false);
+                handleOpenAIAsk();
+              }}
+              onNavigate={() => setIsMobileNavOpen(false)}
+              onCloseMobile={() => setIsMobileNavOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
 
         {/* Main View Area */}
         <main className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-black">

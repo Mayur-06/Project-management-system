@@ -8,6 +8,8 @@ import { CreateIssueModal } from '@/components/issues/CreateIssueModal';
 import { Team, WorkflowState } from '@/types';
 import { useWorkspace } from '@/lib/WorkspaceContext';
 
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+
 export default function WorkspaceInboxLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const router = useRouter();
@@ -21,8 +23,15 @@ export default function WorkspaceInboxLayout({ children }: { children: React.Rea
 
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isNewIssueOpen, setIsNewIssueOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [initialStateId, setInitialStateId] = useState<string>('');
   const [currentTeamStates, setCurrentTeamStates] = useState<WorkflowState[]>([]);
+
+  useEffect(() => {
+    const handleOpenMobile = () => setIsMobileNavOpen(true);
+    window.addEventListener('openMobileNav', handleOpenMobile);
+    return () => window.removeEventListener('openMobileNav', handleOpenMobile);
+  }, []);
 
   const defaultTeam = teams[0] || null;
   const defaultTeamKey = defaultTeam?.key?.toLowerCase() || 'eng';
@@ -78,17 +87,50 @@ export default function WorkspaceInboxLayout({ children }: { children: React.Rea
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#08090a] font-sans">
-      {/* Primary Workspace Sidebar */}
-      <WorkspaceSidebar
-        currentOrgSlug={orgSlug}
-        currentTeamKey={defaultTeamKey}
-        organization={organization}
-        teams={teams}
-        currentUser={currentUser}
-        onOpenCommandPalette={() => setIsCommandOpen(true)}
-        onOpenNewIssue={handleOpenNewIssue}
-        onOpenAIAsk={handleOpenAIAsk}
-      />
+      {/* Desktop Sidebar (hidden on mobile, visible on md+) */}
+      <div className="hidden md:flex shrink-0 h-full">
+        <WorkspaceSidebar
+          currentOrgSlug={orgSlug}
+          currentTeamKey={defaultTeamKey}
+          organization={organization}
+          teams={teams}
+          currentUser={currentUser}
+          onOpenCommandPalette={() => setIsCommandOpen(true)}
+          onOpenNewIssue={handleOpenNewIssue}
+          onOpenAIAsk={handleOpenAIAsk}
+        />
+      </div>
+
+      {/* Mobile Navigation Drawer Sheet */}
+      <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
+        <SheetContent side="left" className="w-64 p-0 bg-[#0f1011] border-r border-white/[0.08] [&>button]:hidden">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Navigation Menu</SheetTitle>
+            <SheetDescription>Workspace navigation sidebar</SheetDescription>
+          </SheetHeader>
+          <WorkspaceSidebar
+            currentOrgSlug={orgSlug}
+            currentTeamKey={defaultTeamKey}
+            organization={organization}
+            teams={teams}
+            currentUser={currentUser}
+            onOpenCommandPalette={() => {
+              setIsMobileNavOpen(false);
+              setIsCommandOpen(true);
+            }}
+            onOpenNewIssue={() => {
+              setIsMobileNavOpen(false);
+              handleOpenNewIssue();
+            }}
+            onOpenAIAsk={() => {
+              setIsMobileNavOpen(false);
+              handleOpenAIAsk();
+            }}
+            onNavigate={() => setIsMobileNavOpen(false)}
+            onCloseMobile={() => setIsMobileNavOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
 
       {/* Main Inbox Application Surface */}
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[#08090a]">
