@@ -12,7 +12,7 @@ class MemberRole(str, Enum):
 
 RESERVED_SLUGS = {
     "login", "signup", "auth", "api", "accept-invite", "settings",
-    "admin", "dashboard", "workspaces", "teams", "issues", "projects", "cycles"
+    "admin", "dashboard", "workspaces", "teams", "issues"
 }
 
 

@@ -11,12 +11,6 @@ from app.schemas.phase4 import (
     AttachmentUploadRequest,
     AttachmentUploadResponse,
     AttachmentResponse,
-    DuplicateCheckRequest,
-    DuplicateCheckResponse,
-    BreakdownStartRequest,
-    BreakdownStartResponse,
-    BreakdownResumeRequest,
-    BreakdownResumeResponse,
     ChatStreamRequest,
     ChatActionConfirmRequest,
     ChatActionConfirmResponse,
@@ -75,54 +69,7 @@ async def delete_attachment(
 
 
 # ==============================================================================
-# 2. AI Duplicate Detection (pgvector)
-# ==============================================================================
-
-@router.post(
-    "/ai/duplicates/check",
-    response_model=DuplicateCheckResponse,
-    summary="Lightweight vector-only duplicate search during issue drafting (fast, zero LLM cost)",
-)
-async def check_duplicates(
-    payload: DuplicateCheckRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase4Service.check_duplicates(payload, current_user.id, db)
-
-
-# ==============================================================================
-# 3. AI Technical Breakdown (HITL Interruption)
-# ==============================================================================
-
-@router.post(
-    "/ai/breakdown/start",
-    response_model=BreakdownStartResponse,
-    summary="Initiates technical decomposition and halts at interrupt() with proposed subtasks",
-)
-async def start_breakdown(
-    payload: BreakdownStartRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase4Service.start_breakdown(payload, current_user.id, db)
-
-
-@router.post(
-    "/ai/breakdown/resume",
-    response_model=BreakdownResumeResponse,
-    summary="Resumes LangGraph breakdown with user-approved subtasks and batch-inserts child issues",
-)
-async def resume_breakdown(
-    payload: BreakdownResumeRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return Phase4Service.resume_breakdown(payload, current_user.id, db)
-
-
-# ==============================================================================
-# 4. Workspace Copilot: ReAct Assistant (SSE Stream)
+# 2. Workspace Copilot: ReAct Assistant (SSE Stream)
 # ==============================================================================
 
 from app.agents.react_agent import LinearAskAgent

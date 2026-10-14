@@ -80,7 +80,6 @@ export interface Issue {
   assigned_by?: User;
   creator_id: string;
   creator?: User;
-  project_id?: string;
   parent_id?: string;
   parent?: Issue;
   subtasks?: Issue[];
@@ -104,7 +103,6 @@ export interface IssueComment {
   user?: User;
   body_text: string;
   body_json?: any;
-  reactions?: { emoji: string; count: number; users: string[] }[];
   created_at: string;
   updated_at: string;
 }

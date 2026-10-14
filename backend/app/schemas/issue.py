@@ -24,8 +24,6 @@ class IssueCreate(BaseModel):
     state_id: Optional[str] = None
     assignee_id: Optional[str] = None
     assigned_by_id: Optional[str] = None
-    project_id: Optional[str] = None
-    cycle_id: Optional[str] = None
     parent_id: Optional[str] = None
     due_date: Optional[date] = None
     client_session_id: Optional[str] = None
@@ -40,8 +38,6 @@ class IssueUpdate(BaseModel):
     state_id: Optional[str] = None
     assignee_id: Optional[str] = None
     assigned_by_id: Optional[str] = None
-    project_id: Optional[str] = None
-    cycle_id: Optional[str] = None
     parent_id: Optional[str] = None
     due_date: Optional[date] = None
     completed_at: Optional[datetime] = None
@@ -55,30 +51,6 @@ class IssueReorderRequest(BaseModel):
     state_id: Optional[str] = None
     prev_position: Optional[str] = None
     next_position: Optional[str] = None
-    client_session_id: Optional[str] = None
-
-
-class BatchReorderItem(BaseModel):
-    issue_id: str
-    state_id: str
-    position: str
-
-
-class BatchReorderRequest(BaseModel):
-    items: List[BatchReorderItem]
-    client_session_id: Optional[str] = None
-
-
-class BatchUpdateItem(BaseModel):
-    issue_id: str
-    state_id: Optional[str] = None
-    assignee_id: Optional[str] = None
-    priority: Optional[IssuePriority] = None
-    cycle_id: Optional[str] = None
-
-
-class BatchUpdateRequest(BaseModel):
-    updates: List[BatchUpdateItem]
     client_session_id: Optional[str] = None
 
 
@@ -113,8 +85,6 @@ class IssueResponse(BaseModel):
     assigned_by: Optional[IssueAssigneeUser] = None
     creator_id: str
     creator: Optional[IssueAssigneeUser] = None
-    project_id: Optional[str] = None
-    cycle_id: Optional[str] = None
     parent_id: Optional[str] = None
     labels: List[Dict[str, Any]] = []
     sort_order: str
@@ -155,16 +125,6 @@ class CommentUpdate(BaseModel):
     body_text: str = Field(..., min_length=1)
 
 
-class CommentReactionToggle(BaseModel):
-    emoji: str
-
-
-class CommentReactionResponse(BaseModel):
-    emoji: str
-    count: int
-    user_ids: List[str]
-
-
 class CommentResponse(BaseModel):
     id: str
     issue_id: str
@@ -174,4 +134,3 @@ class CommentResponse(BaseModel):
     body_text: str
     created_at: datetime
     updated_at: datetime
-    reactions: List[CommentReactionResponse] = []

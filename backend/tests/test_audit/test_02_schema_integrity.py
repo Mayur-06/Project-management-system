@@ -11,7 +11,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.issue import IssueCreate, IssuePriority
-from app.schemas.phase4 import ProposedSubtask, BreakdownResumeRequest
 from app.schemas.workspace import MemberInviteRequest
 from app.core.lexorank import calculate_midpoint_rank, _rank_before
 
@@ -81,23 +80,6 @@ def test_M7_invite_invalid_email_rejected_by_schema():
     """M-7: Verify invalid email address is rejected by MemberInviteRequest schema."""
     with pytest.raises(ValidationError):
         MemberInviteRequest(email="definitely-not-an-email")
-
-
-def test_M8_approved_subtasks_upper_bound():
-    """M-8: Verify approved_subtasks enforces a reasonable upper bound limit (e.g. <= 100)."""
-    subtasks = [ProposedSubtask(title=f"Subtask {i}") for i in range(5000)]
-    # BreakdownResumeRequest should reject 5000 items
-    assert hasattr(BreakdownResumeRequest.model_fields.get("approved_subtasks"), "metadata") or False, \
-        "M-8 DEFECT: approved_subtasks allows unbounded payload (5000+ items accepted)!"
-
-
-def test_M8_proposed_subtask_priority_enum_validation():
-    """M-8: Verify ProposedSubtask priority validates against valid issue priorities."""
-    valid_priorities = {p.value for p in IssuePriority}
-    # If priority is 'P1-CRITICAL', it should be rejected or normalized
-    subtask = ProposedSubtask(title="Test", priority="P1-CRITICAL")
-    assert subtask.priority in valid_priorities, \
-        f"M-8 DEFECT: ProposedSubtask accepted invalid priority '{subtask.priority}' not in DB enum {valid_priorities}!"
 
 
 def test_M14_rank_ordering_is_preserved_under_repeated_prepends():
