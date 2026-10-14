@@ -194,31 +194,7 @@ def test_reorder_issue_lexorank(client, mock_db):
     assert data["version"] == 2
 
 
-def test_batch_reorder_and_batch_update(client, mock_db):
-    mock_db.table.side_effect = None
-    mock_db.table().update().eq().execute.return_value = MagicMock(data=[])
 
-    # 1. Batch reorder
-    reorder_payload = {
-        "items": [
-            {"issue_id": MOCK_ISSUE_ID, "state_id": MOCK_STATE_ID_1, "position": "0|010000:"},
-            {"issue_id": MOCK_SUBTASK_ID, "state_id": MOCK_STATE_ID_1, "position": "0|020000:"},
-        ]
-    }
-    res_reorder = client.post("/api/v1/issues/batch-reorder", json=reorder_payload)
-    assert res_reorder.status_code == status.HTTP_200_OK
-    assert res_reorder.json()["modified_count"] == 2
-
-    # 2. Batch update
-    update_payload = {
-        "updates": [
-            {"issue_id": MOCK_ISSUE_ID, "priority": "urgent"},
-            {"issue_id": MOCK_SUBTASK_ID, "priority": "low"},
-        ]
-    }
-    res_update = client.post("/api/v1/issues/batch-update", json=update_payload)
-    assert res_update.status_code == status.HTTP_200_OK
-    assert len(res_update.json()) == 2
 
 
 def test_subtasks_creation_and_listing(client, mock_db):
@@ -363,15 +339,8 @@ def test_comments_and_reactions(client, mock_db):
     assert res_post.status_code == status.HTTP_201_CREATED
     assert res_post.json()["body_text"] == "Looks great!"
 
-    # 2. List comments with reactions
+    # 2. List comments
     res_list = client.get(f"/api/v1/issues/{MOCK_ISSUE_ID}/comments")
     assert res_list.status_code == status.HTTP_200_OK
     data = res_list.json()
     assert len(data) == 1
-    assert data[0]["reactions"][0]["emoji"] == "👍"
-
-    # 3. Toggle reaction
-    rx_payload = {"emoji": "🚀"}
-    res_rx = client.post(f"/api/v1/comments/{MOCK_COMMENT_ID}/reactions", json=rx_payload)
-    assert res_rx.status_code == status.HTTP_200_OK
-    assert res_rx.json()[0]["emoji"] == "🚀"

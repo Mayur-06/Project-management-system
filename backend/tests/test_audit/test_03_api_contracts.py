@@ -9,13 +9,11 @@ import pytest
 from pydantic import ValidationError
 from fastapi import status
 
-from app.schemas.issue import IssueUpdate, IssueCreate, IssueReorderRequest, BatchUpdateRequest, BatchReorderRequest, SubtaskCreate
+from app.schemas.issue import IssueUpdate, IssueCreate, IssueReorderRequest, SubtaskCreate
 from app.schemas.workspace import MemberInviteRequest
 from app.schemas.phase4 import (
     AttachmentUploadRequest,
     AttachmentUploadResponse,
-    DuplicateCheckRequest,
-    DuplicateCheckResponse,
 )
 from app.schemas.team import TeamUpdate
 
@@ -44,18 +42,6 @@ def test_api_contract_subtask_create_schema():
         SubtaskCreate()
 
 
-def test_api_contract_batch_update_schema():
-    """Contract: BatchUpdateRequest accepts valid updates array."""
-    req = BatchUpdateRequest(updates=[{"issue_id": str(uuid.uuid4()), "priority": "high"}])
-    assert len(req.updates) == 1
-
-
-def test_api_contract_batch_reorder_schema():
-    """Contract: BatchReorderRequest accepts items array."""
-    req = BatchReorderRequest(items=[{"issue_id": str(uuid.uuid4()), "state_id": str(uuid.uuid4()), "position": "0|h00001:"}])
-    assert len(req.items) == 1
-
-
 def test_api_contract_issue_reorder_schema():
     """Contract: IssueReorderRequest accepts prev_position and next_position."""
     req = IssueReorderRequest(prev_position="0|h00000:", next_position="0|h00002:")
@@ -78,18 +64,6 @@ def test_api_contract_attachment_upload_response_schema():
         file_name="file.png",
     )
     assert isinstance(res.upload_url, str)
-
-
-def test_api_contract_duplicate_check_request():
-    """Contract: DuplicateCheckRequest validates title min_length."""
-    with pytest.raises(ValidationError):
-        DuplicateCheckRequest(title="Short")
-
-
-def test_api_contract_duplicate_check_response():
-    """Contract: DuplicateCheckResponse includes duplicates_found and count."""
-    res = DuplicateCheckResponse(duplicates_found=False, count=0, matches=[])
-    assert res.duplicates_found is False
 
 
 def test_api_contract_cycle_complete_request():

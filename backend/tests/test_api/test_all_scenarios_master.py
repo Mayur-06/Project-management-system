@@ -127,38 +127,9 @@ def test_issue_stale_update_race_condition_occ_diff(client, mock_db):
     assert body["detail"]["current_state"]["title"] == "Updated by collaborator A"
 
 
-def test_batch_update_multiple_properties(client, mock_db):
-    """Batch updating statuses, assignees, and priorities across selected issues."""
-    mock_db.table.side_effect = None
-    mock_db.table().update().eq().execute.return_value = MagicMock(data=[])
-
-    payload = {
-        "updates": [
-            {"issue_id": MOCK_ISSUE_ID, "priority": "urgent", "assignee_id": OTHER_USER_ID},
-            {"issue_id": MOCK_SUBTASK_ID, "priority": "low", "state_id": MOCK_STATE_ID_2},
-        ],
-        "client_session_id": "batch-session-123",
-    }
-    res = client.post("/api/v1/issues/batch-update", json=payload)
-    assert res.status_code == status.HTTP_200_OK
-    assert len(res.json()) == 2
-
-
 # ==============================================================================
 # Domain 3: Comments & Permission Scenarios
 # ==============================================================================
-
-def test_comment_not_found_on_reaction_raises_404(client, mock_db):
-    """Toggling a reaction on an un-existing comment raises 404."""
-    def mock_table(table_name):
-        mock_t = MagicMock()
-        if table_name == "issue_comments":
-            mock_t.select().eq().is_().limit().execute.return_value = MagicMock(data=[])
-        return mock_t
-
-    mock_db.table.side_effect = mock_table
-    res = client.post(f"/api/v1/comments/{MOCK_COMMENT_ID}/reactions", json={"emoji": "🚀"})
-    assert res.status_code == status.HTTP_404_NOT_FOUND
 
 
 def test_admin_can_delete_others_comment(client, mock_db):
@@ -182,81 +153,6 @@ def test_admin_can_delete_others_comment(client, mock_db):
     mock_db.table.side_effect = mock_table
     res = client.delete(f"/api/v1/comments/{MOCK_COMMENT_ID}")
     assert res.status_code == status.HTTP_204_NO_CONTENT
-
-
-# ==============================================================================
-# Domain 5: Projects & Milestones Scenarios
-# ==============================================================================
-
-def test_project_slug_collision_in_same_org_raises_409(client, mock_db):
-    """Creating a project with a slug that already exists in the organization raises 409 Conflict."""
-    def mock_table(table_name):
-        mock_t = MagicMock()
-        if table_name == "organizations":
-            mock_t.select().eq().limit().execute.return_value = MagicMock(
-                data=[{"id": MOCK_ORG_ID, "slug": "acme"}]
-            )
-        elif table_name == "workspace_members":
-            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[{"id": "m1"}])
-        elif table_name == "projects":
-            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(
-                data=[{"id": "p-1", "slug": "core-platform"}]
-            )
-        return mock_t
-
-    mock_db.table.side_effect = mock_table
-    payload = {"name": "Core Platform", "slug": "core-platform"}
-    res = client.post("/api/v1/organizations/acme/projects", json=payload)
-    assert res.status_code == status.HTTP_409_CONFLICT
-
-
-def test_milestone_update_target_date_and_name(client, mock_db):
-    """Updating milestone name and deadline checkpoint."""
-    def mock_table(table_name):
-        mock_t = MagicMock()
-        if table_name == "project_milestones":
-            mock_t.select().eq().limit().execute.return_value = MagicMock(
-                data=[
-                    {
-                        "id": MOCK_MILESTONE_ID,
-                        "project_id": MOCK_PROJECT_ID,
-                        "name": "Beta Testing",
-                        "target_date": "2026-10-15",
-                        "completed_at": None,
-                        "sort_order": "0|h00000:",
-                        "created_at": "2026-10-01T00:00:00Z",
-                    }
-                ]
-            )
-            mock_t.update().eq().execute.return_value = MagicMock(
-                data=[
-                    {
-                        "id": MOCK_MILESTONE_ID,
-                        "project_id": MOCK_PROJECT_ID,
-                        "name": "Public Release Candidate",
-                        "target_date": "2026-10-20",
-                        "completed_at": None,
-                        "sort_order": "0|h00000:",
-                        "created_at": "2026-10-01T00:00:00Z",
-                    }
-                ]
-            )
-        elif table_name == "projects":
-            mock_t.select().eq().limit().execute.return_value = MagicMock(
-                data=[{"id": MOCK_PROJECT_ID, "organization_id": MOCK_ORG_ID}]
-            )
-        elif table_name == "workspace_members":
-            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[{"id": "m1"}])
-        return mock_t
-
-    mock_db.table.side_effect = mock_table
-    payload = {"name": "Public Release Candidate", "target_date": "2026-10-20"}
-    res = client.patch(f"/api/v1/milestones/{MOCK_MILESTONE_ID}", json=payload)
-    assert res.status_code == status.HTTP_200_OK
-    assert res.json()["name"] == "Public Release Candidate"
-    assert res.json()["target_date"] == "2026-10-20"
-
-
 
 
 # ==============================================================================
@@ -284,28 +180,4 @@ def test_attachment_upload_zero_byte_file_rejected(client):
         "mime_type": "text/plain",
     }
     res = client.post("/api/v1/attachments/upload-url", json=payload)
-    assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-
-
-# ==============================================================================
-# Domain 8: AI Fleet & HITL Edge Cases
-# ==============================================================================
-
-def test_breakdown_resume_with_invalid_thread_raises_404(client):
-    """Attempting to resume an expired or non-existent AI breakdown thread raises 404."""
-    payload = {
-        "thread_id": "non-existent-thread-id",
-        "approved_subtasks": [{"title": "Subtask A"}],
-    }
-    res = client.post("/api/v1/ai/breakdown/resume", json=payload)
-    assert res.status_code == status.HTTP_404_NOT_FOUND
-
-
-def test_duplicate_check_title_too_short_raises_422(client):
-    """Submitting titles shorter than debounce minimum (10 characters) rejects with 422."""
-    payload = {
-        "organization_id": MOCK_ORG_ID,
-        "title": "Bug",  # Too short
-    }
-    res = client.post("/api/v1/ai/duplicates/check", json=payload)
     assert res.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY

@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field, model_validator, field_validator
-from app.schemas.issue import IssuePriority
+from pydantic import BaseModel, Field
 
 
 # ==============================================================================
@@ -37,112 +36,7 @@ class AttachmentResponse(BaseModel):
 
 
 # ==============================================================================
-# 2. AI Duplicate Detection Schemas
-# ==============================================================================
-
-class DuplicateCheckRequest(BaseModel):
-    organization_id: Optional[str] = None
-    title: str = Field(..., min_length=10, max_length=500)
-    description: Optional[str] = None
-    threshold: float = Field(0.75, ge=0.0, le=1.0)
-    limit: int = Field(5, ge=1, le=20)
-
-
-class DuplicateIssueItem(BaseModel):
-    issue_id: str
-    identifier: str
-    title: str
-    similarity: float
-    state_id: Optional[str] = None
-
-
-class DuplicateCheckResponse(BaseModel):
-    duplicates_found: bool
-    count: int
-    matches: List[DuplicateIssueItem]
-    duplicates: Optional[List[Dict[str, Any]]] = None
-
-
-# ==============================================================================
-# 3. AI Technical Breakdown (HITL) Schemas
-# ==============================================================================
-
-class ProposedSubtask(BaseModel):
-    title: str
-    description: Optional[str] = None
-    priority: str = "none"
-
-    @field_validator("priority", mode="before")
-    @classmethod
-    def validate_priority(cls, v: Any) -> str:
-        if isinstance(v, str):
-            v_low = v.strip().lower()
-            valid = {p.value for p in IssuePriority}
-            if v_low in valid:
-                return v_low
-            # Normalize common synonyms or critical markers
-            if "crit" in v_low or "urgent" in v_low or "p0" in v_low or "p1" in v_low:
-                return IssuePriority.URGENT.value
-            if "high" in v_low or "p2" in v_low:
-                return IssuePriority.HIGH.value
-            if "med" in v_low or "p3" in v_low:
-                return IssuePriority.MEDIUM.value
-            if "low" in v_low or "p4" in v_low:
-                return IssuePriority.LOW.value
-            raise ValueError(f"Invalid priority '{v}'. Must be one of {valid}")
-        return IssuePriority.NONE.value
-
-
-class BreakdownStartRequest(BaseModel):
-    issue_id: str
-    context_instructions: Optional[str] = None
-
-
-class BreakdownStartResponse(BaseModel):
-    thread_id: str
-    status: str = "interrupted"
-    prdspec: str
-    proposed_subtasks: List[ProposedSubtask]
-
-
-class BreakdownResumeRequest(BaseModel):
-    thread_id: str
-    approved_subtasks: Optional[List[ProposedSubtask]] = None
-    approved_tasks: Optional[List[Any]] = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_subtasks(cls, data: Any) -> Any:
-        if isinstance(data, dict):
-            if not data.get("approved_subtasks") and data.get("approved_tasks"):
-                raw_tasks = data["approved_tasks"]
-                normalized = []
-                for t in raw_tasks:
-                    if isinstance(t, str):
-                        normalized.append({"title": t, "priority": "medium"})
-                    elif isinstance(t, dict):
-                        normalized.append(t)
-                data["approved_subtasks"] = normalized
-            elif data.get("approved_subtasks"):
-                raw_tasks = data["approved_subtasks"]
-                normalized = []
-                for t in raw_tasks:
-                    if isinstance(t, str):
-                        normalized.append({"title": t, "priority": "medium"})
-                    elif isinstance(t, dict):
-                        normalized.append(t)
-                data["approved_subtasks"] = normalized
-        return data
-
-
-class BreakdownResumeResponse(BaseModel):
-    status: str = "completed"
-    created_subtasks_count: int
-    created_subtask_ids: List[str]
-
-
-# ==============================================================================
-# 4. AI Chat ReAct Schemas
+# 2. AI Chat ReAct Schemas
 # ==============================================================================
 
 class ChatMessage(BaseModel):

@@ -59,14 +59,6 @@ def test_C9_chat_stream_endpoint_reachable(client):
         "C-9 DEFECT: /api/v1/ai/chat/stream route is missing or returned 404 Not Found!"
 
 
-def test_C10_breakdown_agent_no_name_error_state_id():
-    """C-10: Verify breakdown_agent.py defines default_state_id before using it in batch_persist_node."""
-    agent_path = BACKEND_DIR / "app" / "agents" / "breakdown_agent.py"
-    content = agent_path.read_text(encoding="utf-8")
-    assert "default_state_id" in content or "state_id = " in content, \
-        "C-10 DEFECT: batch_persist_node uses undefined 'state_id' raising NameError at runtime!"
-
-
 def test_H1_server_reorder_computes_new_rank():
     """H-1A: Verify calculate_midpoint_rank does not collapse to constant '0|h00000:' when positions are provided."""
     r = calculate_midpoint_rank("0|h00000:", "0|h20000:")
@@ -155,49 +147,9 @@ def test_team_service_does_not_query_public_users():
             "M-4 DEFECT: team_service queries non-existent public.users table!"
 
 
-def test_breakdown_agent_atomic_rpc_identifier():
-    """H-10: Verify breakdown_agent attempts allocate_issue_identifier RPC."""
-    agent_path = BACKEND_DIR / "app" / "agents" / "breakdown_agent.py"
-    content = agent_path.read_text(encoding="utf-8")
-    assert "allocate_issue_identifier" in content, \
-        "H-10 DEFECT: breakdown_agent does not use allocate_issue_identifier RPC!"
-
-
 def test_react_agent_client_disconnect_handling():
     """Verify react_agent checks request.is_disconnected() during token streaming."""
     agent_path = BACKEND_DIR / "app" / "agents" / "react_agent.py"
     content = agent_path.read_text(encoding="utf-8")
     assert "is_disconnected" in content, \
         "react_agent fails to handle client disconnect during SSE streaming!"
-
-
-def test_duplicate_check_vector_results_populated():
-    """Verify check_duplicates returns matches from RPC without crashing."""
-    from unittest.mock import MagicMock
-    from app.services.phase4_service import Phase4Service
-    from app.schemas.phase4 import DuplicateCheckRequest
-
-    mock_db = MagicMock()
-    mock_db.table().select().eq().eq().limit().execute.return_value = MagicMock(data=[{"id": "m1"}])
-    mock_db.rpc().execute.return_value = MagicMock(data=[])
-
-    req = DuplicateCheckRequest(title="Authentication failure on login page", organization_id="11111111-1111-1111-1111-111111111111")
-    res = Phase4Service.check_duplicates(req, "u1", mock_db)
-    assert res.duplicates_found is False
-
-
-def test_hitl_breakdown_interrupt_payload_shape():
-    """Verify start_breakdown returns interrupted status and thread_id."""
-    from unittest.mock import MagicMock
-    from app.services.phase4_service import Phase4Service
-    from app.schemas.phase4 import BreakdownStartRequest
-
-    mock_db = MagicMock()
-    mock_db.table().select().eq().limit().execute.return_value = MagicMock(data=[{"id": "iss1", "organization_id": "org1", "team_id": "team1", "title": "Test Issue"}])
-    mock_db.table().select().eq().eq().limit().execute.return_value = MagicMock(data=[{"id": "m1"}])
-    mock_db.table().select().eq().is_().execute.return_value = MagicMock(data=[])
-
-    req = BreakdownStartRequest(issue_id="iss1")
-    res = Phase4Service.start_breakdown(req, "u1", mock_db)
-    assert res.status == "interrupted"
-    assert "org1:u1:" in res.thread_id

@@ -8,8 +8,6 @@ from app.schemas.issue import (
     IssueCreate,
     IssueUpdate,
     IssueReorderRequest,
-    BatchReorderRequest,
-    BatchUpdateRequest,
     SubtaskCreate,
     IssueResponse,
     IssueDetailResponse,
@@ -18,7 +16,6 @@ from app.schemas.issue import (
     CommentCreate,
     CommentUpdate,
     CommentResponse,
-    CommentReactionResponse,
 )
 from app.core.lexorank import calculate_midpoint_rank
 from app.services.workspace_service import WorkspaceService
@@ -149,8 +146,6 @@ class IssueService:
         db: Client,
         state_id: Optional[str] = None,
         assignee_id: Optional[str] = None,
-        cycle_id: Optional[str] = None,
-        project_id: Optional[str] = None,
         priority: Optional[str] = None,
         search: Optional[str] = None,
     ) -> List[IssueResponse]:
@@ -161,8 +156,6 @@ class IssueService:
             query = query.eq("state_id", state_id)
         if assignee_id:
             query = query.eq("assignee_id", assignee_id)
-        if project_id:
-            query = query.eq("project_id", project_id)
         if priority:
             query = query.eq("priority", priority)
         if search:
@@ -322,7 +315,6 @@ class IssueService:
             "assignee_id": data.assignee_id,
             "assigned_by_id": data.assigned_by_id or (user_id if data.assignee_id else None),
             "creator_id": user_id,
-            "project_id": data.project_id,
             "parent_id": data.parent_id,
             "sort_order": sort_order,
             "version": 1,
@@ -651,60 +643,6 @@ class IssueService:
         return IssueResponse(**res.data[0])
 
     @classmethod
-    def batch_reorder(cls, data: BatchReorderRequest, user_id: str, db: Client) -> Dict[str, Any]:
-        count = 0
-        now_iso = datetime.now(timezone.utc).isoformat()
-        for item in data.items:
-            current_issue = cls._verify_issue_access(item.issue_id, user_id, db)
-            payload = {
-                "state_id": item.state_id,
-                "sort_order": item.position,
-                "version": current_issue.get("version", 1) + 1,
-                "updated_at": now_iso,
-            }
-            if data.client_session_id:
-                payload["last_modified_by_session"] = data.client_session_id
-            db.table("issues").update(payload).eq("id", item.issue_id).execute()
-            count += 1
-        return {"modified_count": count}
-
-    @classmethod
-    def batch_update(cls, data: BatchUpdateRequest, user_id: str, db: Client) -> List[str]:
-        updated_ids = []
-        now_iso = datetime.now(timezone.utc).isoformat()
-        for item in data.updates:
-            current_issue = cls._verify_issue_access(item.issue_id, user_id, db)
-            updates_dict = {}
-            if item.state_id is not None:
-                updates_dict["state_id"] = item.state_id
-            if item.assignee_id is not None:
-                updates_dict["assignee_id"] = item.assignee_id
-            if item.priority is not None:
-                updates_dict["priority"] = item.priority.value
-            
-            if updates_dict:
-                updates_dict["version"] = current_issue.get("version", 1) + 1
-                updates_dict["updated_at"] = now_iso
-                if data.client_session_id:
-                    updates_dict["last_modified_by_session"] = data.client_session_id
-                db.table("issues").update(updates_dict).eq("id", item.issue_id).execute()
-                
-                # Activity log
-                try:
-                    db.table("activity_logs").insert({
-                        "organization_id": current_issue["organization_id"],
-                        "issue_id": item.issue_id,
-                        "actor_id": user_id,
-                        "action": "issue_updated",
-                        "changes": updates_dict,
-                    }).execute()
-                except Exception:
-                    pass
-
-                updated_ids.append(item.issue_id)
-        return updated_ids
-
-    @classmethod
     def list_subtasks(cls, issue_id: str, user_id: str, db: Client) -> List[IssueResponse]:
         cls._verify_issue_access(issue_id, user_id, db)
         res = (
@@ -751,7 +689,6 @@ class IssueService:
             "state_id": parent["state_id"],
             "assignee_id": data.assignee_id,
             "creator_id": user_id,
-            "project_id": parent.get("project_id"),
             "parent_id": parent["id"],
             "sort_order": sort_order,
             "version": 1,
@@ -817,22 +754,6 @@ class IssueService:
         comments = comments_res.data or []
         comment_ids = [c["id"] for c in comments]
 
-        reactions_map: Dict[str, Dict[str, List[str]]] = {cid: {} for cid in comment_ids}
-        if comment_ids:
-            rx_res = (
-                db.table("comment_reactions")
-                .select("comment_id, emoji, user_id")
-                .in_("comment_id", comment_ids)
-                .execute()
-            )
-            for r in (rx_res.data or []):
-                cid = r["comment_id"]
-                emoji = r["emoji"]
-                uid = r["user_id"]
-                if emoji not in reactions_map[cid]:
-                    reactions_map[cid][emoji] = []
-                reactions_map[cid][emoji].append(uid)
-
         # Resolve comment authors
         user_cache: Dict[str, IssueAssigneeUser] = {}
         for c in comments:
@@ -846,12 +767,8 @@ class IssueService:
 
         result = []
         for c in comments:
-            rx_list = [
-                CommentReactionResponse(emoji=emoji, count=len(uids), user_ids=uids)
-                for emoji, uids in reactions_map[c["id"]].items()
-            ]
             author = user_cache.get(c.get("user_id"))
-            result.append(CommentResponse(**c, reactions=rx_list, user=author))
+            result.append(CommentResponse(**c, user=author))
         return result
 
     @classmethod
@@ -926,50 +843,7 @@ class IssueService:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only comment author or admin can delete comment")
 
         if hard:
-            try:
-                db.table("comment_reactions").delete().eq("comment_id", comment_id).execute()
-            except Exception:
-                pass
             db.table("issue_comments").delete().eq("id", comment_id).execute()
         else:
             now_iso = datetime.now(timezone.utc).isoformat()
             db.table("issue_comments").update({"deleted_at": now_iso}).eq("id", comment_id).execute()
-
-    @classmethod
-    def toggle_reaction(cls, comment_id: str, emoji: str, user_id: str, db: Client) -> List[CommentReactionResponse]:
-        c_res = db.table("issue_comments").select("id, issue_id").eq("id", comment_id).is_("deleted_at", "null").limit(1).execute()
-        if not c_res.data:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
-        cls._verify_issue_access(c_res.data[0]["issue_id"], user_id, db)
-
-        existing = (
-            db.table("comment_reactions")
-            .select("id")
-            .eq("comment_id", comment_id)
-            .eq("user_id", user_id)
-            .eq("emoji", emoji)
-            .limit(1)
-            .execute()
-        )
-        if existing.data:
-            db.table("comment_reactions").delete().eq("id", existing.data[0]["id"]).execute()
-        else:
-            db.table("comment_reactions").insert({
-                "comment_id": comment_id,
-                "user_id": user_id,
-                "emoji": emoji,
-            }).execute()
-
-        # Fetch current reactions
-        rx_res = db.table("comment_reactions").select("emoji, user_id").eq("comment_id", comment_id).execute()
-        rx_map: Dict[str, List[str]] = {}
-        for r in (rx_res.data or []):
-            e = r["emoji"]
-            if e not in rx_map:
-                rx_map[e] = []
-            rx_map[e].append(r["user_id"])
-
-        return [
-            CommentReactionResponse(emoji=e, count=len(uids), user_ids=uids)
-            for e, uids in rx_map.items()
-        ]

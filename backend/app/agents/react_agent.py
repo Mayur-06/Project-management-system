@@ -299,7 +299,7 @@ class LinearAskAgent:
 
             # Dynamic LLM synthesis if API key is provided
             llm_summary = generate_llm_completion(
-                prompt=f"User asked: '{query}'\nTool results from issues database: {json.dumps(tool_res)}\nSummarize these results clearly and concisely for the user.",
+                prompt=f"User asked: '{query}'\nTool results from issues database: {json.dumps(tool_res, default=str)}\nSummarize these results clearly and concisely for the user.",
                 system_instruction="You are Workspace Copilot, a helpful, ultra-concise assistant for a modern engineering project management system."
             )
             if llm_summary:

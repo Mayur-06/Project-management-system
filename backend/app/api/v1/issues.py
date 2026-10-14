@@ -8,8 +8,6 @@ from app.schemas.issue import (
     IssueCreate,
     IssueUpdate,
     IssueReorderRequest,
-    BatchReorderRequest,
-    BatchUpdateRequest,
     SubtaskCreate,
     IssueResponse,
     IssueDetailResponse,
@@ -17,8 +15,6 @@ from app.schemas.issue import (
     CommentCreate,
     CommentUpdate,
     CommentResponse,
-    CommentReactionToggle,
-    CommentReactionResponse,
 )
 from app.services.issue_service import IssueService
 
@@ -38,8 +34,6 @@ async def list_issues(
     team_id: str = Query(..., description="Target team UUID"),
     state_id: Optional[str] = Query(None, description="Filter by workflow state UUID"),
     assignee_id: Optional[str] = Query(None, description="Filter by assigned user UUID"),
-    cycle_id: Optional[str] = Query(None, description="Filter by sprint cycle UUID"),
-    project_id: Optional[str] = Query(None, description="Filter by project UUID"),
     priority: Optional[str] = Query(None, description="Filter by priority tier"),
     search: Optional[str] = Query(None, description="Search issue titles"),
     current_user: AuthenticatedUser = Depends(get_current_user),
@@ -51,8 +45,6 @@ async def list_issues(
         db=db,
         state_id=state_id,
         assignee_id=assignee_id,
-        cycle_id=cycle_id,
-        project_id=project_id,
         priority=priority,
         search=search,
     )
@@ -70,32 +62,6 @@ async def create_issue(
     db: Client = Depends(get_admin_db),
 ):
     return IssueService.create_issue(payload, current_user.id, db)
-
-
-@router.post(
-    "/issues/batch-reorder",
-    response_model=Dict[str, Any],
-    summary="Atomically reorder multiple issues in a batch",
-)
-async def batch_reorder_issues(
-    payload: BatchReorderRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return IssueService.batch_reorder(payload, current_user.id, db)
-
-
-@router.post(
-    "/issues/batch-update",
-    response_model=List[str],
-    summary="Apply bulk updates to selected issues",
-)
-async def batch_update_issues(
-    payload: BatchUpdateRequest,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return IssueService.batch_update(payload, current_user.id, db)
 
 
 @router.get(
@@ -257,17 +223,3 @@ async def delete_comment(
     db: Client = Depends(get_admin_db),
 ):
     IssueService.delete_comment(comment_id, current_user.id, db, hard=hard)
-
-
-@router.post(
-    "/comments/{comment_id}/reactions",
-    response_model=List[CommentReactionResponse],
-    summary="Toggle emoji reaction on a comment (add if absent, remove if present)",
-)
-async def toggle_reaction(
-    comment_id: str,
-    payload: CommentReactionToggle,
-    current_user: AuthenticatedUser = Depends(get_current_user),
-    db: Client = Depends(get_admin_db),
-):
-    return IssueService.toggle_reaction(comment_id, payload.emoji, current_user.id, db)

@@ -302,42 +302,6 @@ def test_delete_comment_by_non_author_non_admin_forbidden(client, mock_db):
 
 
 # ==============================================================================
-# 6. Reaction Toggle (Remove if Already Exists)
-# ==============================================================================
-
-def test_toggle_reaction_remove_when_already_exists(client, mock_db):
-    """Clicking an emoji you already reacted with removes the reaction."""
-    def mock_table(table_name):
-        mock_t = MagicMock()
-        if table_name == "issue_comments":
-            mock_t.select().eq().is_().limit().execute.return_value = MagicMock(
-                data=[{"id": MOCK_COMMENT_ID, "issue_id": MOCK_ISSUE_ID}]
-            )
-        elif table_name == "issues":
-            mock_t.select().eq().limit().execute.return_value = MagicMock(
-                data=[{"id": MOCK_ISSUE_ID, "organization_id": MOCK_ORG_ID}]
-            )
-        elif table_name == "workspace_members":
-            mock_t.select().eq().eq().limit().execute.return_value = MagicMock(data=[{"id": "m1"}])
-        elif table_name == "comment_reactions":
-            # Reaction already exists -> will be deleted
-            mock_t.select().eq().eq().eq().limit().execute.return_value = MagicMock(
-                data=[{"id": "reaction-1"}]
-            )
-            mock_t.delete().eq().execute.return_value = MagicMock(data=[])
-            # Next query returns empty list
-            mock_t.select().eq().execute.return_value = MagicMock(data=[])
-        return mock_t
-
-    mock_db.table.side_effect = mock_table
-
-    payload = {"emoji": "👍"}
-    response = client.post(f"/api/v1/comments/{MOCK_COMMENT_ID}/reactions", json=payload)
-    assert response.status_code == status.HTTP_200_OK
-    assert len(response.json()) == 0  # Reaction was removed
-
-
-# ==============================================================================
 # 7. Echo Suppression Session ID Propagation
 # ==============================================================================
 
